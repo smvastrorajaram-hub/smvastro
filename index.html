@@ -2057,7 +2057,32 @@ async function loadAdminPanel(){
     const reason=$('questionReject_'+id).value.trim();
     if(!reason){alert('Enter rejection reason.');return;}
     b.disabled=true;
-    try{await withTimeout(callFunction('rejectPublicQuestion',{questionId:id,reason}),60000);await window.__smvNotifyQuestionUpdate?.(id,'question_rejected',reason);await loadAdminPanel();}
+    try{
+  const qRef=doc(db,'smv_questions',id);
+  const qSnap=await getDoc(qRef);
+  if(!qSnap.exists()) throw new Error('Question not found.');
+  const q=qSnap.data()||{};
+  if(!['pending_admin_approval','paid'].includes(q.status) || (q.status==='paid' && q.adminQuestionApprovedAt)){
+    throw new Error('This question is not waiting for Admin approval.');
+  }
+  await updateDoc(qRef,{
+    status:'question_rejected',
+    allocationStatus:'rejected_by_admin',
+    adminQuestionRejectedAt:serverTimestamp(),
+    adminQuestionRejectedBy:currentUser.uid,
+    adminQuestionRejectionReason:reason
+  });
+  await setDoc(doc(db,'smv_notifications',id+'_question_reject_'+Date.now()),{
+    userId:q.customerId,
+    type:'question_rejected',
+    title:'Question Not Approved',
+    message:'Your paid question was not approved by Admin. Reason: '+reason,
+    questionId:id,
+    createdAt:serverTimestamp(),
+    read:false
+  });
+  await loadAdminPanel();
+}
     catch(e){alert(e.message||String(e));b.disabled=false;}
   });
 const answerBox = $('adminAnswers');
