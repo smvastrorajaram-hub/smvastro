@@ -713,7 +713,7 @@ async function submitAuth(mode){
     const loginCred=await withTimeout(signInWithEmailAndPassword(auth,email,password),20000);
     if(!loginCred?.user){throw new Error("Login did not return a Firebase user. Please try again.");}
     currentUser=loginCred.user;
-    const loginProfile=await getUserProfile(loginCred.user.uid); const loginRole=String(loginProfile?.role||"customer").toLowerCase(); const loginStatus=String(loginProfile?.status||"active").toLowerCase(); if((loginRole==="astrologer" && (loginStatus!=="approved" || !loginCred.user.emailVerified)) || (loginRole==="customer" && !loginCred.user.emailVerified)){ await signOut(auth); currentUser=null; pendingAfterLogin=null; msg.innerHTML='<span class="error"><b>Login blocked.</b><br>Your account must be approved and email verified before login.<br><button type="button" class="btn" data-resend-verification="1" style="margin-top:10px">Resend Verification Email</button></span>'; return; }
+    await loginCred.user.reload(); const loginProfile=await getUserProfile(loginCred.user.uid); const loginRole=String(loginProfile?.role||"customer").toLowerCase(); const loginStatus=String(loginProfile?.status||"active").toLowerCase(); if((loginRole!=="admin" && loginCred.user.uid!==ADMIN_UID && loginRole==="astrologer" && (loginStatus!=="approved" || !loginCred.user.emailVerified)) || (loginRole!=="admin" && loginCred.user.uid!==ADMIN_UID && loginRole==="customer" && !loginCred.user.emailVerified)){ await signOut(auth); currentUser=null; pendingAfterLogin=null; msg.innerHTML='<span class="error"><b>Login blocked.</b><br>Your account must be approved and email verified before login.<br><button type="button" class="btn" data-resend-verification="1" style="margin-top:10px">Resend Verification Email</button></span>'; return; }
     const goToQuestion=pendingAfterLogin==="question";
     const goToAdmin=pendingAfterLogin==="admin";
     pendingAfterLogin=null;
@@ -2909,7 +2909,7 @@ if(auth){ onAuthStateChanged(auth,async user=>{
    $('authBtn').textContent=user?'Logout':'Login';
    if(user){
      lastAuthUid=user.uid; touchSession(); armIdleTimer();
-     if(!user.emailVerified){ await signOut(auth); currentUser=null; clearIdleTimer(); lastAuthUid=null; hide("dashboard"); hide("admin"); hide("dashLink"); hide("adminLink"); $("authBtn").textContent="Login"; return; }
+     if(user.uid!==ADMIN_UID && !user.emailVerified){ await signOut(auth); currentUser=null; clearIdleTimer(); lastAuthUid=null; hide("dashboard"); hide("admin"); hide("dashLink"); hide("adminLink"); $("authBtn").textContent="Login"; return; }
      const adminUser=await isCurrentAdmin();
      if(adminUser){ hide('dashLink'); show('adminLink'); }
      else { show('dashLink'); hide('adminLink'); }
