@@ -642,7 +642,7 @@ function openModal(html){$("modalContent").innerHTML=html;$("modal").classList.r
 function openRegister(){hide("astro-flow");hide("ask-flow");hide("astro-register-form");show("register-flow");go("register-flow");}
 function openAstroRegister(){hide("register-flow");show("astro-register-form");go("astro-register-form");}
 function openAstroFlow(){openQuestionService();}
-async function openQuestionService(){if(!currentUser){pendingAfterLogin="question";openAuth("login");return;} if(String(currentUser.email||"").trim() if(!currentUser){pendingAfterLogin="question";openAuth("login");return;}if(!currentUser){pendingAfterLogin="question";openAuth("login");return;} !currentUser.emailVerified){await logoutToHome();openAuth("login");return;} hide("register-flow");hide("astro-register-form");hide("astro-flow");show("ask-flow"); selectedAstro=null; $("askTitle").textContent="Ask Your Question"; await loadQuestionPrice(); $("birthName").value=""; $("birthDate").value=""; $("birthTime").value=""; $("birthPlace").value=""; $("birthGender").value=""; $("questionText").value=""; message("askMsg",""); go("ask-flow");}
+async function openQuestionService(){if(!currentUser){pendingAfterLogin="question";openAuth("login");return;}const questionProfile=await getUserProfile(currentUser.uid);const questionRole=String(questionProfile?.role||"").toLowerCase();if(questionRole!=="customer"||!currentUser.emailVerified){await logoutToHome();openAuth("login");return;}hide("register-flow");hide("astro-register-form");hide("astro-flow");show("ask-flow");selectedAstro=null;$("askTitle").textContent="Ask Your Question";await loadQuestionPrice();$("birthName").value="";$("birthDate").value="";$("birthTime").value="";$("birthPlace").value="";$("birthGender").value="";$("questionText").value="";message("askMsg","");go("ask-flow");}
 
 $("authBtn")?.addEventListener("click",async()=>{if(currentUser){await logoutToHome();}else{openAuth("login");}});
 $("customerRegBtn")?.addEventListener("click",()=>openAuth("register"));
@@ -2907,6 +2907,7 @@ if(auth){ onAuthStateChanged(auth,async user=>{
    $('authBtn').textContent=user?'Logout':'Login';
    if(user){
      lastAuthUid=user.uid; touchSession(); armIdleTimer();
+     if(!user.emailVerified){ await signOut(auth); currentUser=null; clearIdleTimer(); lastAuthUid=null; hide("dashboard"); hide("admin"); hide("dashLink"); hide("adminLink"); $("authBtn").textContent="Login"; return; }
      const adminUser=await isCurrentAdmin();
      if(adminUser){ hide('dashLink'); show('adminLink'); }
      else { show('dashLink'); hide('adminLink'); }
