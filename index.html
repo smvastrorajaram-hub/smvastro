@@ -781,7 +781,7 @@ $("regBackBtn")?.addEventListener("click",()=>{hide("register-flow");window.scro
 $("astroRegBackBtn")?.addEventListener("click",openRegister);
 $("backHomeBtn")?.addEventListener("click",()=>{hide("astro-flow");hide("ask-flow");window.scrollTo({top:0,behavior:"smooth"});});
 $("backAstroBtn")?.addEventListener("click",()=>{hide("ask-flow");go("ask-service");});
-$("dashLink")?.addEventListener("click",e=>{e.preventDefault();loadDashboard();go("dashboard");});
+$("dashLink")?.addEventListener("click",async e=>{e.preventDefault();show("dashboard");go("dashboard");await loadDashboard();});
 $("adminLink")?.addEventListener("click",e=>{e.preventDefault();openAdminEntry();});
 $("adminFeatureBtn")?.addEventListener("click",e=>{e.preventDefault();openAdminEntry();});
 $("consultationNav")?.addEventListener("click",e=>{e.preventDefault();openQuestionService();});
