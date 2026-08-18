@@ -700,6 +700,7 @@ function openAuth(mode="login"){
     }catch(e){m.innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';}
   };
 }
+async function resendVerificationEmail(){const email=$("email").value.trim(),password=$("password").value;if(!email||!password){alert("Please enter your email and password first.");return;}try{const cred=await signInWithEmailAndPassword(auth,email,password);await sendEmailVerification(cred.user);await signOut(auth);currentUser=null;alert("New verification email sent. Please check your inbox and Spam folder.");}catch(e){try{await signOut(auth);}catch(_){}alert("Unable to resend verification email: "+(e.message||e));}}
 async function submitAuth(mode){
  const msg=$("authMsg"),email=$("email").value.trim(),password=$("password").value;
  if(!email||!password){msg.innerHTML='<span class="error">Please enter email and password.</span>';return;}
@@ -711,7 +712,7 @@ async function submitAuth(mode){
     const loginCred=await withTimeout(signInWithEmailAndPassword(auth,email,password),20000);
     if(!loginCred?.user){throw new Error("Login did not return a Firebase user. Please try again.");}
     currentUser=loginCred.user;
-    const loginProfile=await getUserProfile(loginCred.user.uid); const loginRole=String(loginProfile?.role||"customer").toLowerCase(); const loginStatus=String(loginProfile?.status||"active").toLowerCase(); if((loginRole==="astrologer" && (loginStatus!=="approved" || !loginCred.user.emailVerified)) || (loginRole==="customer" && !loginCred.user.emailVerified)){ await signOut(auth); currentUser=null; pendingAfterLogin=null; msg.innerHTML='<span class="error"><b>Login blocked.</b><br>Your account must be approved and email verified before login.</span>'; return; }
+    const loginProfile=await getUserProfile(loginCred.user.uid); const loginRole=String(loginProfile?.role||"customer").toLowerCase(); const loginStatus=String(loginProfile?.status||"active").toLowerCase(); if((loginRole==="astrologer" && (loginStatus!=="approved" || !loginCred.user.emailVerified)) || (loginRole==="customer" && !loginCred.user.emailVerified)){ await signOut(auth); currentUser=null; pendingAfterLogin=null; msg.innerHTML='<span class="error"><b>Login blocked.</b><br>Your account must be approved and email verified before login.<br><button type="button" class="btn" onclick="resendVerificationEmail()" style="margin-top:10px">Resend Verification Email</button></span>'; return; }
     const goToQuestion=pendingAfterLogin==="question";
     const goToAdmin=pendingAfterLogin==="admin";
     pendingAfterLogin=null;
