@@ -759,7 +759,7 @@ async function openAdminEntry(){
 
 
 function openAuth(mode="login"){
-  hide("dashboard"); hide("admin"); hide("dashLink"); hide("adminLink");
+  hide("dashboard"); hide("admin"); hide("dashLink"); hide("adminLink"); hide("appointment"); hide("contact"); hide("ask-flow");
   closeModal();
   openModal(`<h2>${mode==="login"?"Login":"Create Customer Account"}</h2>
   <div id="authMsg" class="small"></div>
