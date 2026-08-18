@@ -711,14 +711,22 @@ async function resendVerificationEmail(){
    await sendEmailVerification(cred.user);
    await signOut(auth);
    currentUser=null;
-   message("authMsg",'<span class="success"><b>Verification email sent.</b> Please check your email.</span>');
+   message("authMsg",'<span class="success"><b>Verification link sent successfully.</b> Please check your email.</span>');
  }catch(e){
    try{await signOut(auth);}catch(_){}
    message("authMsg",'<span class="error">Unable to send verification email. Please check your email and password.</span>');
  }
 }
 window.resendVerificationEmail=resendVerificationEmail;
-document.addEventListener("click",e=>{if(e.target.closest("[data-resend-verification]")){resendVerificationEmail();}});
+document.addEventListener("click",e=>{
+ const resendBtn=e.target.closest("[data-resend-verification]");
+ if(!resendBtn)return;
+ e.preventDefault();
+ e.stopPropagation();
+ if(resendBtn.dataset.sending==="1")return;
+ resendBtn.dataset.sending="1";
+ resendVerificationEmail().finally(()=>{resendBtn.dataset.sending="";});
+});
 async function submitAuth(mode){
  const msg=$("authMsg"),email=$("email").value.trim(),password=$("password").value;
  if(!email||!password){msg.innerHTML='<span class="error">Please enter email and password.</span>';return;}
@@ -730,7 +738,22 @@ async function submitAuth(mode){
     const loginCred=await withTimeout(signInWithEmailAndPassword(auth,email,password),20000);
     if(!loginCred?.user){throw new Error("Login did not return a Firebase user. Please try again.");}
     currentUser=loginCred.user;
-    await loginCred.user.reload(); const loginProfile=await getUserProfile(loginCred.user.uid); const loginRole=String(loginProfile?.role||"customer").toLowerCase(); const loginStatus=String(loginProfile?.status||"active").toLowerCase(); if((loginRole!=="admin" && loginCred.user.uid!==ADMIN_UID && loginRole==="astrologer" && (loginStatus!=="approved" || !loginCred.user.emailVerified)) || (loginRole!=="admin" && loginCred.user.uid!==ADMIN_UID && loginRole==="customer" && !loginCred.user.emailVerified)){ await signOut(auth); currentUser=null; pendingAfterLogin=null; msg.innerHTML='<span class="error"><b>Login blocked.</b><br>Your account must be approved and email verified before login.<br><button type="button" class="btn" data-resend-verification="1" style="margin-top:10px">Resend Verification Email</button></span>'; return; }
+    await loginCred.user.reload(); const loginProfile=await getUserProfile(loginCred.user.uid); const loginRole=String(loginProfile?.role||"customer").toLowerCase(); const loginStatus=String(loginProfile?.status||"active").toLowerCase(); if(loginRole!=="admin" && loginCred.user.uid!==ADMIN_UID){
+      if(!loginCred.user.emailVerified){
+        await signOut(auth);
+        currentUser=null;
+        pendingAfterLogin=null;
+        msg.innerHTML='<span class="error"><b>Please verify your email first.</b><br>Check your email and click the verification link.<br><button type="button" class="btn" data-resend-verification="1" style="margin-top:10px">Resend Verification Email</button></span>';
+        return;
+      }
+      if(loginRole==="astrologer" && !["active","approved"].includes(loginStatus)){
+        await signOut(auth);
+        currentUser=null;
+        pendingAfterLogin=null;
+        msg.innerHTML='<span class="error"><b>Waiting for Admin Approval.</b><br>Your email is verified. Your astrologer account is waiting for Admin approval.</span>';
+        return;
+      }
+}
     const goToQuestion=pendingAfterLogin==="question";
     const goToAdmin=pendingAfterLogin==="admin";
     pendingAfterLogin=null;
