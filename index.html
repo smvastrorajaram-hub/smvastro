@@ -588,14 +588,14 @@ footer{text-align:center;padding:35px 16px;color:var(--muted);border-top:3px dou
 </div>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendEmailVerification } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendEmailVerification, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 import { getFirestore, collection, query, where, getDocs, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch, runTransaction } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
 const firebaseConfig={apiKey:"AIzaSyCKXyfZ9sjGmej7ygxHpzHNcNysMXHuvSs",authDomain:"smv-astro.firebaseapp.com",projectId:"smv-astro",storageBucket:"smv-astro.firebasestorage.app",messagingSenderId:"299081899217",appId:"1:299081899217:web:8d558df08e86037ea539f0"};
 let app=null, auth=null, db=null, functions=null, httpsCallableFn=null, firebaseInitError=null;
 try{
   app=initializeApp(firebaseConfig);
-  auth=getAuth(app);
+  auth=getAuth(app);await setPersistence(auth,browserSessionPersistence);
   db=getFirestore(app);
 }catch(initError){
   firebaseInitError=initError;
@@ -3057,7 +3057,7 @@ window.__SMV_APP_READY=true;
     const {getAuth}=await import('https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js');
     const app=getApps().length?getApps()[0]:initializeApp(FBCONFIG);
     db=getFirestore(app);
-    auth=getAuth(app);
+    auth=getAuth(app);await setPersistence(auth,browserSessionPersistence);
     fbApi={
       collection:fs.collection,getDocs:fs.getDocs,query:fs.query,where:fs.where,orderBy:fs.orderBy,limit:fs.limit,
       doc:fs.doc,getDoc:fs.getDoc,addDoc:fs.addDoc,updateDoc:fs.updateDoc,deleteDoc:fs.deleteDoc,
