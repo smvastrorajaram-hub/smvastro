@@ -1,0 +1,13 @@
+SMV ASTRO V63 Render Environment Variables
+
+Existing Razorpay/Firebase variables remain unchanged.
+
+Add/fix these for Contact Us and question/answer email notifications:
+ADMIN_EMAIL=your-admin@example.com
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_USER=your-sender@gmail.com
+SMTP_PASS=your-Google-App-Password
+SMTP_FROM=SMV ASTRO <your-sender@gmail.com>
+
+Never put SMTP_PASS in index.html or GitHub.

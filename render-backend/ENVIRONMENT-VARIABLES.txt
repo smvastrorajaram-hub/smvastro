@@ -1,0 +1,30 @@
+RENDER ENVIRONMENT VARIABLES
+
+RAZORPAY_KEY_ID=<your Razorpay Test/Live Key ID>
+RAZORPAY_KEY_SECRET=<your Razorpay Test/Live Key Secret>
+RAZORPAY_WEBHOOK_SECRET=<your Razorpay Webhook Secret>
+
+FIREBASE_PROJECT_ID=smv-astro
+FIREBASE_CLIENT_EMAIL=<Firebase service account client email>
+FIREBASE_PRIVATE_KEY=<Firebase service account private key; keep \n as escaped newlines if required by your Render setup>
+
+ALLOWED_ORIGINS=https://smvastrorajaram-hub.github.io,https://smv-astro-razorpay-webhook.onrender.com
+
+CONTACT FORM EMAIL SETTINGS (required for the new Contact form)
+---------------------------------------------------------------
+ADMIN_EMAIL=the admin email address that should receive customer queries
+SMTP_HOST=your SMTP server hostname
+SMTP_PORT=587
+SMTP_USER=your SMTP username/email
+SMTP_PASS=your SMTP password or app password
+SMTP_FROM=the sender email address (usually the same as SMTP_USER)
+
+Example for Gmail:
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_USER=your-gmail-address
+SMTP_PASS=your-16-character-Gmail-App-Password
+SMTP_FROM=your-gmail-address
+
+Do not put SMTP passwords in index.html or GitHub. Add them only as Render Environment Variables.
+The Contact form endpoint is POST /contact-query.

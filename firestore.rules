@@ -1,0 +1,84 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isAdmin() {
+  return signedIn() &&
+    (request.auth.uid == "TwjeEIFS3Zcf1SxboLZoujm91Ky2" ||
+     exists(/databases/$(database)/documents/smv_admins/$(request.auth.uid)));
+}
+
+    match /smv_users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow create: if signedIn() && request.auth.uid == uid;
+      allow update: if isAdmin() || (signedIn() && request.auth.uid == uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["name","phone","mobile","emailVerificationRequired","updatedAt"]));
+    }
+
+    match /smv_astrologers/{uid} {
+      allow read: if resource.data.status == "approved" || (signedIn() && request.auth.uid == uid) || isAdmin();
+      allow create: if signedIn() && request.auth.uid == uid && request.resource.data.status == "pending";
+      allow update: if isAdmin() || (signedIn() && request.auth.uid == uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["name","specialization","expertise","experience","about","bio","photoData"]));
+    }
+
+    match /smv_payouts/{uid} {
+      allow read: if isAdmin();
+      allow create: if signedIn() && request.auth.uid == uid && request.resource.data.uid == uid && request.resource.data.status == "pending_admin_review";
+      allow update: if isAdmin() || (signedIn() && request.auth.uid == uid && request.resource.data.uid == uid && request.resource.data.status == "pending_admin_review");
+      allow delete: if isAdmin();
+    }
+
+
+
+    match /smv_admins/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow write: if request.auth.uid == "TwjeEIFS3Zcf1SxboLZoujm91Ky2";
+    }
+
+    match /smv_blogs/{blogId} {
+      allow read: if resource.data.active == true || isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+    match /smv_settings/{docId} {
+      allow read: if isAdmin() || (signedIn() && docId == "question");
+      allow write: if isAdmin();
+    }
+
+    match /smv_notifications/{id} {
+      allow read: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAdmin() || (signedIn() && request.resource.data.userId == request.auth.uid);
+      allow update: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    match /smv_questions/{questionId} {
+      allow create: if signedIn() &&
+                    request.resource.data.customerId == request.auth.uid &&
+                    request.resource.data.status == "awaiting_payment";
+
+      allow read: if signedIn() &&
+                  (resource.data.customerId == request.auth.uid ||
+                   resource.data.astrologerId == request.auth.uid ||
+                   isAdmin());
+
+      // Astrologer answers are submitted through the server-side Cloud Function.
+    allow update: if isAdmin();
+    }
+
+    match /smv_withdrawals/{withdrawalId} {
+      allow read: if signedIn() && (resource.data.astrologerId == request.auth.uid || isAdmin());
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /smv_announcements/{id} {
+      allow read: if resource.data.active == true;
+      allow write: if isAdmin();
+    }
+
+    match /smv_reviews/{reviewId} {
+      allow read: if (resource.data.approved == true) ||
+                  isAdmin() ||
+                  (signedIn() && (resource.data.customerId == request.auth.uid || resource.data.astrologerId == request.auth.uid));
+      allow create: if false;
+      allow update, delete: if isAdmin();
+    }
+  }
+}
