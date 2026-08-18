@@ -2055,7 +2055,12 @@ async function loadBlogs(){
   const rows=snap.docs.map(d=>({id:d.id,...d.data()})).filter(b=>b.active!==false);
   rows.sort((a,b)=>String(b.updatedAtText||b.createdAtText||"").localeCompare(String(a.updatedAtText||a.createdAtText||"")));
   if(!rows.length){box.innerHTML='<div class="empty">No blog articles published yet.</div>';return;}
-  box.innerHTML=rows.map(b=>`<article class="card blog-card"")+" "+(b.category||"")+" "+(b.excerpt||""))}">
+  box.innerHTML=rows.map(b=>`<article class="card blog-card">
+    <span class="badge">${escapeHtml(b.category||"Astrology")}</span>
+    <h3>${escapeHtml(b.title||"Untitled")}</h3>
+    <p class="small">${escapeHtml(b.excerpt||"")}</p>
+    <details><summary>Read article</summary><div class="blog-content" style="margin-top:10px">${escapeHtml(b.content||"")}</div></details>
+  </article>`).join("");
     <span class="badge">${escapeHtml(b.category||"Astrology")}</span>
     <h3>${escapeHtml(b.title||"Untitled")}</h3>
     <p class="small">${escapeHtml(b.excerpt||"")}</p>
