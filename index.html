@@ -581,9 +581,9 @@ footer{text-align:center;padding:35px 16px;color:var(--muted);border-top:3px dou
 
 <footer>© SMV ASTRO SERVICES</footer>
 <div class="modal hidden" id="modal">
-<div class="modalbox">
-<button class="btn gray" onclick="closeModal()" style="float:right">Close</button>
-<div id="modalContent"></div>
+<div class="modalbox" style="position:relative">
+<button type="button" onclick="closeModal()" aria-label="Close" title="Close" style="position:absolute;top:10px;right:10px;border:0;background:transparent;font-size:28px;line-height:1;cursor:pointer;padding:4px 8px;color:inherit">×</button>
+<div id="modalContent" style="padding-right:35px"></div>
 </div>
 </div>
 <script type="module">
