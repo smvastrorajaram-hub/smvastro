@@ -310,6 +310,55 @@ footer{text-align:center;padding:35px 16px;color:var(--muted);border-top:3px dou
   }
 }
 
+
+/* V58 Mobile-first polish — UI only */
+@media(max-width:760px){
+  body{overflow-x:hidden}
+  .container{padding:14px 10px}
+  .card{padding:17px 15px;border-radius:12px}
+  .btn{
+    min-height:46px;
+    padding:12px 16px;
+    border-radius:10px;
+    font-size:14px;
+  }
+  input,select,textarea{
+    min-height:46px;
+    padding:12px 13px;
+    font-size:16px;
+    border-radius:9px;
+  }
+  textarea{min-height:120px}
+  .action-row{gap:10px}
+  .action-row .btn{min-height:46px}
+  .quick-actions{grid-template-columns:1fr!important;gap:14px!important}
+  .quick-action{padding:20px 16px!important}
+  .quick-action .btn{width:100%;min-height:48px}
+  .modal{padding:8px}
+  .modalbox{
+    width:100%;
+    max-width:100%;
+    max-height:94vh;
+    padding:19px 15px;
+    border-radius:13px;
+  }
+  .modalbox .btn{width:100%;margin-top:6px}
+  section>h2{font-size:25px;line-height:1.25}
+  .stat{padding:15px}
+  .stat b{font-size:25px}
+}
+
+@media(max-width:520px){
+  .container{padding-left:9px;padding-right:9px}
+  .hero{padding:32px 7px 28px}
+  .hero h1{font-size:clamp(32px,10vw,46px)}
+  .hero p{font-size:14px;line-height:1.7}
+  .registration-option{padding:22px 15px}
+  .registration-option .btn{width:100%;min-width:0}
+  .quick-action-title{font-size:18px}
+  .quick-action-text{font-size:14px;line-height:1.55}
+}
+
 </style>
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <style>
