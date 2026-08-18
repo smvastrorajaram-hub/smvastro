@@ -700,7 +700,7 @@ function openAuth(mode="login"){
     }catch(e){m.innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';}
   };
 }
-async function resendVerificationEmail(){const email=$("email").value.trim(),password=$("password").value;if(!email||!password){alert("Please enter your email and password first.");return;}try{const cred=await signInWithEmailAndPassword(auth,email,password);await sendEmailVerification(cred.user);await signOut(auth);currentUser=null;alert("New verification email sent. Please check your inbox and Spam folder.");}catch(e){try{await signOut(auth);}catch(_){}alert("Unable to resend verification email: "+(e.message||e));}}
+async function resendVerificationEmail(){alert("Resend button clicked");const email=$("email").value.trim(),password=$("password").value;if(!email||!password){alert("Please enter your email and password first.");return;}try{const cred=await signInWithEmailAndPassword(auth,email,password);await sendEmailVerification(cred.user);await signOut(auth);currentUser=null;alert("New verification email sent. Please check your inbox and Spam folder.");}catch(e){try{await signOut(auth);}catch(_){}alert("Unable to resend verification email: "+(e.message||e));}} window.resendVerificationEmail=resendVerificationEmail;
 async function submitAuth(mode){
  const msg=$("authMsg"),email=$("email").value.trim(),password=$("password").value;
  if(!email||!password){msg.innerHTML='<span class="error">Please enter email and password.</span>';return;}
