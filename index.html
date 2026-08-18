@@ -497,7 +497,7 @@ footer{text-align:center;padding:35px 16px;color:var(--muted);border-top:3px dou
 </div>
 </div>
 </section>
-<section id="ask-service" style="margin-top:45px;scroll-margin-top:90px"><div class="card" style="text-align:center"><div class="home-rule"><span>✦</span><span>SMV ASTRO QUESTION SERVICE</span><span>✦</span></div><h2>ASK YOUR QUESTIONS</h2><p class="small" style="max-width:680px;margin:0 auto 18px">Submit your astrology question with the birth details of the person concerned. The question is allocated by SMV ASTRO administration to a suitable approved astrologer.</p><button class="btn" id="askServiceBtn">ASK YOUR QUESTIONS</button></div></section>
+
 <section class="hidden" id="dashboard" style="margin-top:45px">
 <h2 id="dashboardTitle">My Dashboard</h2>
 <div class="small" id="sessionNotice" style="margin:8px 0 14px"></div>
@@ -747,7 +747,6 @@ $("backAstroBtn")?.addEventListener("click",()=>{hide("ask-flow");go("ask-servic
 $("dashLink")?.addEventListener("click",e=>{e.preventDefault();loadDashboard();go("dashboard");});
 $("adminLink")?.addEventListener("click",e=>{e.preventDefault();openAdminEntry();});
 $("adminFeatureBtn")?.addEventListener("click",e=>{e.preventDefault();openAdminEntry();});
-$("askServiceBtn")?.addEventListener("click",e=>{e.preventDefault();openQuestionService();});
 $("consultationNav")?.addEventListener("click",e=>{e.preventDefault();openQuestionService();});
 
 // ---------- Admin access + Login / customer registration ----------
@@ -3147,7 +3146,6 @@ window.__SMV_APP_READY=true;
     $("authBtn")?.addEventListener("click",()=>fallbackUser?null:loginUI());
     $("customerRegBtn")?.addEventListener("click",()=>registerUI("customer"));
     // Astrologer registration is handled only by the main Full Registration page.
-    $("askServiceBtn")?.addEventListener("click",e=>{e.preventDefault(); if(fallbackUser||window.__SMV_APP_READY){if(window.__SMV_APP_READY&&typeof window.openQuestionService==="function")window.openQuestionService();else{show("ask-flow");go("ask-flow");}}else{window.__smvPendingAsk=true;loginUI();}});
     $("privateConsultBtn")?.addEventListener("click",e=>{e.preventDefault(); if(fallbackUser){show("ask-flow");go("ask-flow");}else{window.__smvPendingAsk=true;loginUI();}});
   }
   // The main module normally binds these. If it failed to load, keep the essential public buttons usable.
@@ -3491,7 +3489,7 @@ window.__SMV_APP_READY=true;
       finally{bookingSubmitting=false;btn.disabled=false;btn.textContent='REQUEST APPOINTMENT';}
     });
   }
-  function setupAsk(){ $('featureAskBtn')?.addEventListener('click',()=>{document.getElementById('askServiceBtn')?.click();}); }
+  function setupAsk(){ $('featureAskBtn')?.addEventListener('click',()=>{openQuestionService();}); }
   function hookAdmin(){const old=window.loadAdminPanel; // existing function is module-scoped, so poll DOM after admin becomes visible.
     $('saveAnnouncement')?.addEventListener('click',publishAnnouncement);
     $('testEmailBtn')?.addEventListener('click',testAdminEmail);
