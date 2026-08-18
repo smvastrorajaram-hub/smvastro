@@ -340,7 +340,7 @@ footer{text-align:center;padding:35px 16px;color:var(--muted);border-top:3px dou
 <a href="#home">Home</a>
 <a href="#featureHub">Services</a>
 <a href="#ask-service" id="consultationNav">Consultation</a>
-<a href="#contact">Contact</a>
+                <a href="#contact" id="contactNav">Contact</a>
 <button class="btn gray" id="langToggle" type="button" style="padding:8px 10px">தமிழ்</button>
 <a class="hidden" href="#dashboard" id="dashLink">Dashboard</a><a class="hidden" href="#admin" id="adminLink">Admin</a>
 <button class="btn" id="authBtn">Login</button>
@@ -403,10 +403,10 @@ footer{text-align:center;padding:35px 16px;color:var(--muted);border-top:3px dou
     </div>
 
     <div class="card quick-action">
-      <div class="quick-action-icon">✉️</div>
-      <div class="quick-action-title">Contact Us</div>
-      <div class="quick-action-text">Send your query to our team</div>
-      <a class="btn" href="#contact">CONTACT US</a>
+      <div class="quick-action-icon">🔮</div>
+      <div class="quick-action-title">Ask Now</div>
+      <div class="quick-action-text">Ask your astrology question</div>
+      <button class="btn" type="button" id="quickAskBtn">ASK NOW</button>
     </div>
 
   </div>
@@ -416,13 +416,10 @@ footer{text-align:center;padding:35px 16px;color:var(--muted);border-top:3px dou
   <div class="home-rule"><span>✦</span><span data-i18n="services">SERVICES & PRICING</span><span>✦</span></div>
   <h2 data-i18n="servicesTitle">Choose Your Guidance</h2>
   <div class="grid">
-    <div class="card service-card"><div class="service-icon">💬</div><h3>Private Chat Consultation</h3><p class="small">A private conversation with an approved astrologer for focused guidance.</p><button class="btn" type="button" data-open-booking="Chat Consultation">BOOK CHAT</button></div>
-    <div class="card service-card"><div class="service-icon">📞</div><h3>Private Call Consultation</h3><p class="small">Choose a preferred time and receive a personal consultation by call.</p><button class="btn" type="button" data-open-booking="Call Consultation">BOOK CALL</button></div>
-    <div class="card service-card"><div class="service-icon">🪐</div><h3>Ask Your Astrology Question</h3><p class="small">Submit birth details and a question for an approved astrologer. Current price: <b id="publicQuestionPrice">Loading...</b></p><button class="btn alt" id="featureAskBtn" type="button">ASK A QUESTION</button></div>
   </div>
 </section>
 
-<section id="appointment" class="feature-section">
+<section id="appointment" class="feature-section hidden">
   <div class="card">
     <div class="home-rule"><span>✦</span><span>APPOINTMENT / CONSULTATION BOOKING</span><span>✦</span></div>
     <h2>Book a Private Consultation</h2>
@@ -641,7 +638,7 @@ footer{text-align:center;padding:35px 16px;color:var(--muted);border-top:3px dou
 </div>
 </section>
 
-<section id="contact" class="card contact-section" style="max-width:900px;margin:30px auto;padding:28px 20px;">
+<section id="contact" class="card contact-section hidden" style="max-width:900px;margin:30px auto;padding:28px 20px;">
   <h2>Contact Us</h2>
   <p class="small">Have a question? Send us your details and query. Our admin team will contact you soon.</p>
   <form id="contactForm" style="display:grid;gap:12px;margin-top:18px;">
@@ -3454,7 +3451,7 @@ window.__SMV_APP_READY=true;
   }
   let bookingSubmitting=false;
   function setupBooking(){
-    document.querySelectorAll('[data-open-booking]').forEach(b=>b.onclick=()=>{if($('apType'))$('apType').value=b.dataset.openBooking;location.hash='appointment';$('apName')?.focus();});
+    document.querySelectorAll('[data-open-booking]').forEach(b=>b.onclick=()=>{show("appointment");if($('apType'))$('apType').value=b.dataset.openBooking;location.hash='appointment';$('apName')?.focus();});
     const f=$('appointmentForm');if(!f)return;
     if(f.dataset.smvBookingBound==='1')return;
     f.dataset.smvBookingBound='1';
@@ -3489,7 +3486,7 @@ window.__SMV_APP_READY=true;
       finally{bookingSubmitting=false;btn.disabled=false;btn.textContent='REQUEST APPOINTMENT';}
     });
   }
-  function setupAsk(){ $('featureAskBtn')?.addEventListener('click',()=>{openQuestionService();}); }
+  function setupAsk(){ $('quickAskBtn')?.addEventListener('click',()=>{openQuestionService();}); }
   function hookAdmin(){const old=window.loadAdminPanel; // existing function is module-scoped, so poll DOM after admin becomes visible.
     $('saveAnnouncement')?.addEventListener('click',publishAnnouncement);
     $('testEmailBtn')?.addEventListener('click',testAdminEmail);
@@ -3501,6 +3498,7 @@ window.__SMV_APP_READY=true;
   const blogAdminObs=new MutationObserver(()=>{if(!$("admin")?.classList.contains("hidden"))window.__smvLoadAdminBlogs?.();});
   if($("admin")) blogAdminObs.observe($("admin"),{attributes:true,attributeFilter:["class"]});
 })();
+  document.getElementById("contactNav")?.addEventListener("click",()=>{show("contact");});
 </script>
 </body>
 </html>
