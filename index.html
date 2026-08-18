@@ -700,7 +700,24 @@ function openAuth(mode="login"){
     }catch(e){m.innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';}
   };
 }
-async function resendVerificationEmail(){alert("Resend button clicked");const email=$("email").value.trim(),password=$("password").value;if(!email||!password){alert("Please enter your email and password first.");return;}try{const cred=await signInWithEmailAndPassword(auth,email,password);await sendEmailVerification(cred.user);await signOut(auth);currentUser=null;alert("New verification email sent. Please check your inbox and Spam folder.");}catch(e){try{await signOut(auth);}catch(_){}alert("Unable to resend verification email: "+(e.message||e));}} window.resendVerificationEmail=resendVerificationEmail;
+async function resendVerificationEmail(){
+ const email=$("email").value.trim(),password=$("password").value;
+ if(!email||!password){
+   message("authMsg",'<span class="error">Please enter your email and password first.</span>');
+   return;
+ }
+ try{
+   const cred=await signInWithEmailAndPassword(auth,email,password);
+   await sendEmailVerification(cred.user);
+   await signOut(auth);
+   currentUser=null;
+   message("authMsg",'<span class="success"><b>Verification email sent.</b> Please check your email.</span>');
+ }catch(e){
+   try{await signOut(auth);}catch(_){}
+   message("authMsg",'<span class="error">Unable to send verification email. Please check your email and password.</span>');
+ }
+}
+window.resendVerificationEmail=resendVerificationEmail;
 document.addEventListener("click",e=>{if(e.target.closest("[data-resend-verification]")){resendVerificationEmail();}});
 async function submitAuth(mode){
  const msg=$("authMsg"),email=$("email").value.trim(),password=$("password").value;
@@ -751,7 +768,7 @@ async function submitAuth(mode){
   }catch(profileErr){
     console.warn("Customer profile save failed after Auth registration",profileErr);
   }
-  msg.innerHTML='<span class="success"><b>Registration successful ✓</b><br>Account created. A verification email has been sent. Verify it once, then use Login normally.</span><button class="btn" id="registrationLoginBtn" style="margin-top:10px">Go to Login</button>';
+  msg.innerHTML='<span class="success"><b>Registration successful ✓</b><br>Verification email sent. Please verify your account and login again.</span><button class="btn" id="registrationLoginBtn" style="margin-top:10px">Go to Login</button>';
   $("registrationLoginBtn").onclick=async()=>{await logoutToHome();openAuth("login");};
  }catch(e){
   let t=e?.message||String(e);
@@ -764,7 +781,7 @@ let authReadyResolve;
 const authReady=new Promise(r=>authReadyResolve=r);
 function waitForAuthReady(){return authReady;}
 // ---------- Astrologer list ----------
-async function loadAstrologers(){ return; }
+async function loadAstrologers(){ return loadAstroCards(); }
 async function loadAstroCards(){
  const box=$("astroCards");box.innerHTML='<div class="empty">Loading astrologers...</div>';
  try{const snap=await withTimeout(getDocs(query(collection(db,"smv_astrologers"),where("status","==","approved"))));
@@ -881,7 +898,7 @@ $("astroRegistrationForm")?.addEventListener("submit",async e=>{
   batch.set(doc(db,"smv_notifications",uid+"_"+Date.now()),{userId:uid,type:"registration",title:"Registration submitted",message:"Your astrologer application is pending Admin approval.",createdAt:serverTimestamp(),read:false});
   batch.set(doc(db,"smv_payouts",uid),{uid,bankName,accountName,accountNumber,ifsc,upi,updatedAt:serverTimestamp(),status:"pending_admin_review"});
   await withTimeout(batch.commit());
-  form.reset();btn.disabled=false;btn.textContent="SUBMITTED ✓";await signOut(auth);currentUser=null;selectedAstro=null;message("astroRegMsg",'<span class="success"><b>Registration submitted ✓</b><br>Your complete profile is waiting for Admin approval. Email verification is required once at registration. Your bank/UPI details are private and will not be shown back in full.</span><button class="btn" id="astroGoLogin" style="margin-top:10px">Go to Login</button>');
+  form.reset();btn.disabled=false;btn.textContent="SUBMITTED ✓";await signOut(auth);currentUser=null;selectedAstro=null;message("astroRegMsg",'<span class="success"><b>Please verify your account and login again.</b><br>Your account was registered. Wait for Admin approval.</span><button class="btn" id="astroGoLogin" style="margin-top:10px">Go to Login</button>');
   $("astroGoLogin").onclick=async()=>{await logoutToHome();openAuth("login");};
  }catch(err){let text=err?.message||String(err);if(err?.code==="auth/email-already-in-use")text="This email is already registered. Please use Login instead.";else if(err?.code==="auth/operation-not-allowed")text="Email/Password registration is disabled in Firebase Authentication.";else if(err?.code==="auth/network-request-failed")text="Firebase network connection failed. Check your internet connection.";else if(err?.code==="permission-denied")text="Firestore permission denied. Check Firestore Rules.";message("astroRegMsg",'<span class="error"><b>Registration failed:</b> '+escapeHtml(text)+'</span>');btn.disabled=false;btn.textContent="SUBMIT REGISTRATION";}
 });
