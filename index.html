@@ -1019,7 +1019,7 @@ async function logoutToHome(reason=''){
   currentUser=null; selectedAstro=null;
   try{await signOut(auth);}catch(e){console.warn("Logout failed",e);}
   hide('dashboard'); hide('admin'); hide('dashLink'); hide('adminLink');
-  hide('ask-flow'); hide('register-flow'); hide('astro-register-form'); hide('astro-flow');
+  hide('ask-flow'); hide('register-flow'); hide('astro-register-form'); hide('astro-flow'); hide('appointment'); hide('contact');
   $('authBtn').textContent='Login'; closeModal(); window.scrollTo({top:0,behavior:'smooth'});
   if(reason) alert(reason);
   setTimeout(()=>{intentionalLogout=false;},800);
