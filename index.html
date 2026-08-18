@@ -642,7 +642,7 @@ function openModal(html){$("modalContent").innerHTML=html;$("modal").classList.r
 function openRegister(){hide("astro-flow");hide("ask-flow");hide("astro-register-form");show("register-flow");go("register-flow");}
 function openAstroRegister(){hide("register-flow");show("astro-register-form");go("astro-register-form");}
 function openAstroFlow(){openQuestionService();}
-async function openQuestionService(){if(!currentUser){pendingAfterLogin="question";openAuth("login");return;} hide("register-flow");hide("astro-register-form");hide("astro-flow");show("ask-flow"); selectedAstro=null; $("askTitle").textContent="Ask Your Question"; await loadQuestionPrice(); $("birthName").value=""; $("birthDate").value=""; $("birthTime").value=""; $("birthPlace").value=""; $("birthGender").value=""; $("questionText").value=""; message("askMsg",""); go("ask-flow");}
+async function openQuestionService(){if(!currentUser){pendingAfterLogin="question";openAuth("login");return;} if(String(currentUser.email||"").trim() if(!currentUser){pendingAfterLogin="question";openAuth("login");return;}if(!currentUser){pendingAfterLogin="question";openAuth("login");return;} !currentUser.emailVerified){await logoutToHome();openAuth("login");return;} hide("register-flow");hide("astro-register-form");hide("astro-flow");show("ask-flow"); selectedAstro=null; $("askTitle").textContent="Ask Your Question"; await loadQuestionPrice(); $("birthName").value=""; $("birthDate").value=""; $("birthTime").value=""; $("birthPlace").value=""; $("birthGender").value=""; $("questionText").value=""; message("askMsg",""); go("ask-flow");}
 
 $("authBtn")?.addEventListener("click",async()=>{if(currentUser){await logoutToHome();}else{openAuth("login");}});
 $("customerRegBtn")?.addEventListener("click",()=>openAuth("register"));
@@ -711,6 +711,7 @@ async function submitAuth(mode){
     const loginCred=await withTimeout(signInWithEmailAndPassword(auth,email,password),20000);
     if(!loginCred?.user){throw new Error("Login did not return a Firebase user. Please try again.");}
     currentUser=loginCred.user;
+    const loginProfile=await getUserProfile(loginCred.user.uid); const loginRole=String(loginProfile?.role||"customer").toLowerCase(); const loginStatus=String(loginProfile?.status||"active").toLowerCase(); if((loginRole==="astrologer" && (loginStatus!=="approved" || !loginCred.user.emailVerified)) || (loginRole==="customer" && !loginCred.user.emailVerified)){ await signOut(auth); currentUser=null; pendingAfterLogin=null; msg.innerHTML='<span class="error"><b>Login blocked.</b><br>Your account must be approved and email verified before login.</span>'; return; }
     const goToQuestion=pendingAfterLogin==="question";
     const goToAdmin=pendingAfterLogin==="admin";
     pendingAfterLogin=null;
