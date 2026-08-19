@@ -668,7 +668,7 @@ footer{text-align:center;padding:35px 16px;color:var(--muted);border-top:3px dou
 <footer>© SMV ASTRO SERVICES</footer>
 <div class="modal hidden" id="modal">
 <div class="modalbox" style="position:relative">
-<button type="button" onclick="closeModal()" aria-label="Close" title="Close" style="position:absolute;top:10px;right:10px;border:0;background:transparent;font-size:28px;line-height:1;cursor:pointer;padding:4px 8px;color:inherit">×</button>
+<button type="button" onclick="window.closeModal()" aria-label="Close" title="Close" style="position:absolute;top:10px;right:10px;border:0;background:transparent;font-size:28px;line-height:1;cursor:pointer;padding:4px 8px;color:inherit">×</button>
 <div id="modalContent" style="padding-right:35px"></div>
 </div>
 </div>
@@ -721,7 +721,7 @@ const go=id=>$(id)?.scrollIntoView({behavior:"smooth",block:"start"});
 function escapeHtml(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m]));}
 function message(id,html){if($(id)) $(id).innerHTML=html;}
 function withTimeout(promise,ms=15000){return Promise.race([promise,new Promise((_,reject)=>setTimeout(()=>reject(new Error("Firebase did not respond within 15 seconds.")),ms))]);}
-window.closeModal=()=>$("modal").classList.add("hidden");
+window.closeModal=()=>{const m=document.getElementById("modal");if(m)m.classList.add("hidden");};
 function openModal(html){$("modalContent").innerHTML=html;$("modal").classList.remove("hidden");}
 
 // ---------- Navigation ----------
@@ -813,7 +813,7 @@ document.addEventListener("click",e=>{
  resendVerificationEmail().finally(()=>{resendBtn.dataset.sending="";});
 });
 async function submitAuth(mode){
- const msg=$("authMsg"),email=$("email").value.trim(),password=$("password").value;
+ const msg=$("authMsg"),email=$("email")?.value.trim()||"",password=$("password")?.value||"";
  if(!email||!password){msg.innerHTML='<span class="error">Please enter email and password.</span>';return;}
  const btn=$("submitAuth");btn.disabled=true;btn.textContent=mode==="login"?"Signing in...":"Creating...";
  try{
@@ -3522,5 +3522,40 @@ document.addEventListener("click",function(e){
   }
 });
 </script>
-<style id="svm-final-blog-layout">#blogList{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:18px!important;align-items:start!important;grid-auto-rows:max-content!important}#blogList .blog-card{width:auto!important;max-width:none!important;height:auto!important;min-height:0!important;align-self:start!important;box-sizing:border-box!important}.blog-content{overflow-wrap:anywhere!important;word-break:break-word!important}@media(max-width:900px) and (min-width:701px){#blogList{grid-template-columns:repeat(2,minmax(0,1fr))!important}}@media(max-width:700px){#blogList{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;overflow-x:auto!important;overflow-y:hidden!important;gap:14px!important;padding:4px 4px 16px!important;scroll-snap-type:x mandatory!important;-webkit-overflow-scrolling:touch!important}#blogList .blog-card{flex:0 0 86%!important;width:86%!important;max-width:86%!important;min-width:86%!important;height:auto!important;min-height:0!important;scroll-snap-align:start!important;align-self:flex-start!important}}</style><style id="svm-blog-responsive-final">#blogList{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:18px!important;align-items:start!important}#blogList .blog-card{width:auto!important;max-width:none!important;min-width:0!important;height:auto!important;min-height:0!important;align-self:start!important}@media(max-width:900px) and (min-width:701px){#blogList{grid-template-columns:repeat(2,minmax(0,1fr))!important}}@media(max-width:700px),(pointer:coarse){#blogList{display:grid!important;grid-template-columns:1fr!important;gap:14px!important;overflow:visible!important;padding:0!important}#blogList .blog-card{display:block!important;width:100%!important;max-width:100%!important;min-width:0!important;height:auto!important;min-height:0!important;flex:none!important;align-self:start!important}}</style></body>
+<style id="svm-final-blog-layout">#blogList{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:18px!important;align-items:start!important;grid-auto-rows:max-content!important}#blogList .blog-card{width:auto!important;max-width:none!important;height:auto!important;min-height:0!important;align-self:start!important;box-sizing:border-box!important}.blog-content{overflow-wrap:anywhere!important;word-break:break-word!important}@media(max-width:900px) and (min-width:701px){#blogList{grid-template-columns:repeat(2,minmax(0,1fr))!important}}@media(max-width:700px){#blogList{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;overflow-x:auto!important;overflow-y:hidden!important;gap:14px!important;padding:4px 4px 16px!important;scroll-snap-type:x mandatory!important;-webkit-overflow-scrolling:touch!important}#blogList .blog-card{flex:0 0 86%!important;width:86%!important;max-width:86%!important;min-width:86%!important;height:auto!important;min-height:0!important;scroll-snap-align:start!important;align-self:flex-start!important}}</style><style id="svm-blog-responsive-final">#blogList{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:18px!important;align-items:start!important}#blogList .blog-card{width:auto!important;max-width:none!important;min-width:0!important;height:auto!important;min-height:0!important;align-self:start!important}@media(max-width:900px) and (min-width:701px){#blogList{grid-template-columns:repeat(2,minmax(0,1fr))!important}}@media(max-width:700px),(pointer:coarse){#blogList{display:grid!important;grid-template-columns:1fr!important;gap:14px!important;overflow:visible!important;padding:0!important}#blogList .blog-card{display:block!important;width:100%!important;max-width:100%!important;min-width:0!important;height:auto!important;min-height:0!important;flex:none!important;align-self:start!important}}</style>
+<script id="svm-ui-navigation-fallback">
+(function(){
+  document.addEventListener("click",function(e){
+    const close=e.target.closest("#modal button[onclick*='closeModal']");
+    if(close){e.preventDefault();window.closeModal();return;}
+
+    const astro=e.target.closest("#astroRegBtn");
+    if(astro){
+      e.preventDefault();
+      const f=document.getElementById("register-flow");
+      const a=document.getElementById("astro-register-form");
+      if(f)f.classList.add("hidden");
+      if(a)a.classList.remove("hidden");
+      a?.scrollIntoView({behavior:"smooth",block:"start"});
+      return;
+    }
+
+    const consult=e.target.closest("#consultationNav");
+    if(consult){
+      e.preventDefault();
+      if(window.openQuestionService)window.openQuestionService();
+      return;
+    }
+
+    const contact=e.target.closest("#contactNav");
+    if(contact){
+      e.preventDefault();
+      const c=document.getElementById("contact");
+      if(c){c.classList.remove("hidden");c.scrollIntoView({behavior:"smooth",block:"start");}
+      return;
+    }
+  },true);
+})();
+</script>
+</body>
 </html>
