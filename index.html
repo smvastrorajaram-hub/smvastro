@@ -681,7 +681,7 @@ const firebaseConfig={apiKey:"AIzaSyCKXyfZ9sjGmej7ygxHpzHNcNysMXHuvSs",authDomai
 let app=null, auth=null, db=null, functions=null, httpsCallableFn=null, firebaseInitError=null;
 try{
   app=initializeApp(firebaseConfig);
-  auth=getAuth(app);try{await setPersistence(auth,browserSessionPersistence);}catch(e){console.warn("Auth persistence unavailable; continuing.",e);}
+  auth=getAuth(app);
   db=getFirestore(app);
 }catch(initError){
   firebaseInitError=initError;
@@ -3211,7 +3211,7 @@ window.show=show; window.hide=hide; window.openQuestionService=openQuestionServi
     const {getAuth,setPersistence,browserSessionPersistence}=await import('https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js');
     const app=getApps().length?getApps()[0]:initializeApp(FBCONFIG);
     db=getFirestore(app);
-    auth=getAuth(app);try{await setPersistence(auth,browserSessionPersistence);}catch(e){console.warn("Auth persistence unavailable; continuing.",e);}
+    auth=getAuth(app);
     fbApi={
       collection:fs.collection,getDocs:fs.getDocs,query:fs.query,where:fs.where,orderBy:fs.orderBy,limit:fs.limit,
       doc:fs.doc,getDoc:fs.getDoc,addDoc:fs.addDoc,updateDoc:fs.updateDoc,deleteDoc:fs.deleteDoc,
