@@ -682,7 +682,7 @@ const firebaseConfig={apiKey:"AIzaSyCKXyfZ9sjGmej7ygxHpzHNcNysMXHuvSs",authDomai
 let app=null, auth=null, db=null, functions=null, httpsCallableFn=null, firebaseInitError=null;
 try{
   app=initializeApp(firebaseConfig);
-  auth=getAuth(app);await setPersistence(auth,browserSessionPersistence);
+  auth=getAuth(app);try{await setPersistence(auth,browserSessionPersistence);}catch(persistenceError){console.warn("Firebase Auth persistence unavailable; continuing with default persistence.",persistenceError);}
   db=getFirestore(app);
 }catch(initError){
   firebaseInitError=initError;
