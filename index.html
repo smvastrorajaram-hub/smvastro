@@ -3139,6 +3139,8 @@ window.show=show; window.hide=hide; window.openQuestionService=openQuestionServi
     window.__SMV_FALLBACK_BOUND=true;
     $("authBtn")?.addEventListener("click",()=>fallbackUser?null:loginUI());
     $("customerRegBtn")?.addEventListener("click",()=>registerUI("customer"));
+    $("astroRegBtn")?.addEventListener("click",()=>{if(window.openAstroRegister)window.openAstroRegister();else{const a=$("astro-register-form");if(a)a.classList.remove("hidden");a?.scrollIntoView({behavior:"smooth",block:"start"});}});
+    $("contactNav")?.addEventListener("click",e=>{e.preventDefault();const c=$("contact");if(c){c.classList.remove("hidden");c.scrollIntoView({behavior:"smooth",block:"start"});}});
     // Astrologer registration is handled only by the main Full Registration page.
     $("privateConsultBtn")?.addEventListener("click",e=>{e.preventDefault(); if(fallbackUser){show("ask-flow");go("ask-flow");}else{window.__smvPendingAsk=true;loginUI();}});
   }
