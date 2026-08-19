@@ -245,6 +245,10 @@ footer{text-align:center;padding:35px 16px;color:var(--muted);border-top:3px dou
 
 /* V62 blog manager */
 #blogList .blog-card{min-width:0}
+#blogList{grid-template-columns:repeat(3,minmax(0,1fr));align-items:stretch}
+#blogList .blog-card{height:100%}
+@media(max-width:900px){#blogList{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){#blogList{grid-template-columns:1fr}}
 .blog-content{white-space:pre-wrap;line-height:1.75}
 .admin-blog-row{border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:10px;background:#fffdf8}
 .admin-blog-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}
