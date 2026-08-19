@@ -3400,7 +3400,7 @@ window.__SMV_APP_READY=true;
     box.innerHTML='<div class="empty">Loading articles...</div>';
     try{
       const f=await fb();
-      const snap=await withTimeout(f.getDocs(f.collection(db,'smv_blogs')),12000);
+      const snap=await withTimeout(f.getDocs(f.query(f.collection(db,'smv_blogs'),f.where('active','==',true))),12000);
       const rows=snap.docs.map(d=>({id:d.id,...d.data()})).filter(b=>b.active!==false);
       rows.sort((a,b)=>String(b.updatedAtText||b.createdAtText||'').localeCompare(String(a.updatedAtText||a.createdAtText||'')));
       if(!rows.length){box.innerHTML='<div class="empty">No blog articles published yet.</div>';return;}
