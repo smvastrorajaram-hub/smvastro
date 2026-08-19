@@ -342,6 +342,7 @@ footer{text-align:center;padding:35px 16px;color:var(--muted);border-top:3px dou
 </div>
 <nav>
 <a href="#home">Home</a>
+<a href="#featureHub">Services</a>
 <a href="#ask-service" id="consultationNav">Consultation</a>
                 <a href="#contact" id="contactNav">Contact</a>
 <button class="btn gray" id="langToggle" type="button" style="padding:8px 10px">தமிழ்</button>
@@ -681,7 +682,7 @@ const firebaseConfig={apiKey:"AIzaSyCKXyfZ9sjGmej7ygxHpzHNcNysMXHuvSs",authDomai
 let app=null, auth=null, db=null, functions=null, httpsCallableFn=null, firebaseInitError=null;
 try{
   app=initializeApp(firebaseConfig);
-  auth=getAuth(app);try{await setPersistence(auth,browserSessionPersistence);}catch(e){console.warn("Auth persistence unavailable; continuing.",e);}
+  auth=getAuth(app);await setPersistence(auth,browserSessionPersistence);
   db=getFirestore(app);
 }catch(initError){
   firebaseInitError=initError;
@@ -3071,7 +3072,7 @@ if(firebaseInitError){
   console.error("SMV ASTRO Firebase is unavailable. Basic navigation is still available.",firebaseInitError);
 }
 
-window.show=show; window.hide=hide; window.openQuestionService=openQuestionService; window.openAuth=openAuth; window.openAstroRegister=openAstroRegister; window.__SMV_APP_READY=true;
+window.show=show; window.hide=hide; window.openQuestionService=openQuestionService; window.openAuth=openAuth; window.__SMV_APP_READY=true;
 </script>
 
 <script>
@@ -3209,7 +3210,7 @@ window.show=show; window.hide=hide; window.openQuestionService=openQuestionServi
     const {getAuth,setPersistence,browserSessionPersistence}=await import('https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js');
     const app=getApps().length?getApps()[0]:initializeApp(FBCONFIG);
     db=getFirestore(app);
-    auth=getAuth(app);try{await setPersistence(auth,browserSessionPersistence);}catch(e){console.warn("Auth persistence unavailable; continuing.",e);}
+    auth=getAuth(app);await setPersistence(auth,browserSessionPersistence);
     fbApi={
       collection:fs.collection,getDocs:fs.getDocs,query:fs.query,where:fs.where,orderBy:fs.orderBy,limit:fs.limit,
       doc:fs.doc,getDoc:fs.getDoc,addDoc:fs.addDoc,updateDoc:fs.updateDoc,deleteDoc:fs.deleteDoc,
@@ -3495,7 +3496,7 @@ window.show=show; window.hide=hide; window.openQuestionService=openQuestionServi
   const blogAdminObs=new MutationObserver(()=>{if(!$("admin")?.classList.contains("hidden"))window.__smvLoadAdminBlogs?.();});
   if($("admin")) blogAdminObs.observe($("admin"),{attributes:true,attributeFilter:["class"]});
 })();
-  document.getElementById("contactNav")?.addEventListener("click",e=>{e.preventDefault();if(window.show)window.show("contact");document.getElementById("contact")?.scrollIntoView({behavior:"smooth",block:"start"});});
+  document.getElementById("contactNav")?.addEventListener("click",()=>{show("contact");});
 </script>
 <script>
 document.addEventListener("click",function(e){
