@@ -854,15 +854,16 @@ async function submitAuth(mode){
       pendingAfterLogin=null;
       if(adminUser){
         show("adminLink");
+        hide("dashLink");
+        show("admin");
         await loadAdminPanel();
         go("admin");
       }else{
-        openModal('<h2>Admin Access</h2><div class="error">This account is not an Admin account.</div><p class="small">Please use your Admin login.</p>');
-      }
-    }else{
-      show("dashLink");
-      await loadDashboard();
-      go("dashboard");
+        hide("admin");
+        show("dashLink");
+        show("dashboard");
+        await loadDashboard();
+        go("dashboard");
     }
     return;
   }
