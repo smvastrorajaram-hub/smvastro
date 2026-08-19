@@ -3072,7 +3072,7 @@ if(firebaseInitError){
   console.error("SMV ASTRO Firebase is unavailable. Basic navigation is still available.",firebaseInitError);
 }
 
-window.show=show; window.hide=hide; window.openQuestionService=openQuestionService; window.openAuth=openAuth; window.__SMV_APP_READY=true;
+window.__SMV_APP_READY=true;
 </script>
 
 <script>
