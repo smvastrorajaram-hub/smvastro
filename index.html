@@ -766,7 +766,7 @@ async function openAdminEntry(){
 
 
 function openAuth(mode="login"){
-  hide("dashboard"); hide("admin"); hide("dashLink"); hide("adminLink"); hide("register-flow"); hide("astro-register-form"); hide("astro-flow");
+  hide("dashboard"); hide("admin"); hide("dashLink"); hide("adminLink"); hide("register-flow"); hide("astro-register-form"); hide("astro-flow"); hide("appointment"); hide("ask-flow");
   closeModal();
   openModal(`<h2>${mode==="login"?"Login":"Create Customer Account"}</h2>
   <div id="authMsg" class="small"></div>
