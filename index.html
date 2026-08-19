@@ -412,12 +412,6 @@ footer{text-align:center;padding:35px 16px;color:var(--muted);border-top:3px dou
   </div>
 </section>
 
-<section id="servicesPricing" class="feature-section">
-  <div class="home-rule"><span>✦</span><span data-i18n="services">SERVICES & PRICING</span><span>✦</span></div>
-  <h2 data-i18n="servicesTitle">Choose Your Guidance</h2>
-  <div class="grid">
-  </div>
-</section>
 
 <section id="appointment" class="feature-section hidden">
   <div class="card">
@@ -2026,7 +2020,7 @@ async function loadBlogs(){
 async function loadAdminBlogs(){
  const box=$("adminBlogs"); if(!box)return;
  try{
-  const snap=await withTimeout(getDocs(collection(db,"smv_blogs")),12000);
+  const snap=await withTimeout(getDocs(query(collection(db,"smv_blogs"),where("active","==",true))),12000);
   const rows=snap.docs.map(d=>({id:d.id,...d.data()}));
   rows.sort((a,b)=>String(b.updatedAtText||b.createdAtText||"").localeCompare(String(a.updatedAtText||a.createdAtText||"")));
   if(!rows.length){box.innerHTML='<div class="empty">No blogs yet. Add your first article above.</div>';return;}
