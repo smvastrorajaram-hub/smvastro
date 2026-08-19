@@ -3500,5 +3500,30 @@ window.__SMV_APP_READY=true;
 })();
   document.getElementById("contactNav")?.addEventListener("click",()=>{show("contact");});
 </script>
+<script>
+document.addEventListener("click",function(e){
+  const booking=e.target.closest("[data-open-booking]");
+  if(booking){
+    e.preventDefault();
+    const a=document.getElementById("appointment");
+    if(a){
+      a.classList.remove("hidden");
+      const t=document.getElementById("apType");
+      if(t)t.value=booking.dataset.openBooking||"";
+      a.scrollIntoView({behavior:"smooth",block:"start"});
+    }
+    return;
+  }
+
+  if(e.target.closest("#quickAskBtn")){
+    e.preventDefault();
+    const ask=document.getElementById("ask-flow");
+    if(ask){
+      ask.classList.remove("hidden");
+      ask.scrollIntoView({behavior:"smooth",block:"start"});
+    }
+  }
+});
+</script>
 </body>
 </html>
