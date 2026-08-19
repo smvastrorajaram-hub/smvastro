@@ -682,7 +682,7 @@ const firebaseConfig={apiKey:"AIzaSyCKXyfZ9sjGmej7ygxHpzHNcNysMXHuvSs",authDomai
 let app=null, auth=null, db=null, functions=null, httpsCallableFn=null, firebaseInitError=null;
 try{
   app=initializeApp(firebaseConfig);
-  auth=getAuth(app);try{await setPersistence(auth,browserSessionPersistence);}catch(persistenceError){console.warn("Firebase Auth persistence unavailable; continuing with default persistence.",persistenceError);}
+  auth=getAuth(app);await setPersistence(auth,browserSessionPersistence);
   db=getFirestore(app);
 }catch(initError){
   firebaseInitError=initError;
@@ -3498,6 +3498,30 @@ window.__SMV_APP_READY=true;
 })();
   document.getElementById("contactNav")?.addEventListener("click",()=>{show("contact");});
 </script>
+<script>
+document.addEventListener("click",function(e){
+  const booking=e.target.closest("[data-open-booking]");
+  if(booking){
+    e.preventDefault();
+    const a=document.getElementById("appointment");
+    if(a){
+      a.classList.remove("hidden");
+      const t=document.getElementById("apType");
+      if(t)t.value=booking.dataset.openBooking||"";
+      a.scrollIntoView({behavior:"smooth",block:"start"});
+    }
+    return;
+  }
 
+  if(e.target.closest("#quickAskBtn")){
+    e.preventDefault();
+    const ask=document.getElementById("ask-flow");
+    if(ask){
+      ask.classList.remove("hidden");
+      ask.scrollIntoView({behavior:"smooth",block:"start"});
+    }
+  }
+});
+</script>
 <style id="svm-final-blog-layout">#blogList{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:18px!important;align-items:start!important;grid-auto-rows:max-content!important}#blogList .blog-card{width:auto!important;max-width:none!important;height:auto!important;min-height:0!important;align-self:start!important;box-sizing:border-box!important}.blog-content{overflow-wrap:anywhere!important;word-break:break-word!important}@media(max-width:900px) and (min-width:701px){#blogList{grid-template-columns:repeat(2,minmax(0,1fr))!important}}@media(max-width:700px){#blogList{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;overflow-x:auto!important;overflow-y:hidden!important;gap:14px!important;padding:4px 4px 16px!important;scroll-snap-type:x mandatory!important;-webkit-overflow-scrolling:touch!important}#blogList .blog-card{flex:0 0 86%!important;width:86%!important;max-width:86%!important;min-width:86%!important;height:auto!important;min-height:0!important;scroll-snap-align:start!important;align-self:flex-start!important}}</style><style id="svm-blog-responsive-final">#blogList{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:18px!important;align-items:start!important}#blogList .blog-card{width:auto!important;max-width:none!important;min-width:0!important;height:auto!important;min-height:0!important;align-self:start!important}@media(max-width:900px) and (min-width:701px){#blogList{grid-template-columns:repeat(2,minmax(0,1fr))!important}}@media(max-width:700px),(pointer:coarse){#blogList{display:grid!important;grid-template-columns:1fr!important;gap:14px!important;overflow:visible!important;padding:0!important}#blogList .blog-card{display:block!important;width:100%!important;max-width:100%!important;min-width:0!important;height:auto!important;min-height:0!important;flex:none!important;align-self:start!important}}</style></body>
 </html>
