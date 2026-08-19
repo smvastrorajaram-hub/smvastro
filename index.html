@@ -3146,7 +3146,7 @@ window.show=show; window.hide=hide; window.openQuestionService=openQuestionServi
     $("privateConsultBtn")?.addEventListener("click",e=>{e.preventDefault(); if(fallbackUser){show("ask-flow");go("ask-flow");}else{window.__smvPendingAsk=true;loginUI();}});
   }
   // The main module normally binds these. If it failed to load, keep the essential public buttons usable.
-  setTimeout(()=>{if(!window.__SMV_APP_READY) bindFallback();},1200);
+  /* fallback authentication disabled: main Firebase module is the single auth handler */
 })();
 </script>
 
