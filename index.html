@@ -338,10 +338,11 @@ footer{text-align:center;padding:35px 16px;color:var(--muted);border-top:3px dou
 </div>
 <nav>
 <a href="#home">Home</a>
-<a href="#contact" id="contactNav">Contact</a>
+<a href="#featureHub">Services</a>
+<a href="#ask-service" id="consultationNav">Consultation</a>
+                <a href="#contact" id="contactNav">Contact</a>
 <button class="btn gray" id="langToggle" type="button" style="padding:8px 10px">தமிழ்</button>
-<a class="hidden" href="#dashboard" id="dashLink">Dashboard</a>
-<a class="hidden" href="#admin" id="adminLink">Admin</a>
+<a class="hidden" href="#dashboard" id="dashLink">Dashboard</a><a class="hidden" href="#admin" id="adminLink">Admin</a>
 <button class="btn" id="authBtn">Login</button>
 </nav>
 </div>
@@ -361,7 +362,7 @@ footer{text-align:center;padding:35px 16px;color:var(--muted);border-top:3px dou
       <div>
         <div class="home-rule"><span>✦</span><span data-i18n="discover">DISCOVER SMV ASTRO</span><span>✦</span></div>
         <h2 data-i18n="allServices">Services, Guidance & Resources</h2>
-        <p class="small" data-i18n="hubIntro">Explore trusted reviews, astrology articles and more.</p>
+        <p class="small" data-i18n="hubIntro">Explore consultations, pricing, trusted reviews, astrology articles, FAQs and more.</p>
       </div>
       
     </div>
@@ -371,6 +372,7 @@ footer{text-align:center;padding:35px 16px;color:var(--muted);border-top:3px dou
       <a class="feature-tile" href="#appointment"><span>📅</span><b data-i18n="booking">Appointment Booking</b><small>Choose Chat or Call</small></a>
       <a class="feature-tile" href="#reviews"><span>⭐</span><b data-i18n="reviews">Customer Reviews</b><small>Verified experiences</small></a>
       <a class="feature-tile" href="#blog"><span>📝</span><b data-i18n="blog">Astrology Blog</b><small>Read & learn</small></a>
+      <a class="feature-tile" href="#faq"><span>❓</span><b data-i18n="faq">FAQ</b><small>Quick answers</small></a>
       <a class="feature-tile" href="#register-flow"><span>👤</span><b data-i18n="account">Customer Account</b><small>Login & registration</small></a>
       <a class="feature-tile" href="#featureHub"><span>🔔</span><b data-i18n="notifications">Notifications</b><small>Latest updates</small></a>
       <a class="feature-tile" href="#admin" id="adminFeatureBtn"><span>📊</span><b>Admin Dashboard</b><small>Admin login & management</small></a>
@@ -410,7 +412,12 @@ footer{text-align:center;padding:35px 16px;color:var(--muted);border-top:3px dou
   </div>
 </section>
 
-
+<section id="servicesPricing" class="feature-section">
+  <div class="home-rule"><span>✦</span><span data-i18n="services">SERVICES & PRICING</span><span>✦</span></div>
+  <h2 data-i18n="servicesTitle">Choose Your Guidance</h2>
+  <div class="grid">
+  </div>
+</section>
 
 <section id="appointment" class="feature-section hidden">
   <div class="card">
@@ -722,7 +729,7 @@ function openModal(html){$("modalContent").innerHTML=html;$("modal").classList.r
 
 // ---------- Navigation ----------
 function openRegister(){hide("astro-flow");hide("ask-flow");hide("astro-register-form");show("register-flow");go("register-flow");}
-function openAstroRegister(){hide("register-flow");hide("appointment");hide("contact");hide("ask-flow");hide("astro-flow");show("astro-register-form");go("astro-register-form");}
+function openAstroRegister(){hide("register-flow");show("astro-register-form");go("astro-register-form");}
 function openAstroFlow(){openQuestionService();}
 async function openQuestionService(){if(!currentUser){pendingAfterLogin="question";openAuth("login");return;}const questionProfile=await getUserProfile(currentUser.uid);const questionRole=String(questionProfile?.role||"").toLowerCase();if(questionRole!=="customer"||!currentUser.emailVerified){await logoutToHome();openAuth("login");return;}hide("register-flow");hide("astro-register-form");hide("astro-flow");show("ask-flow");selectedAstro=null;$("askTitle").textContent="Ask Your Question";await loadQuestionPrice();$("birthName").value="";$("birthDate").value="";$("birthTime").value="";$("birthPlace").value="";$("birthGender").value="";$("questionText").value="";message("askMsg","");go("ask-flow");}
 
@@ -759,7 +766,7 @@ async function openAdminEntry(){
 
 
 function openAuth(mode="login"){
-  hide("dashboard"); hide("admin"); hide("dashLink"); hide("adminLink"); hide("appointment"); hide("contact"); hide("ask-flow");
+  hide("dashboard"); hide("admin"); hide("dashLink"); hide("adminLink"); hide("register-flow"); hide("astro-register-form"); hide("astro-flow");
   closeModal();
   openModal(`<h2>${mode==="login"?"Login":"Create Customer Account"}</h2>
   <div id="authMsg" class="small"></div>
@@ -1019,7 +1026,7 @@ async function logoutToHome(reason=''){
   currentUser=null; selectedAstro=null;
   try{await signOut(auth);}catch(e){console.warn("Logout failed",e);}
   hide('dashboard'); hide('admin'); hide('dashLink'); hide('adminLink');
-  hide('ask-flow'); hide('register-flow'); hide('astro-register-form'); hide('astro-flow'); hide('appointment'); hide('contact');
+  hide('ask-flow'); hide('register-flow'); hide('astro-register-form'); hide('astro-flow');
   $('authBtn').textContent='Login'; closeModal(); window.scrollTo({top:0,behavior:'smooth'});
   if(reason) alert(reason);
   setTimeout(()=>{intentionalLogout=false;},800);
@@ -2004,7 +2011,7 @@ async function loadBlogs(){
  const box=$("blogList"); if(!box)return;
  box.innerHTML='<div class="empty">Loading articles...</div>';
  try{
-  const snap=await withTimeout(getDocs(collection(db,"smv_blogs")),12000);
+  const snap=await withTimeout(getDocs(query(collection(db,"smv_blogs"),where("active","==",true))),12000);
   const rows=snap.docs.map(d=>({id:d.id,...d.data()})).filter(b=>b.active!==false);
   rows.sort((a,b)=>String(b.updatedAtText||b.createdAtText||"").localeCompare(String(a.updatedAtText||a.createdAtText||"")));
   if(!rows.length){box.innerHTML='<div class="empty">No blog articles published yet.</div>';return;}
@@ -3479,17 +3486,7 @@ window.__SMV_APP_READY=true;
       finally{bookingSubmitting=false;btn.disabled=false;btn.textContent='REQUEST APPOINTMENT';}
     });
   }
-  function setupAsk(){
-  $('quickAskBtn')?.addEventListener('click',()=>{openQuestionService();});
-  document.querySelectorAll('[data-open-booking]').forEach(b=>{
-    b.onclick=()=>{
-      show('appointment');
-      if($('apType')) $('apType').value=b.dataset.openBooking;
-      $('appointment')?.scrollIntoView({behavior:'smooth',block:'start'});
-      $('apName')?.focus();
-    };
-  });
-}
+  function setupAsk(){ $('quickAskBtn')?.addEventListener('click',()=>{openQuestionService();}); }
   function hookAdmin(){const old=window.loadAdminPanel; // existing function is module-scoped, so poll DOM after admin becomes visible.
     $('saveAnnouncement')?.addEventListener('click',publishAnnouncement);
     $('testEmailBtn')?.addEventListener('click',testAdminEmail);
@@ -3501,38 +3498,7 @@ window.__SMV_APP_READY=true;
   const blogAdminObs=new MutationObserver(()=>{if(!$("admin")?.classList.contains("hidden"))window.__smvLoadAdminBlogs?.();});
   if($("admin")) blogAdminObs.observe($("admin"),{attributes:true,attributeFilter:["class"]});
 })();
-  document.getElementById("contactNav")?.addEventListener("click",e=>{e.preventDefault();document.getElementById("contact")?.classList.remove("hidden");document.getElementById("contact")?.scrollIntoView({behavior:"smooth",block:"start"});});
-</script>
-<script>
-document.addEventListener("click",function(e){
-  const b=e.target.closest("[data-open-booking]");
-  if(!b)return;
-  const a=document.getElementById("appointment");
-  if(!a)return;
-  a.classList.remove("hidden");
-  const t=document.getElementById("apType");
-  if(t)t.value=b.dataset.openBooking;
-  a.scrollIntoView({behavior:"smooth",block:"start"});
-});
-</script>
-<script>
-document.addEventListener("click",function(e){
-  if(e.target.closest("#quickAskBtn")){
-    const ask=document.getElementById("ask-flow");
-    if(ask){
-      ask.classList.remove("hidden");
-      ask.scrollIntoView({behavior:"smooth",block:"start"});
-    }
-  }
-  if(e.target.closest("#contactNav")){
-    e.preventDefault();
-    const contact=document.getElementById("contact");
-    if(contact){
-      contact.classList.remove("hidden");
-      contact.scrollIntoView({behavior:"smooth",block:"start"});
-    }
-  }
-});
+  document.getElementById("contactNav")?.addEventListener("click",()=>{show("contact");});
 </script>
 </body>
 </html>
