@@ -3071,7 +3071,7 @@ if(firebaseInitError){
   console.error("SMV ASTRO Firebase is unavailable. Basic navigation is still available.",firebaseInitError);
 }
 
-window.show=show; window.hide=hide; window.openQuestionService=openQuestionService; window.openAuth=openAuth; window.openAstroRegister=openAstroRegister; window.__SMV_APP_READY=true;
+window.show=show; window.hide=hide; window.openQuestionService=openQuestionService; window.openAuth=openAuth; window.openAstroRegister=openAstroRegister; window.closeModal=closeModal; window.__SMV_APP_READY=true;
 </script>
 
 <script>
@@ -3495,7 +3495,7 @@ window.show=show; window.hide=hide; window.openQuestionService=openQuestionServi
   const blogAdminObs=new MutationObserver(()=>{if(!$("admin")?.classList.contains("hidden"))window.__smvLoadAdminBlogs?.();});
   if($("admin")) blogAdminObs.observe($("admin"),{attributes:true,attributeFilter:["class"]});
 })();
-  document.getElementById("contactNav")?.addEventListener("click",e=>{e.preventDefault();if(window.show)window.show("contact");document.getElementById("contact")?.scrollIntoView({behavior:"smooth",block:"start"});});
+  document.getElementById("contactNav")?.addEventListener("click",e=>{e.preventDefault();const c=document.getElementById("contact");if(c){c.classList.remove("hidden");c.scrollIntoView({behavior:"smooth",block:"start"});}});
 </script>
 <script>
 document.addEventListener("click",function(e){
