@@ -4388,13 +4388,13 @@ document.addEventListener('DOMContentLoaded', function(){
 #modal.profile-modal-active .profile-dialog .profile-photo{width:72px;height:72px;min-height:72px;margin:0 auto 6px;}
 #modal.profile-modal-active .profile-dialog .profile-title{font-size:21px!important;margin:0 0 2px!important;line-height:1.15;}
 #modal.profile-modal-active .profile-dialog .profile-expertise,#modal.profile-modal-active .profile-dialog .profile-experience{font-size:12px!important;line-height:1.25;margin:2px 0;}
-#modal.profile-modal-active .profile-dialog .profile-bio{font-size:12px!important;line-height:1.35;margin:5px 0;max-height:62px;overflow:auto;}
+#modal.profile-modal-active .profile-dialog .profile-bio{font-size:12px!important;line-height:1.4;margin:6px 0 7px;max-height:110px;min-height:0;flex:0 0 auto;overflow-y:auto;overflow-x:hidden;padding-right:4px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
 #modal.profile-modal-active .profile-dialog .profile-reviews-title{font-size:17px!important;margin:7px 0 4px!important;}
 #modal.profile-modal-active .profile-dialog #publicProfileReviews{flex:1 1 auto;min-height:70px;max-height:none!important;overflow-y:auto!important;padding:0 4px 2px 0;margin:0;}
 #modal.profile-modal-active .profile-dialog #publicProfileReviews .card{margin:5px 0!important;padding:8px!important;border-radius:9px!important;}
 #modal.profile-modal-active .profile-dialog #publicProfileReviews p{font-size:11px!important;line-height:1.3!important;margin:3px 0!important;}
 #modal.profile-modal-active .profile-dialog #profileCloseBtn{flex:0 0 auto;min-height:36px!important;margin-top:7px!important;}
-@media(max-width:520px){#modal.profile-modal-active{padding:7px!important;}#modal.profile-modal-active .modalbox{width:calc(100vw - 14px)!important;max-width:calc(100vw - 14px)!important;max-height:72dvh!important;padding:10px!important;border-radius:14px!important;}#modal.profile-modal-active .profile-dialog{max-height:calc(72dvh - 20px);}#modal.profile-modal-active .profile-dialog .profile-photo{width:64px;height:64px;min-height:64px;}#modal.profile-modal-active .profile-dialog .profile-title{font-size:19px!important;}#modal.profile-modal-active .profile-dialog .profile-bio{max-height:50px;font-size:11px!important;}#modal.profile-modal-active .profile-dialog .profile-reviews-title{font-size:16px!important;margin:5px 0 3px!important;}}
+@media(max-width:520px){#modal.profile-modal-active{padding:7px!important;}#modal.profile-modal-active .modalbox{width:calc(100vw - 14px)!important;max-width:calc(100vw - 14px)!important;max-height:72dvh!important;padding:10px!important;border-radius:14px!important;}#modal.profile-modal-active .profile-dialog{max-height:calc(72dvh - 20px);}#modal.profile-modal-active .profile-dialog .profile-photo{width:64px;height:64px;min-height:64px;}#modal.profile-modal-active .profile-dialog .profile-title{font-size:19px!important;}#modal.profile-modal-active .profile-dialog .profile-bio{max-height:90px;font-size:11px!important;line-height:1.4;flex:0 0 auto;overflow-y:auto;overflow-x:hidden;padding-right:4px;}#modal.profile-modal-active .profile-dialog .profile-reviews-title{font-size:16px!important;margin:5px 0 3px!important;}}\n#modal.profile-modal-active .profile-dialog .profile-bio::-webkit-scrollbar{width:5px}\n#modal.profile-modal-active .profile-dialog .profile-bio::-webkit-scrollbar-thumb{background:#c9a86b;border-radius:10px}\n#modal.profile-modal-active .profile-dialog .profile-bio::-webkit-scrollbar-track{background:#f7f1e4;border-radius:10px}
 </style>
 
 <style id="smv-v33-login-profile-compact">
@@ -5143,6 +5143,20 @@ html body header .brand .brand-text .logo a {
   #smv-content-hub #publicBlogs .blog-card{display:flex!important;flex-direction:column!important;height:auto!important;}
   #smv-content-hub #publicBlogs .blog-card > .content-thumb{width:100%;height:auto;max-height:240px;object-fit:cover;}
 }
+</style>
+<style id="smv-english-blog-horizontal-desktop">
+@media(min-width:701px){
+#smv-content-hub #publicBlogs{display:flex;flex-direction:column;gap:16px;}
+#smv-content-hub #publicBlogs .blog-card{display:grid!important;grid-template-columns:minmax(220px,34%) minmax(0,1fr);grid-template-rows:auto auto 1fr auto;column-gap:20px;align-items:start;height:auto!important;min-height:220px;padding:18px;}
+#smv-content-hub #publicBlogs .blog-card:before{grid-column:1 / -1;}
+#smv-content-hub #publicBlogs .blog-card > h3{grid-column:2;grid-row:1;margin:0 0 8px!important;}
+#smv-content-hub #publicBlogs .blog-card > .content-thumb{grid-column:1;grid-row:1 / 5;width:100%;height:100%;min-height:180px;max-height:300px;object-fit:cover;margin:0!important;}
+#smv-content-hub #publicBlogs .blog-card > p.small{grid-column:2;grid-row:2;margin:4px 0 10px!important;}
+#smv-content-hub #publicBlogs .blog-card > .blog-content{grid-column:2;grid-row:3;margin-top:0;}
+#smv-content-hub #publicBlogs .blog-card > .small:last-child{grid-column:2;grid-row:4;margin-top:10px!important;padding-top:10px!important;}
+#smv-content-hub #publicBlogs .blog-card:not(:has(.content-thumb)){grid-template-columns:1fr;}
+}
+@media(max-width:700px){#smv-content-hub #publicBlogs .blog-card{display:flex!important;flex-direction:column!important;height:auto!important;}#smv-content-hub #publicBlogs .blog-card > .content-thumb{width:100%;height:auto;max-height:240px;object-fit:cover;}}
 </style>
 </head>
 <body>
@@ -7947,7 +7961,7 @@ function smvClearMediaForm(){
 async function loadAdminContent(){
   const box=$("adminBlogsMedia");if(!box)return;
   try{
-    const snap=await getDocs(collection(db,SMV_CONTENT_COLLECTION));
+    const snap=await getDocs(query(collection(db,SMV_CONTENT_COLLECTION),where("language","==","en")));
     const items=snap.docs.map(d=>({id:d.id,...(d.data()||{})})).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
     box.innerHTML=items.length?items.map(x=>{
       const status=x.published?'<span class="success">PUBLISHED</span>':'<span class="small">DRAFT</span>';
@@ -7979,7 +7993,7 @@ async function saveBlog(){
   try{let id=editId,old=null;if(editId){const oldSnap=await getDoc(doc(db,SMV_CONTENT_COLLECTION,editId));if(!oldSnap.exists())throw new Error("Blog not found.");old=oldSnap.data()||{};}else id=doc(collection(db,SMV_CONTENT_COLLECTION)).id;
     let coverUrl=old?.coverUrl||"",coverPath=old?.coverPath||"";const file=$("blogCoverFile")?.files?.[0];if(file){const up=await smvUploadFile(file,"image",id);coverUrl=up.url;coverPath=up.path;}
     const textUp=await smvUploadBlogText(body,id);
-    const data={kind:"blog",title,summary,bodyUrl:textUp.url,bodyPublicId:textUp.publicId,bodySize:textUp.size,coverUrl,coverPath,published:true,updatedAt:serverTimestamp(),updatedBy:currentUser.uid};
+    const data={kind:"blog",title,summary,language:"en",bodyUrl:textUp.url,bodyPublicId:textUp.publicId,bodySize:textUp.size,coverUrl,coverPath,published:true,updatedAt:serverTimestamp(),updatedBy:currentUser.uid};
     if(editId)await updateDoc(doc(db,SMV_CONTENT_COLLECTION,editId),data);else await setDoc(doc(db,SMV_CONTENT_COLLECTION,id),{...data,createdAt:serverTimestamp(),publishedAt:serverTimestamp(),authorUid:currentUser.uid});
     smvClearBlogForm();await loadAdminContent();await loadPublicContent();$("blogManagerMsg").innerHTML='<span class="success">Blog published successfully. Blog text is stored on Cloudinary.</span>';
   }catch(e){$("blogManagerMsg").innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';}finally{b.disabled=false;if(!b.textContent.includes("PUBLISH"))b.textContent="PUBLISH BLOG";}
@@ -8001,7 +8015,7 @@ async function uploadMedia(){
   }
 
   const b=$("uploadMediaBtn");b.disabled=true;b.textContent="UPLOADING...";
-  try{const id=doc(collection(db,SMV_CONTENT_COLLECTION)).id,up=await smvUploadFile(file,type,id);await setDoc(doc(db,SMV_CONTENT_COLLECTION,id),{kind:"media",title,description:desc,mediaType:type,url:up.url,storagePath:up.path,cloudinaryPublicId:up.publicId,size:up.size,mimeType:up.mimeType,fileName:up.name,published:true,createdAt:serverTimestamp(),publishedAt:serverTimestamp(),authorUid:currentUser.uid});smvClearMediaForm();await loadAdminContent();await loadPublicContent();$("mediaManagerMsg").innerHTML='<span class="success">Content uploaded and published successfully.</span>';}catch(e){$("mediaManagerMsg").innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';}finally{b.disabled=false;b.textContent="UPLOAD & PUBLISH";}
+  try{const id=doc(collection(db,SMV_CONTENT_COLLECTION)).id,up=await smvUploadFile(file,type,id);await setDoc(doc(db,SMV_CONTENT_COLLECTION,id),{kind:"media",title,description:desc,language:"en",mediaType:type,url:up.url,storagePath:up.path,cloudinaryPublicId:up.publicId,size:up.size,mimeType:up.mimeType,fileName:up.name,published:true,createdAt:serverTimestamp(),publishedAt:serverTimestamp(),authorUid:currentUser.uid});smvClearMediaForm();await loadAdminContent();await loadPublicContent();$("mediaManagerMsg").innerHTML='<span class="success">Content uploaded and published successfully.</span>';}catch(e){$("mediaManagerMsg").innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';}finally{b.disabled=false;b.textContent="UPLOAD & PUBLISH";}
 }
 function initContentManager(){
   $("saveBlogBtn")?.addEventListener("click",saveBlog);
