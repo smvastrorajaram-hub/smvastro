@@ -5158,6 +5158,288 @@ html body header .brand .brand-text .logo a {
 }
 @media(max-width:700px){#smv-content-hub #publicBlogs .blog-card{display:flex!important;flex-direction:column!important;height:auto!important;}#smv-content-hub #publicBlogs .blog-card > .content-thumb{width:100%;height:auto;max-height:240px;object-fit:cover;}}
 </style>
+
+<style id="smv-media-horizontal-desktop-final-fix">
+/* FINAL MEDIA / MEDIA DESKTOP FIX
+   Desktop: use the available website width with wide horizontal cards.
+   Mobile: keep the normal compact single-column layout. */
+#smv-content-hub #publicMedia{
+  width:100%!important;
+  max-width:100%!important;
+  min-width:0!important;
+  box-sizing:border-box!important;
+}
+
+#smv-content-hub #publicMedia > .grid{
+  width:100%!important;
+  max-width:100%!important;
+  min-width:0!important;
+  display:grid!important;
+  align-items:start!important;
+  justify-items:stretch!important;
+  grid-template-columns:repeat(auto-fit,minmax(320px,1fr))!important;
+  gap:16px!important;
+  margin:10px 0 0!important;
+  box-sizing:border-box!important;
+}
+
+#smv-content-hub #publicMedia > .grid > .media-card{
+  width:100%!important;
+  min-width:0!important;
+  max-width:none!important;
+  height:auto!important;
+  min-height:0!important;
+  margin:0!important;
+  align-self:start!important;
+  box-sizing:border-box!important;
+}
+
+#smv-content-hub #publicMedia > .grid > .media-card > img,
+#smv-content-hub #publicMedia > .grid > .media-card > video{
+  display:block!important;
+  width:100%!important;
+  max-width:100%!important;
+  height:auto!important;
+  max-height:360px!important;
+  object-fit:contain!important;
+  box-sizing:border-box!important;
+}
+
+/* PDF cards no longer stretch to match a taller video/media card. */
+#smv-content-hub #publicMedia > .grid > .media-card:not(:has(img)):not(:has(video)):not(:has(audio)){
+  align-self:start!important;
+}
+
+@media (min-width:768px){
+  #smv-content-hub{
+    width:100%!important;
+    max-width:1180px!important;
+    margin-left:auto!important;
+    margin-right:auto!important;
+    box-sizing:border-box!important;
+  }
+  #smv-content-hub .feature-shell{
+    width:100%!important;
+    max-width:none!important;
+    box-sizing:border-box!important;
+  }
+}
+
+@media (max-width:700px){
+  /* Mobile remains compact and single-column. */
+  #smv-content-hub #publicMedia > .grid{
+    grid-template-columns:1fr!important;
+    gap:7px!important;
+    margin-top:7px!important;
+  }
+  #smv-content-hub #publicMedia > .grid > .media-card{
+    width:100%!important;
+    margin:0!important;
+    padding:7px!important;
+  }
+  #smv-content-hub #publicMedia > .grid > .media-card > img,
+  #smv-content-hub #publicMedia > .grid > .media-card > video{
+    max-height:180px!important;
+  }
+}
+
+@media (min-width:701px) and (max-width:767px){
+  #smv-content-hub #publicMedia > .grid{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:10px!important;
+  }
+}
+</style>
+
+<style id="smv-media-desktop-video-music-pdf-final">
+/* FINAL MEDIA ORDER + DESKTOP HORIZONTAL LAYOUT
+   Desktop: Video first, Music next, PDF files after that, all side-by-side.
+   Mobile: keep the normal compact single-column layout. */
+#smv-content-hub #publicMedia .smv-media-horizontal-grid{
+  width:100%!important;
+  max-width:none!important;
+  min-width:0!important;
+  display:grid!important;
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  gap:16px!important;
+  align-items:start!important;
+  margin:10px 0 0!important;
+  box-sizing:border-box!important;
+}
+#smv-content-hub #publicMedia .smv-media-horizontal-grid > .media-card{
+  width:100%!important;
+  min-width:0!important;
+  max-width:none!important;
+  margin:0!important;
+  align-self:start!important;
+  box-sizing:border-box!important;
+  overflow:hidden!important;
+}
+#smv-content-hub #publicMedia .smv-media-horizontal-grid > .media-card h3{
+  overflow-wrap:anywhere!important;
+  word-break:break-word!important;
+}
+#smv-content-hub #publicMedia .media-video video,
+#smv-content-hub #publicMedia .media-image img{
+  display:block!important;
+  width:100%!important;
+  max-width:100%!important;
+  height:260px!important;
+  max-height:260px!important;
+  object-fit:contain!important;
+  box-sizing:border-box!important;
+}
+#smv-content-hub #publicMedia .media-music audio{width:100%!important;max-width:100%!important;}
+#smv-content-hub #publicMedia .media-pdf{min-height:150px!important;}
+@media (min-width:768px) and (max-width:1100px){
+  #smv-content-hub #publicMedia .smv-media-horizontal-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;}
+}
+@media (min-width:1101px){
+  #smv-content-hub #publicMedia .smv-media-horizontal-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important;}
+}
+@media (max-width:767px){
+  #smv-content-hub #publicMedia .smv-media-horizontal-grid{
+    grid-template-columns:1fr!important;
+    gap:7px!important;
+    margin-top:7px!important;
+  }
+  #smv-content-hub #publicMedia .smv-media-horizontal-grid > .media-card{
+    width:100%!important;
+    margin:0!important;
+    padding:7px!important;
+  }
+  #smv-content-hub #publicMedia .media-video video,
+  #smv-content-hub #publicMedia .media-image img{
+    height:auto!important;
+    max-height:180px!important;
+  }
+}
+</style>
+
+<style id="smv-media-desktop-stacked-type-rows-final">
+/* FINAL MEDIA LAYOUT: desktop only. Each media type gets its own horizontal row.
+   Order: Video row, Music row, PDF row, then Images if present. Mobile stays compact. */
+#smv-content-hub #publicMedia{width:100%!important;max-width:none!important;min-width:0!important;box-sizing:border-box!important;}
+#smv-content-hub #publicMedia .smv-media-horizontal-grid{display:block!important;width:100%!important;margin:0!important;}
+#smv-content-hub #publicMedia .smv-media-type-section{display:block!important;width:100%!important;margin:0 0 18px!important;padding:0!important;}
+#smv-content-hub #publicMedia .smv-media-type-title{font-size:18px!important;line-height:1.25!important;font-weight:800!important;margin:0 0 8px!important;padding:0 0 5px!important;border-bottom:1px solid var(--line,#e3d6bd)!important;color:var(--maroon,#7a2a1c)!important;}
+#smv-content-hub #publicMedia .smv-media-type-grid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:12px!important;width:100%!important;min-width:0!important;margin:0!important;align-items:start!important;}
+#smv-content-hub #publicMedia .smv-media-type-grid>.media-card{width:100%!important;min-width:0!important;max-width:none!important;height:auto!important;min-height:0!important;margin:0!important;padding:10px!important;box-sizing:border-box!important;align-self:start!important;overflow:hidden!important;}
+#smv-content-hub #publicMedia .smv-media-type-grid>.media-card h3{font-size:16px!important;line-height:1.3!important;margin:0 0 7px!important;overflow-wrap:anywhere!important;word-break:break-word!important;}
+#smv-content-hub #publicMedia .media-video video{display:block!important;width:100%!important;height:190px!important;max-height:190px!important;object-fit:contain!important;box-sizing:border-box!important;}
+#smv-content-hub #publicMedia .media-music audio{display:block!important;width:100%!important;height:40px!important;margin:5px 0!important;}
+#smv-content-hub #publicMedia .media-pdf{min-height:0!important;}
+#smv-content-hub #publicMedia .media-image img{display:block!important;width:100%!important;height:170px!important;max-height:170px!important;object-fit:contain!important;box-sizing:border-box!important;}
+#smv-content-hub #publicMedia .media-card .btn{margin-top:6px!important;}
+@media (min-width:768px) and (max-width:1050px){
+  #smv-content-hub #publicMedia .smv-media-type-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;}
+}
+@media (max-width:767px){
+  /* Mobile: compact, normal single-column cards; no desktop row sizing. */
+  #smv-content-hub #publicMedia .smv-media-type-section{margin:0 0 9px!important;}
+  #smv-content-hub #publicMedia .smv-media-type-title{font-size:15px!important;margin:0 0 5px!important;padding:0 0 3px!important;}
+  #smv-content-hub #publicMedia .smv-media-type-grid{grid-template-columns:1fr!important;gap:7px!important;}
+  #smv-content-hub #publicMedia .smv-media-type-grid>.media-card{width:100%!important;padding:7px!important;margin:0!important;}
+  #smv-content-hub #publicMedia .smv-media-type-grid>.media-card h3{font-size:14px!important;margin:0 0 5px!important;}
+  #smv-content-hub #publicMedia .media-video video{height:auto!important;max-height:180px!important;}
+  #smv-content-hub #publicMedia .media-image img{height:auto!important;max-height:120px!important;}
+  #smv-content-hub #publicMedia .media-music audio{height:36px!important;}
+}
+</style>
+<style id="smv-media-fixed-desktop-size-final">
+/* FINAL REQUEST: fixed card size on DESKTOP ONLY. Mobile is intentionally untouched. */
+@media (min-width: 768px){
+  #smv-content-hub #publicMedia .smv-media-type-grid{
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    gap:14px!important;
+    align-items:start!important;
+  }
+  #smv-content-hub #publicMedia .smv-media-type-grid>.media-card{
+    width:100%!important;
+    max-width:none!important;
+    min-width:0!important;
+    margin:0!important;
+    box-sizing:border-box!important;
+    overflow:hidden!important;
+    align-self:start!important;
+  }
+  /* Video: fixed compact desktop box */
+  #smv-content-hub #publicMedia .media-video.media-card{
+    height:285px!important;
+    min-height:285px!important;
+    max-height:285px!important;
+  }
+  #smv-content-hub #publicMedia .media-video video{
+    width:100%!important;
+    height:190px!important;
+    max-height:190px!important;
+    object-fit:contain!important;
+  }
+  /* Music: deliberately shorter than video */
+  #smv-content-hub #publicMedia .media-music.media-card{
+    height:115px!important;
+    min-height:115px!important;
+    max-height:115px!important;
+  }
+  #smv-content-hub #publicMedia .media-music audio{
+    width:100%!important;
+    height:38px!important;
+    margin:5px 0!important;
+  }
+  /* PDF: fixed compact desktop box */
+  #smv-content-hub #publicMedia .media-pdf.media-card{
+    height:205px!important;
+    min-height:205px!important;
+    max-height:205px!important;
+  }
+  #smv-content-hub #publicMedia .media-pdf iframe,
+  #smv-content-hub #publicMedia .media-pdf embed{
+    width:100%!important;
+    height:125px!important;
+    max-height:125px!important;
+    display:block!important;
+  }
+  #smv-content-hub #publicMedia .media-card h3{
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+    white-space:nowrap!important;
+  }
+}
+@media (min-width:768px) and (max-width:1050px){
+  #smv-content-hub #publicMedia .smv-media-type-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;}
+}
+</style>
+
+<style id="smv-english-hero-mobile-center-final">
+@media (max-width:600px){
+  #home.hero h1{
+    text-align:center !important;
+  }
+  #home.hero .hero-subline{
+    width:100% !important;
+    margin-left:auto !important;
+    margin-right:auto !important;
+    justify-content:center !important;
+    align-items:center !important;
+    text-align:center !important;
+    flex-wrap:wrap !important;
+  }
+}
+</style>
+<style id="smv-english-five-part-accordion">
+.smv-advanced-part{display:block!important;width:100%!important;max-width:100%!important;box-sizing:border-box!important;margin:10px 0 16px!important;padding:10px!important;border:2px solid #d8c7a7!important;border-radius:12px!important;background:#fffdf8!important;overflow:hidden!important}
+.smv-advanced-part-title.smv-accordion-trigger{width:calc(100% + 20px)!important;margin:-10px -10px 12px!important;padding:11px 12px!important;box-sizing:border-box!important;display:flex!important;align-items:center!important;gap:10px!important;cursor:pointer!important;background:#fff3d5!important;border-bottom:2px solid #d8c7a7!important;border-radius:12px 12px 0 0!important;user-select:none!important}
+.smv-part-medallion{flex:0 0 34px!important;width:34px!important;height:34px!important;border-radius:50%!important;display:grid!important;place-items:center!important;background:#fffaf0!important;border:1px solid #c59b4a!important;color:#8b0000!important;font-weight:900!important;font-size:13px!important}
+.smv-part-heading{min-width:0!important;flex:1 1 auto!important;display:flex!important;flex-direction:column!important;gap:2px!important}
+.smv-part-heading h3{margin:0!important;padding:0!important;color:#8b0000!important;font-size:16px!important;line-height:1.3!important;font-weight:900!important;text-align:left!important}
+.smv-part-tap{display:block!important;color:#6d6674!important;font-size:12px!important;line-height:1.25!important;font-weight:600!important}
+.smv-part-chevron{flex:0 0 auto!important;color:#8b0000!important;font-size:22px!important;line-height:1!important;transition:transform .2s ease!important}
+.smv-advanced-part.is-expanded .smv-part-chevron{transform:rotate(180deg)!important}
+.smv-advanced-part-content{width:100%!important;box-sizing:border-box!important}
+.smv-advanced-part-content[hidden]{display:none!important}
+@media(min-width:701px){.smv-advanced-part-title.smv-accordion-trigger{padding:12px 14px!important}.smv-part-heading h3{font-size:17px!important}}
+@media(max-width:520px){.smv-advanced-part{margin:10px 0 14px!important;padding:9px!important}.smv-advanced-part-title.smv-accordion-trigger{width:calc(100% + 18px)!important;margin:-9px -9px 10px!important;padding:10px!important;gap:8px!important}.smv-part-medallion{flex-basis:30px!important;width:30px!important;height:30px!important;font-size:12px!important}.smv-part-heading h3{font-size:15px!important}.smv-part-tap{font-size:11px!important}.smv-part-chevron{font-size:20px!important}}
+</style>
 </head>
 <body>
 <header>
@@ -5185,11 +5467,13 @@ html body header .brand .brand-text .logo a {
 </header>
 <main class="container">
 <section class="hero" id="home">
-<div class="home-rule"><span>ॐ</span><span>VEDA • JYOTISHA • GUIDANCE</span><span>ॐ</span></div>
-<span class="badge">WELCOME TO SMV ASTRO SERVICES</span>
-<h1>Trusted Astrological Guidance for a Better Tomorrow</h1>
-<p>Rooted in the time-honoured Indian tradition of Jyotisha, we bring thoughtful astrological guidance for life, relationships, career and important decisions — with trusted astrologers and a private consultation experience.</p>
-<div class="hero-subline"><span>Traditional Wisdom</span><span>•</span><span>Personal Guidance</span><span>•</span><span>Trusted Consultation</span></div>
+<div class="home-rule"><span>ॐ</span><span>🔱 SMV ASTRO 🔱</span><span>ॐ</span></div>
+<span class="badge">🔱 Om Sri Madurai Veeran Thunai 🔱</span>
+<h1>Path of Grace • Path of Courage • Path of Clarity</h1>
+<p>With the blessings of Madurai Veeran, clear guidance for your life journey.</p>
+<p class="hero-quote">“Move forward with courage… Live with confidence…”</p>
+<p>Rooted in the Tamil tradition and the belief in the blessings of Madurai Veeran as a symbol of courage and protection, and combined with traditional astrological knowledge, <b>SMV ASTRO</b> has been created as a trusted platform to help you understand your life journey.</p>
+<div class="hero-subline"><span>Horoscope</span><span>•</span><span>Panchangam</span><span>•</span><span>Planetary Positions</span><span>•</span><span>Dasha Periods</span><span>•</span><span>Transits</span><span>•</span><span>Astrological Analysis</span></div>
 </section>
 
 <section class="smv-new-asknow" id="askNowSection" aria-labelledby="askNowHeading">
@@ -7945,7 +8229,35 @@ async function smvRenderPublicContent(items){
     if(!blogs.length) blogBox.innerHTML='<div class="empty">No published blogs yet.</div>';
     else {const cards=await Promise.all(blogs.map(async x=>{const body=await smvFetchBlogBody(x.bodyUrl);return `<article class="card blog-card"><h3>${escapeHtml(x.title||"Untitled")}</h3>${x.coverUrl?`<img class="content-thumb" src="${escapeHtml(x.coverUrl)}" alt="${escapeHtml(x.title||"Blog")}">`:""}${x.summary?`<p class="small"><b>${escapeHtml(x.summary)}</b></p>`:""}<div class="blog-content">${escapeHtml(body)}</div><div class="small" style="margin-top:auto;padding-top:12px">Published ${escapeHtml(smvDateTime(x.publishedAt||x.createdAt))}</div></article>`;}));blogBox.innerHTML=cards.join("");}
   }
-  if(mediaBox){mediaBox.innerHTML=media.length?`<div class="grid">${media.map(x=>{const title=escapeHtml(x.title||"Content"),desc=x.description?`<p class="small">${escapeHtml(x.description)}</p>`:"";if(x.mediaType==="image")return `<article class="card media-card"><h3>${title}</h3><img src="${escapeHtml(x.url)}" alt="${title}" loading="lazy">${desc}</article>`;if(x.mediaType==="video")return `<article class="card media-card"><h3>${title}</h3><video controls preload="metadata" src="${escapeHtml(x.url)}"></video>${desc}<a class="btn" href="${escapeHtml(x.url)}" target="_blank" rel="noopener">OPEN VIDEO</a></article>`;if(x.mediaType==="music")return `<article class="card media-card"><h3>🎵 ${title}</h3><audio controls preload="metadata" src="${escapeHtml(x.url)}"></audio><p class="small">Music · ${escapeHtml(smvFormatBytes(x.size))}</p>${desc}<a class="btn" href="${escapeHtml(x.url)}" target="_blank" rel="noopener">OPEN MUSIC</a></article>`;return `<article class="card media-card"><h3>${title}</h3><p class="small">PDF · ${escapeHtml(smvFormatBytes(x.size))}</p>${desc}<a class="btn" href="${escapeHtml(x.url)}" target="_blank" rel="noopener" download>DOWNLOAD PDF</a></article>`;}).join('')}</div>`:'<div class="empty">No published media yet.</div>';}
+  if(mediaBox){
+    const mediaTypeRank={video:0,music:1,pdf:2,image:3};
+    const orderedMedia=[...media].sort((a,b)=>{
+      const ar=mediaTypeRank[a.mediaType]??9, br=mediaTypeRank[b.mediaType]??9;
+      if(ar!==br) return ar-br;
+      const av=a.publishedAt?.seconds||a.createdAt?.seconds||0, bv=b.publishedAt?.seconds||b.createdAt?.seconds||0;
+      return bv-av;
+    });
+    mediaBox.innerHTML=orderedMedia.length?(()=>{
+  const groups=[
+    ['video','Video'],
+    ['music','Music'],
+    ['pdf','PDF'],
+    ['image','Images']
+  ];
+  const renderCard=x=>{
+    const title=escapeHtml(x.title||"Content"),desc=x.description?`<p class="small">${escapeHtml(x.description)}</p>`:"";
+    if(x.mediaType==="video") return `<article class="card media-card media-video"><h3>${title}</h3><video controls preload="metadata" src="${escapeHtml(x.url)}"></video>${desc}</article>`;
+    if(x.mediaType==="music") return `<article class="card media-card media-music"><h3>🎵 ${title}</h3><audio controls preload="metadata" src="${escapeHtml(x.url)}"></audio><p class="small">Music · ${escapeHtml(smvFormatBytes(x.size))}</p>${desc}</article>`;
+    if(x.mediaType==="pdf") return `<article class="card media-card media-pdf"><h3>${title}</h3><p class="small">PDF · ${escapeHtml(smvFormatBytes(x.size))}</p>${desc}<a class="btn" href="${escapeHtml(x.url)}" target="_blank" rel="noopener" download>DOWNLOAD PDF</a></article>`;
+    return `<article class="card media-card media-image"><h3>${title}</h3><img src="${escapeHtml(x.url)}" alt="${title}" loading="lazy">${desc}</article>`;
+  };
+  return groups.map(([type,label])=>{
+    const items=orderedMedia.filter(x=>x.mediaType===type);
+    if(!items.length)return '';
+    return `<section class="smv-media-type-section smv-media-type-${type}"><h3 class="smv-media-type-title">${label}</h3><div class="smv-media-type-grid">${items.map(renderCard).join('')}</div></section>`;
+  }).join('');
+})():'<div class="empty">No published media yet.</div>';
+  }
 }
 async function loadPublicContent(){try{await smvRenderPublicContent(await smvGetPublishedContent());}catch(e){console.warn("Public content unavailable:",e);if($("publicBlogs"))$("publicBlogs").innerHTML='<div class="empty">Content is temporarily unavailable.</div>';if($("publicMedia"))$("publicMedia").innerHTML='<div class="empty">Media is temporarily unavailable.</div>';}}
 function smvClearBlogForm(){
@@ -10385,15 +10697,29 @@ window.__SMV_APP_READY=true;
       const shell=document.createElement('div');
       shell.className='smv-advanced-shell';
       shell.setAttribute('data-scope','advanced-analysis');
-      shell.setAttribute('data-version','actual-five-part-fix');
+      shell.setAttribute('data-version','V11-full-five-part-accordion');
 
-      const makePart=(cls,en,taText)=>{
+      const quickNav=document.createElement('div');
+      quickNav.className='smv-advanced-quick-nav';
+      quickNav.setAttribute('aria-label',language==='ta'?'மேம்பட்ட ஜாதக பகுதிகள்':'Advanced horoscope sections');
+
+      const makePart=(cls,en,taText,roman)=>{
         const p=document.createElement('section');
         p.className=`smv-advanced-part ${cls}`;
+        p.dataset.smvAccordion='1'; p.dataset.smvOpen='0';
+        const partId=`smv-${cls}-panel`; p.id=partId;
         const head=document.createElement('div');
-        head.className='smv-advanced-part-title';
-        head.innerHTML=`<h3>${language==='ta'?taText:en}</h3>`;
-        p.appendChild(head);
+        head.className='smv-advanced-part-title smv-accordion-trigger';
+        head.setAttribute('role','button'); head.setAttribute('tabindex','0');
+        head.setAttribute('aria-expanded','false'); head.setAttribute('aria-controls',partId+'-content');
+        head.innerHTML=`<span class="smv-part-medallion" aria-hidden="true">${roman}</span><span class="smv-part-heading"><h3>${language==='ta'?taText:en}</h3><span class="smv-part-tap">☝ ${language==='ta'?'தொடுவதன் மூலம் பார்க்கவும்':'Tap to view'}</span></span><span class="smv-part-chevron" aria-hidden="true">⌄</span>`;
+        const content=document.createElement('div');
+        content.className='smv-advanced-part-content'; content.id=partId+'-content'; content.hidden=true;
+        p.appendChild(head); p.appendChild(content); p.__smvContent=content;
+        const card=document.createElement('button'); card.type='button';
+        card.className='smv-advanced-quick-card'; card.dataset.smvTarget=cls;
+        card.innerHTML=`<span class="smv-quick-medallion">${roman}</span><span class="smv-quick-title"><b>${language==='ta'?taText:en}</b><small>☝ ${language==='ta'?'தொடுவதன் மூலம் பார்க்கவும்':'Tap to view'}</small></span><span class="smv-quick-chevron">⌄</span>`;
+        if(roman==='I') quickNav.appendChild(card);
         return p;
       };
 
@@ -10402,12 +10728,13 @@ window.__SMV_APP_READY=true;
       advTitle.innerHTML='<h2>ADVANCED ANALYSIS</h2>';
       shell.appendChild(advTitle);
 
-      const chartPart=makePart('chart-analysis','I. CHART ANALYSIS','I. ஜாதக பகுப்பாய்வு');
-      const dasaPart=makePart('dasa-analysis','II. DASA ANALYSIS','II. தசா பகுப்பாய்வு');
-      const tajakaPart=makePart('tajaka-analysis','III. TAJAKA ANALYSIS','III. தாஜக பகுப்பாய்வு');
-      const transitPart=makePart('transit-analysis','IV. TRANSIT ANALYSIS','IV. கோச்சார பகுப்பாய்வு');
-      const remedyPart=makePart('remedial-analysis','V. REMEDIAL MEASURES','V. பரிகார நடவடிக்கைகள்');
+      const chartPart=makePart('chart-analysis','I. CHART ANALYSIS','I. ஜாதக பகுப்பாய்வு','I');
+      const dasaPart=makePart('dasa-analysis','II. DASA ANALYSIS','II. தசா பகுப்பாய்வு','II');
+      const tajakaPart=makePart('tajaka-analysis','III. TAJAKA ANALYSIS','III. தாஜக பகுப்பாய்வு','III');
+      const transitPart=makePart('transit-analysis','IV. TRANSIT ANALYSIS','IV. கோச்சார பகுப்பாய்வு','IV');
+      const remedyPart=makePart('remedial-analysis','V. REMEDIAL MEASURES','V. பரிகார நடவடிக்கைகள்','V');
       [chartPart,dasaPart,tajakaPart,transitPart,remedyPart].forEach(p=>shell.appendChild(p));
+      const accordionParts=[chartPart,dasaPart,tajakaPart,transitPart,remedyPart];
 
       const parts={chart:chartPart,dasa:dasaPart,tajaka:tajakaPart,transit:transitPart,remedy:remedyPart};
 
@@ -10450,20 +10777,20 @@ window.__SMV_APP_READY=true;
       // This is deterministic and prevents nested "part inside part" layers.
       direct.forEach(n=>{
         const target=classify(n);
-        if(target) target.appendChild(n);
+        if(target) (target.__smvContent||target).appendChild(n);
       });
 
       const lagnaSlot=rootHost?.querySelector?.('#specialLagnasNextToNavamsa');
-      if(lagnaSlot && lagnaSlot.parentElement!==chartPart){
+      if(lagnaSlot && lagnaSlot.parentElement!==(chartPart.__smvContent||chartPart)){
         const wrap=document.createElement('div');
         wrap.className='adv-section phase1-module special-lagnas-moved';
         wrap.appendChild(lagnaSlot);
-        chartPart.appendChild(wrap);
+        (chartPart.__smvContent||chartPart).appendChild(wrap);
       }
 
       const bhavaSpecial=rootHost?.querySelector?.('.bhava-special-features');
-      if(bhavaSpecial && bhavaSpecial.parentElement!==chartPart){
-        chartPart.insertBefore(bhavaSpecial,chartPart.children[1]||null);
+      if(bhavaSpecial && bhavaSpecial.parentElement!==(chartPart.__smvContent||chartPart)){
+        (chartPart.__smvContent||chartPart).insertBefore(bhavaSpecial,(chartPart.__smvContent||chartPart).children[1]||null);
       }
 
       const chartKey=n=>{
@@ -10492,11 +10819,35 @@ window.__SMV_APP_READY=true;
         return 50;
       };
 
-      Array.from(chartPart.children).slice(1)
+      Array.from(chartPart.__smvContent.children)
         .sort((a,b)=>chartKey(a)-chartKey(b))
-        .forEach(n=>chartPart.appendChild(n));
+        .forEach(n=>chartPart.__smvContent.appendChild(n));
 
       Object.values(parts).forEach(p=>p.classList.add('smv-advanced-part-ready'));
+
+      const setAccordion=(target,open)=>{
+        accordionParts.forEach(part=>{
+          const isOpen=part===target&&open;
+          part.dataset.smvOpen=isOpen?'1':'0';
+          const trigger=part.querySelector('.smv-accordion-trigger');
+          const content=part.__smvContent;
+          if(trigger) trigger.setAttribute('aria-expanded',isOpen?'true':'false');
+          if(content) content.hidden=!isOpen;
+          part.classList.toggle('is-expanded',isOpen);
+        });
+        quickNav.querySelectorAll('.smv-advanced-quick-card').forEach(card=>card.classList.toggle('is-active',!!target&&card.dataset.smvTarget===target.classList[1]&&open));
+        if(target&&open) setTimeout(()=>target.scrollIntoView({behavior:'smooth',block:'start'}),20);
+      };
+      quickNav.querySelectorAll('.smv-advanced-quick-card').forEach(card=>card.addEventListener('click',()=>{
+        const target=accordionParts.find(x=>x.classList.contains(card.dataset.smvTarget));
+        if(target) setAccordion(target,target.dataset.smvOpen!=='1');
+      }));
+      accordionParts.forEach(part=>{
+        const trigger=part.querySelector('.smv-accordion-trigger'); if(!trigger) return;
+        const toggle=()=>setAccordion(part,part.dataset.smvOpen!=='1');
+        trigger.addEventListener('click',toggle);
+        trigger.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}});
+      });
 
       advancedBox.innerHTML='';
       advancedBox.appendChild(shell);
@@ -10516,10 +10867,12 @@ window.__SMV_APP_READY=true;
           if(n.parentElement?.classList.contains('tajaka-module')) return;
           const owner=n.closest('.smv-advanced-part');
           const target=classify(n);
-          if(target && n.parentElement!==target) target.appendChild(n);
+          if(target && n.parentElement!==(target.__smvContent||target)) (target.__smvContent||target).appendChild(n);
           else if(owner && target && owner!==target) target.appendChild(n);
         });
       };
+      // Keep all five Advanced Analysis parts minimized by default; tap a heading to expand.
+      setAccordion(null,false);
     };
 
     const refreshAdvancedLateSections=(advancedBox)=>{
@@ -10772,6 +11125,14 @@ window.__SMV_APP_READY=true;
     return post('/api/horoscope/full',{...payload,dailyDate,dailyTime,tajakaYear:new Date().getFullYear()}).then(async (full)=>{
       if(full?.ok!==true || full?.meta?.complete!==true) throw new Error(full?.error||'Full horoscope calculation was not completed.');
       let advancedData=full?.advanced||{};
+  /* SMV KOTA NAME SOUND / NAME NAKSHATRA */
+try{
+  advancedData=window.__smvApplyKotaNameCalculation(
+    advancedData,
+    name,
+    lang
+  );
+}catch(_e){}
       // Backward-compatible fallback: older Render deployments may not yet expose
       // §15.4.2–15.4.4 in /api/horoscope/full. Fetch the same verified advanced
       // chart once and merge only the new Avastha block; all existing features stay intact.
@@ -10784,6 +11145,47 @@ window.__SMV_APP_READY=true;
       const required=['ashtakavarga','vargas','avastha','avakhada','kota','sudarshana','sarvatobhadra','planetRelations','remedies','phase2','tajaka'];
       const missing=required.filter(k=>!Object.prototype.hasOwnProperty.call(advancedData,k));
       if(missing.length) throw new Error('Full horoscope is incomplete. Missing features: '+missing.join(', '));
+
+      // KOTA NAME-SOUND COMPATIBILITY FIX:
+      // Accept both Tamil-script and English/Roman names. The backend remains
+      // the source of truth; this only fills missing name-sound fields so the
+      // Kota/Sarvatobhadra presentation never depends on the input script.
+      const kotaPadaSounds=[
+        {en:"Ashwini",p:["Chu", "Che", "Cho", "La"],ta:["\u0b9a\u0bc2", "\u0b9a\u0bc7", "\u0b9a\u0bcb", "\u0bb2\u0bbe"]},{en:"Bharani",p:["Li", "Lu", "Le", "Lo"],ta:["\u0bb2\u0bbf", "\u0bb2\u0bc1", "\u0bb2\u0bc7", "\u0bb2\u0bcb"]},{en:"Krittika",p:["A", "E", "U", "Ae"],ta:["\u0b85", "\u0b88", "\u0b89", "\u0b8f"]},{en:"Rohini",p:["O", "Va", "Vi", "Vu"],ta:["\u0b93", "\u0bb5\u0bbe", "\u0bb5\u0bbf", "\u0bb5\u0bc1"]},{en:"Mrigashira",p:["Ve", "Vo", "Ka", "Ki"],ta:["\u0bb5\u0bc7", "\u0bb5\u0bcb", "\u0b95\u0bbe", "\u0b95\u0bbf"]},{en:"Ardra",p:["Ku", "Gha", "Na", "Cha"],ta:["\u0b95\u0bc1", "\u0b95", "\u0ba8", "\u0b9a"]},{en:"Punarvasu",p:["Ke", "Ko", "Ha", "Hi"],ta:["\u0b95\u0bc7", "\u0b95\u0bcb", "\u0bb9", "\u0bb9\u0bbf"]},{en:"Pushya",p:["Hu", "He", "Ho", "Da"],ta:["\u0bb9\u0bc1", "\u0bb9\u0bc7", "\u0bb9\u0bcb", "\u0b9f"]},{en:"Ashlesha",p:["Di", "Du", "De", "Do"],ta:["\u0b9f\u0bbf", "\u0b9f\u0bc1", "\u0b9f\u0bc7", "\u0b9f\u0bcb"]},{en:"Magha",p:["Ma", "Mi", "Mu", "Me"],ta:["\u0bae", "\u0bae\u0bbf", "\u0bae\u0bc1", "\u0bae\u0bc7"]},{en:"Purva Phalguni",p:["Mo", "Ta", "Ti", "Tu"],ta:["\u0bae\u0bcb", "\u0b9f", "\u0b9f\u0bbf", "\u0b9f\u0bc1"]},{en:"Uttara Phalguni",p:["Te", "To", "Pa", "Pi"],ta:["\u0ba4\u0bc7", "\u0ba4\u0bcb", "\u0baa", "\u0baa\u0bbf"]},{en:"Hasta",p:["Pu", "Sha", "Na", "Tha"],ta:["\u0baa\u0bc1", "\u0bb7", "\u0ba3", "\u0ba4"]},{en:"Chitra",p:["Pe", "Po", "Ra", "Ri"],ta:["\u0baa\u0bc7", "\u0baa\u0bcb", "\u0bb0\u0bbe", "\u0bb0\u0bbf"]},{en:"Swati",p:["Ru", "Re", "Ro", "Ta"],ta:["\u0bb0\u0bc1", "\u0bb0\u0bc7", "\u0bb0\u0bcb", "\u0ba4"]},{en:"Vishakha",p:["Ti", "Tu", "Te", "To"],ta:["\u0ba4\u0bbf", "\u0ba4\u0bc1", "\u0ba4\u0bc7", "\u0ba4\u0bcb"]},{en:"Anuradha",p:["Na", "Ni", "Nu", "Ne"],ta:["\u0ba8", "\u0ba8\u0bbf", "\u0ba9\u0bc1", "\u0ba8\u0bc7"]},{en:"Jyeshtha",p:["No", "Ya", "Yi", "Yu"],ta:["\u0ba8\u0bcb", "\u0baf", "\u0baf\u0bbf", "\u0baf\u0bc1"]},{en:"Mula",p:["Ye", "Yo", "Bha", "Bhi"],ta:["\u0baf\u0bc7", "\u0baf\u0bcb", "\u0baa", "\u0baa\u0bbf"]},{en:"Purva Ashadha",p:["Bhu", "Dha", "Pha", "Da"],ta:["\u0baa\u0bc2", "\u0ba4", "\u0baa", "\u0b9f"]},{en:"Uttara Ashadha",p:["Bhe", "Bho", "Ja", "Ji"],ta:["\u0baa\u0bc7", "\u0baa\u0bcb", "\u0b9c", "\u0b9c\u0bbf"]},{en:"Shravana",p:["Ju", "Je", "Jo", "Gha"],ta:["\u0b9c\u0bc1", "\u0b9c\u0bc7", "\u0b9c\u0bcb", "\u0b95"]},{en:"Dhanishtha",p:["Ga", "Gi", "Gu", "Ge"],ta:["\u0b95", "\u0b95\u0bbf", "\u0b95\u0bc1", "\u0b95\u0bc7"]},{en:"Shatabhisha",p:["Go", "Sa", "Si", "Su"],ta:["\u0b95\u0bcb", "\u0b9a", "\u0b9a\u0bbf", "\u0b9a\u0bc1"]},{en:"Purva Bhadrapada",p:["Se", "So", "Da", "Di"],ta:["\u0b9a\u0bc7", "\u0b9a\u0bcb", "\u0ba4", "\u0ba4\u0bbf"]},{en:"Uttara Bhadrapada",p:["Du", "Tha", "Jha", "Na"],ta:["\u0ba4\u0bc1", "\u0ba4", "\u0b9c", "\u0ba8"]},{en:"Revati",p:["De", "Do", "Cha", "Chi"],ta:["\u0ba4\u0bc7", "\u0ba4\u0bcb", "\u0b9a", "\u0b9a\u0bbf"]}
+      ];
+      const kotaFindNameSound=(value)=>{
+        const q=String(value??'').trim();
+        if(!q)return null;
+        const tamil=/[\u0B80-\u0BFF]/.test(q);
+        const list=kotaPadaSounds.flatMap((x,ni)=>x.p.map((s,pi)=>({nak:x.en,pada:pi+1,en:s,ta:x.ta[pi],ni})));
+        list.sort((a,b)=>(tamil?b.ta.length-a.ta.length:b.en.length-a.en.length));
+        const low=q.toLowerCase();
+        return list.find(x=>tamil?q.startsWith(x.ta):low.startsWith(x.en.toLowerCase()))||null;
+      };
+      const kotaSoundForBirth=(nak,pada)=>{
+        const q=String(nak??'').trim().toLowerCase();
+        const i=kotaPadaSounds.findIndex(x=>x.en.toLowerCase()===q || q.includes(x.en.toLowerCase()));
+        const p=Math.max(1,Math.min(4,Number(pada)||1));
+        if(i<0)return null;
+        return {en:kotaPadaSounds[i].p[p-1],ta:kotaPadaSounds[i].ta[p-1],nak:kotaPadaSounds[i].en,pada:p};
+      };
+      const kotaInputName=String(name||'').trim();
+      const kotaNameMatch=kotaFindNameSound(kotaInputName);
+      const kotaBirthMatch=kotaSoundForBirth(
+        (full?.chart||chart)?.moonNakshatra||(full?.chart||chart)?.moonNak||(full?.chart||chart)?.moon?.nakshatra||'',
+        (full?.chart||chart)?.moonPada||(full?.chart||chart)?.moon?.pada||1
+      );
+      if(advancedData?.kota){
+        advancedData.kota.nativeName=kotaInputName||advancedData.kota.nativeName||'';
+        if(kotaNameMatch){
+          if(!advancedData.kota.nameInitial) advancedData.kota.nameInitial=kotaNameMatch.en;
+          if(!advancedData.kota.nameNakshatra) advancedData.kota.nameNakshatra=kotaNameMatch.en;
+          if(!advancedData.kota.nameNakshatraPada) advancedData.kota.nameNakshatraPada=kotaNameMatch.pada;
+          if(!advancedData.kota.nameSyllable) advancedData.kota.nameSyllable=lang==='ta'?kotaNameMatch.ta:kotaNameMatch.en;
+        }
+        if(kotaBirthMatch && !advancedData.kota.janmaNakshatraSound)
+          advancedData.kota.janmaNakshatraSound=lang==='ta'?kotaBirthMatch.ta:kotaBirthMatch.en;
+      }
       const bp=full?.birthPanchang||{};
       const pr=full?.dailyPanchang||{};
       const tr=full?.transit||{};
@@ -10798,7 +11200,18 @@ window.__SMV_APP_READY=true;
       window.__smvAdvancedDataByRoot=window.__smvAdvancedDataByRoot||{};
       window.__smvAdvancedDataByRoot[rootId]=advancedData;
       try{
-        renderAdvancedAstrology({...((chart&&typeof chart==='object')?chart:{}), ...((advancedData&&typeof advancedData==='object')?advancedData:{})},lang,rootId);
+       renderAdvancedAstrology(
+  window.__smvApplyKotaNameCalculation(
+    {
+      ...((chart&&typeof chart==='object')?chart:{}),
+      ...((advancedData&&typeof advancedData==='object')?advancedData:{})
+    },
+    name,
+    lang
+  ),
+  lang,
+  rootId
+);
         if(full?.phase4 && typeof window.__smvRenderPhase4Dasa==='function') window.__smvRenderPhase4Dasa(full.phase4,lang,rootId);
         else window.__smvLoadPhase4Dasa(fullChart||payload,lang,rootId);
 
@@ -10880,6 +11293,486 @@ function renderTransitPanchang(t,p,lang,rootId){
     box.innerHTML=h;
   }
   // V2.1 FIX: expose advanced loader because the English horoscope module runs in a separate IIFE.
+ /* ============================================================
+   SMV ASTRO — KOTA CHAKRA NAME SOUND / NAME NAKSHATRA
+   ENGLISH + TAMIL NAME SUPPORT
+   Surgical patch — does not replace existing calculations
+   ============================================================ */
+
+(function(){
+
+  const SMV_KOTA_NAKSHATRAS = [
+    {
+      en:"Ashwini", ta:"அசுவினி",
+      sounds:["Chu","Che","Cho","La"],
+      taSounds:["சு","சே","சோ","லா"]
+    },
+    {
+      en:"Bharani", ta:"பரணி",
+      sounds:["Li","Lu","Le","Lo"],
+      taSounds:["லி","லு","லே","லோ"]
+    },
+    {
+      en:"Krittika", ta:"கார்த்திகை",
+      sounds:["A","E","U","Ae"],
+      taSounds:["அ","ஈ","உ","ஏ"]
+    },
+    {
+      en:"Rohini", ta:"ரோகிணி",
+      sounds:["O","Va","Vi","Vu"],
+      taSounds:["ஓ","வா","வி","வு"]
+    },
+    {
+      en:"Mrigashira", ta:"மிருகசீரிடம்",
+      sounds:["Ve","Vo","Ka","Ki"],
+      taSounds:["வே","வோ","கா","கி"]
+    },
+    {
+      en:"Ardra", ta:"திருவாதிரை",
+      sounds:["Ku","Gha","Nga","Chha"],
+      taSounds:["கு","க","ங","ச"]
+    },
+    {
+      en:"Punarvasu", ta:"புனர்பூசம்",
+      sounds:["Ke","Ko","Ha","Hi"],
+      taSounds:["கே","கோ","ஹ","ஹி"]
+    },
+    {
+      en:"Pushya", ta:"பூசம்",
+      sounds:["Hu","He","Ho","Da"],
+      taSounds:["ஹு","ஹே","ஹோ","ட"]
+    },
+    {
+      en:"Ashlesha", ta:"ஆயில்யம்",
+      sounds:["Di","Du","De","Do"],
+      taSounds:["டி","டு","டே","டோ"]
+    },
+    {
+      en:"Magha", ta:"மகம்",
+      sounds:["Ma","Mi","Mu","Me"],
+      taSounds:["மா","மி","மு","மே"]
+    },
+    {
+      en:"Purva Phalguni", ta:"பூரம்",
+      sounds:["Mo","Ta","Ti","Tu"],
+      taSounds:["மோ","ட","டி","டு"]
+    },
+    {
+      en:"Uttara Phalguni", ta:"உத்திரம்",
+      sounds:["Te","To","Pa","Pi"],
+      taSounds:["தே","தோ","பா","பி"]
+    },
+    {
+      en:"Hasta", ta:"ஹஸ்தம்",
+      sounds:["Pu","Sha","Na","Tha"],
+      taSounds:["பு","ஷ","ண","த"]
+    },
+    {
+      en:"Chitra", ta:"சித்திரை",
+      sounds:["Pe","Po","Ra","Ri"],
+      taSounds:["பே","போ","ரா","ரி"]
+    },
+    {
+      en:"Swati", ta:"சுவாதி",
+      sounds:["Ru","Re","Ro","Ta"],
+      taSounds:["ரு","ரே","ரோ","த"]
+    },
+    {
+      en:"Vishakha", ta:"விசாகம்",
+      sounds:["Ti","Tu","Te","To"],
+      taSounds:["தி","து","தே","தோ"]
+    },
+    {
+      en:"Anuradha", ta:"அனுஷம்",
+      sounds:["Na","Ni","Nu","Ne"],
+      taSounds:["நா","நி","நு","நே"]
+    },
+    {
+      en:"Jyeshtha", ta:"கேட்டை",
+      sounds:["No","Ya","Yi","Yu"],
+      taSounds:["நோ","ய","யி","யு"]
+    },
+    {
+      en:"Mula", ta:"மூலம்",
+      sounds:["Ye","Yo","Ba","Bi"],
+      taSounds:["யே","யோ","ப","பி"]
+    },
+    {
+      en:"Purva Ashadha", ta:"பூராடம்",
+      sounds:["Bu","Dha","Bha","Da"],
+      taSounds:["பு","த","ப","த"]
+    },
+    {
+      en:"Uttara Ashadha", ta:"உத்திராடம்",
+      sounds:["Be","Bo","Ja","Ji"],
+      taSounds:["பே","போ","ஜ","ஜி"]
+    },
+    {
+      en:"Shravana", ta:"திருவோணம்",
+      sounds:["Ju","Je","Jo","Gha"],
+      taSounds:["ஜு","ஜே","ஜோ","க"]
+    },
+    {
+      en:"Dhanishtha", ta:"அவிட்டம்",
+      sounds:["Ga","Gi","Gu","Ge"],
+      taSounds:["க","கி","கு","கே"]
+    },
+    {
+      en:"Shatabhisha", ta:"சதயம்",
+      sounds:["Go","Sa","Si","Su"],
+      taSounds:["கோ","ச","சி","சு"]
+    },
+    {
+      en:"Purva Bhadrapada", ta:"பூரட்டாதி",
+      sounds:["Se","So","Da","Di"],
+      taSounds:["சே","சோ","த","தி"]
+    },
+    {
+      en:"Uttara Bhadrapada", ta:"உத்திரட்டாதி",
+      sounds:["Du","Tha","Jha","Na"],
+      taSounds:["து","த","ஜ","ந"]
+    },
+    {
+      en:"Revati", ta:"ரேவதி",
+      sounds:["De","Do","Cha","Chi"],
+      taSounds:["தே","தோ","ச","சி"]
+    }
+  ];
+
+  /* ------------------------------------------------------------
+     Normalise English names
+     ------------------------------------------------------------ */
+  function smvKotaEnglishName(v){
+
+    return String(v || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g,"")
+      .toLowerCase()
+      .replace(/[^a-z]/g,"");
+  }
+
+  /* ------------------------------------------------------------
+     Normalise Tamil names
+     Keep Tamil Unicode characters.
+     ------------------------------------------------------------ */
+  function smvKotaTamilName(v){
+
+    return String(v || "")
+      .normalize("NFC")
+      .replace(/[\u200C\u200D\uFEFF]/g,"")
+      .replace(/\s+/g,"")
+      .trim();
+  }
+
+  /* ------------------------------------------------------------
+     Tamil → comparable phonetic form
+
+     This is intentionally conservative.
+     We don't modify the customer's original name.
+     ------------------------------------------------------------ */
+  function smvKotaTamilPhonetic(v){
+
+    let s=smvKotaTamilName(v);
+
+    const map=[
+      ["க்ஷ","ksha"],
+      ["ஸ்ரீ","sri"],
+      ["ஸ","sa"],
+      ["ஷ","sha"],
+      ["ஜ","ja"],
+      ["ஹ","ha"],
+      ["ற","ra"],
+      ["ள","la"],
+      ["ழ","la"],
+      ["ண","na"],
+      ["ங","nga"],
+      ["ஞ","nya"],
+      ["ந","na"],
+      ["ன","na"],
+      ["ம","ma"],
+      ["ப","pa"],
+      ["வ","va"],
+      ["ய","ya"],
+      ["ர","ra"],
+      ["ல","la"],
+      ["ச","cha"],
+      ["க","ka"],
+      ["ட","ta"],
+      ["த","tha"],
+      ["அ","a"],
+      ["ஆ","aa"],
+      ["இ","i"],
+      ["ஈ","ee"],
+      ["உ","u"],
+      ["ஊ","oo"],
+      ["எ","e"],
+      ["ஏ","ae"],
+      ["ஐ","ai"],
+      ["ஒ","o"],
+      ["ஓ","oo"],
+      ["ஔ","au"]
+    ];
+
+    for(const [a,b] of map){
+      s=s.replaceAll(a,b);
+    }
+
+    return s.toLowerCase();
+  }
+
+  /* ------------------------------------------------------------
+     Remove common English pronunciation differences.
+     ------------------------------------------------------------ */
+  function smvKotaEnglishPhonetic(v){
+
+    let s=smvKotaEnglishName(v);
+
+    const replacements=[
+      ["sh","sha"],
+      ["sch","sha"],
+      ["ch","cha"],
+      ["th","tha"],
+      ["dh","dha"],
+      ["ph","pha"],
+      ["bh","bha"],
+      ["kh","kha"],
+      ["gh","gha"],
+      ["j","ja"],
+      ["c","k"],
+      ["q","k"],
+      ["x","ks"],
+      ["w","v"]
+    ];
+
+    for(const [a,b] of replacements){
+      s=s.replaceAll(a,b);
+    }
+
+    return s;
+  }
+
+  /* ------------------------------------------------------------
+     Match name against traditional Nakshatra pada sounds.
+     ------------------------------------------------------------ */
+  function smvKotaFindNameNakshatra(name){
+
+    const original=String(name || "").trim();
+
+    if(!original){
+      return {
+        name:original,
+        initial:"",
+        nakshatra:"",
+        nakshatraTamil:"",
+        pada:null,
+        sound:"",
+        tamilSound:"",
+        matchType:"No name"
+      };
+    }
+
+    const isTamil=/[\u0B80-\u0BFF]/.test(original);
+
+    const normalized=isTamil
+      ? smvKotaTamilName(original)
+      : smvKotaEnglishName(original);
+
+    const phonetic=isTamil
+      ? smvKotaTamilPhonetic(original)
+      : smvKotaEnglishPhonetic(original);
+
+    let best=null;
+
+    for(const nak of SMV_KOTA_NAKSHATRAS){
+
+      for(let p=0;p<4;p++){
+
+        const enSound=nak.sounds[p].toLowerCase();
+        const taSound=nak.taSounds[p];
+
+        let matched=false;
+
+        if(isTamil){
+
+          const ts=smvKotaTamilName(original);
+
+          matched=
+            ts.startsWith(taSound) ||
+            phonetic.startsWith(
+              smvKotaEnglishPhonetic(enSound)
+            );
+
+        }else{
+
+          const en=smvKotaEnglishName(original);
+
+          matched=
+            en.startsWith(enSound) ||
+            phonetic.startsWith(
+              smvKotaEnglishPhonetic(enSound)
+            );
+
+        }
+
+        if(matched){
+
+          best={
+            name:original,
+            initial:original.trim().slice(0,1),
+            nakshatra:nak.en,
+            nakshatraTamil:nak.ta,
+            pada:p+1,
+            sound:nak.sounds[p],
+            tamilSound:nak.taSounds[p],
+            matchType:isTamil
+              ? "Tamil name sound"
+              : "English name sound"
+          };
+
+          return best;
+        }
+      }
+    }
+
+    /* ----------------------------------------------------------
+       Safe first-letter fallback.
+       This prevents the Kota section from remaining blank when
+       a modern spelling is not an exact traditional syllable.
+       ---------------------------------------------------------- */
+
+    const first=isTamil
+      ? smvKotaTamilPhonetic(original)
+      : smvKotaEnglishPhonetic(original);
+
+    const fallbackGroups=[
+      [["a","e","u","ae"],0],
+      [["ka","ki","ku","ke","k"],4],
+      [["ga","gi","gu","ge","go"],22],
+      [["ma","mi","mu","me","mo"],9],
+      [["na","ni","nu","ne","no"],16],
+      [["pa","pi","pu","pe","po"],11],
+      [["ra","ri","ru","re","ro"],13],
+      [["sa","si","su","se","so"],23],
+      [["ta","ti","tu","te","to"],15],
+      [["va","vi","vu","ve","vo"],3],
+      [["ya","yi","yu","ye","yo"],17],
+      [["la","li","lu","le","lo"],1]
+    ];
+
+    for(const [sounds,index] of fallbackGroups){
+
+      for(let p=0;p<sounds.length;p++){
+
+        if(first.startsWith(sounds[p])){
+
+          const nak=SMV_KOTA_NAKSHATRAS[index];
+
+          return {
+            name:original,
+            initial:original.trim().slice(0,1),
+            nakshatra:nak.en,
+            nakshatraTamil:nak.ta,
+            pada:p+1,
+            sound:nak.sounds[p],
+            tamilSound:nak.taSounds[p],
+            matchType:isTamil
+              ? "Tamil phonetic match"
+              : "English phonetic match"
+          };
+        }
+      }
+    }
+
+    return {
+      name:original,
+      initial:original.trim().slice(0,1),
+      nakshatra:"",
+      nakshatraTamil:"",
+      pada:null,
+      sound:"",
+      tamilSound:"",
+      matchType:"No traditional syllable match"
+    };
+  }
+
+  /* ------------------------------------------------------------
+     PUBLIC helper
+     ------------------------------------------------------------ */
+  window.__smvKotaNameNakshatra=smvKotaFindNameNakshatra;
+
+  /* ------------------------------------------------------------
+     Merge calculated name information into existing Kota data.
+
+     IMPORTANT:
+     Existing backend Kota values are preserved when available.
+     We only fill missing/incorrect name fields.
+     ------------------------------------------------------------ */
+  window.__smvApplyKotaNameCalculation=function(data,name,lang){
+
+    try{
+
+      if(!data || typeof data!=="object"){
+        return data;
+      }
+
+      const original=String(
+        name ??
+        data?.kota?.nativeName ??
+        ""
+      ).trim();
+
+      if(!original){
+        return data;
+      }
+
+      const result=smvKotaFindNameNakshatra(original);
+
+      data.kota=data.kota || {};
+
+      /* Keep customer's original name */
+      data.kota.nativeName=original;
+
+      /* Always update name input-derived fields */
+      data.kota.nameInitial=result.initial || "";
+
+      data.kota.nameNakshatra=
+        lang==="ta"
+          ? (result.nakshatraTamil || result.nakshatra || "")
+          : (result.nakshatra || "");
+
+      data.kota.nameNakshatraPada=
+        result.pada ?? null;
+
+      data.kota.nameSyllable=
+        lang==="ta"
+          ? (result.tamilSound || result.sound || "")
+          : (result.sound || "");
+
+      data.kota.nameSound=
+        lang==="ta"
+          ? (result.tamilSound || result.sound || "")
+          : (result.sound || "");
+
+      data.kota.nameMatchType=result.matchType || "";
+
+      /*
+       * Do not change Janma Nakshatra.
+       * It comes from birth Moon calculation.
+       */
+      return data;
+
+    }catch(err){
+
+      console.warn(
+        "SMV Kota name calculation:",
+        err
+      );
+
+      return data;
+    }
+  };
+
+})();
   window.__smvLoadAdvancedAstrology=loadAdvancedAstrology;
 
 
@@ -11697,6 +12590,9 @@ if(lat===''||lon===''){
 
         /* SINGLE ENGLISH RELEASE: the complete core + Advanced + Panchang +
            Transit + Dasa batch is now ready. */
+        if(typeof window.__smvForceEnglishRahuRetrograde==='function'){
+          window.__smvForceEnglishRahuRetrograde(target);
+        }
         target.classList.remove('hidden');
         target.setAttribute('aria-busy','false');
         if(typeof window.__smvFixEnglishBhavaHeaders==='function') window.__smvFixEnglishBhavaHeaders();
@@ -12072,6 +12968,76 @@ document.addEventListener('DOMContentLoaded', function(){
   }
 }
 </style>
+
+<script id="smv-english-rahu-retrograde-final">
+/* English-only presentation fix:
+   Rahu/Ketu are always shown as Retrograde in Planetary Positions and
+   Sarvatobhadra Chakra, matching the requested traditional presentation.
+   No MutationObserver is used, so this cannot create a render loop/freeze. */
+(function(){
+  const isNodePlanet=(v)=>{
+    const q=String(v??'').trim().toLowerCase();
+    return q==='rahu'||q==='ketu'||q==='ராகு'||q==='கேது';
+  };
+  window.__smvForceEnglishRahuRetrograde=function(root){
+    if(!root)return;
+    root.querySelectorAll('tr').forEach(tr=>{
+      const cells=[...tr.children];
+      if(!cells.length || !isNodePlanet(cells[0]?.textContent)) return;
+      cells.forEach(td=>{
+        const q=(td.textContent||'').trim();
+        if(/^(Direct|Retrograde|வக்கிரம்|வக்ரம்|நேர்கதி)$/i.test(q)){
+          td.textContent='Retrograde';
+        }
+      });
+    });
+    root.querySelectorAll('.transit-planet').forEach(card=>{
+      const b=card.querySelector('b');
+      if(!b || !isNodePlanet(b.textContent))return;
+      card.querySelectorAll('span').forEach(sp=>{
+        if(/^(Direct|Retrograde|வக்கிரம்|வக்ரம்|நேர்கதி)$/i.test((sp.textContent||'').trim()))
+          sp.textContent='Retrograde';
+      });
+    });
+  };
+})();
+</script>
+
+<style id="smv-english-horoscope-tamil-ui-parity-final">
+/* Keep English Horoscope result visually identical to the Tamil Horoscope
+   result: same card geometry, chart/table spacing and responsive behavior.
+   Only language text is different. */
+#englishHoroscopeResult.english-horoscope{
+  width:100%!important;
+  max-width:100%!important;
+  box-sizing:border-box!important;
+}
+#englishHoroscopeResult.english-horoscope>.card{
+  width:100%!important;
+  max-width:100%!important;
+  box-sizing:border-box!important;
+}
+#englishHoroscopeResult.english-horoscope .home-rule{
+  margin-left:auto!important;
+  margin-right:auto!important;
+}
+#englishHoroscopeResult.english-horoscope .south-indian-chart,
+#englishHoroscopeResult.english-horoscope .data-table-wrap{
+  width:100%!important;
+  max-width:100%!important;
+  box-sizing:border-box!important;
+}
+@media(max-width:700px){
+  #englishHoroscopeResult.english-horoscope>.card{
+    margin-left:0!important;
+    margin-right:0!important;
+  }
+  #englishHoroscopeResult.english-horoscope .south-indian-chart{
+    max-width:100%!important;
+  }
+}
+</style>
+
 </body>
   
   <style id="smv-dashboard-auto-typography">
