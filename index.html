@@ -5708,6 +5708,7 @@ html body header .brand .brand-text .logo a {
 <div class="card" style="margin-top:16px"><h3>Customer Reviews</h3><div id="adminReviews"><div class="empty">Loading reviews...</div></div><div id="adminReviewMsg" class="small"></div><input id="adminReviewRating" type="hidden" value="5"><textarea id="adminReviewText" class="hidden"></textarea><button id="saveAdminReview" class="hidden" type="button">SAVE</button></div>
 <div class="card" style="margin-top:16px"><h3>Astrologer Withdrawals</h3><div id="adminWithdrawals"><div class="empty">Loading withdrawal requests...</div></div></div>
 <div class="card" style="margin-top:16px"><h3>Admin Earnings History</h3><p class="small">Admin earnings are shown for completed and approved consultations.</p><div id="adminEarningsHistory"><div class="empty">Loading admin earnings...</div></div></div>
+<div class="card" style="margin-top:16px" id="questionApprovalSettings"><h3>Question &amp; Answer Approval</h3><div class="action-row" style="align-items:center"><label style="display:flex;align-items:center;gap:10px;margin:0"><input id="questionApprovalMode" type="checkbox" style="width:22px;height:22px"> <b id="questionApprovalModeLabel">Admin Approval: ON</b></label><button id="saveQuestionApprovalMode" class="btn" type="button">SAVE APPROVAL MODE</button></div><div id="questionApprovalModeMsg" class="small">ON = Admin approves and allocates. OFF = questions become available to all approved astrologers and submitted answers are automatically approved. Existing questions keep their original workflow.</div></div>
 <div class="card" style="margin-top:16px"><h3>Question Price</h3><div class="action-row"><input id="questionPrice" type="number" min="1" step="0.01" placeholder="Question price"><button id="saveQuestionPrice" class="btn" type="button">SAVE PRICE</button></div><div id="questionPriceMsg" class="small"></div></div>
 <div class="card" style="margin-top:16px"><h3>Commission Settings</h3><div class="action-row"><input id="astroCommission" type="number" min="0" max="100" placeholder="Astrologer %"><input id="adminCommission" type="number" min="0" max="100" placeholder="Admin %"><button id="saveCommission" class="btn" type="button">SAVE COMMISSION</button></div><div id="commissionMsg" class="small"></div></div>
 <div class="card" style="margin-top:16px"><h3>Answer Word Limit</h3><div class="action-row"><input id="minimumAnswerWords" type="number" min="1" max="10000" placeholder="Minimum words"><button id="saveAnswerWords" class="btn" type="button">SAVE WORD LIMIT</button></div><div id="answerWordsMsg" class="small"></div></div>
@@ -7388,7 +7389,8 @@ const userStatus=String(
    try{
      inboxSnap=await withTimeout(getDocs(query(collection(db,'smv_questions'),where('astrologerId','==',currentUser.uid))),12000);
    }catch(e){ console.warn('Astrologer available-questions query skipped:',e); }
-   const availableQuestions=inboxSnap.docs.filter(d=>{const q=d.data()||{};return q.astrologerId===currentUser.uid&&!!q.adminQuestionApprovedAt&&['assigned_to_astrologer','available_to_astrologers','reallocated'].includes(String(q.allocationStatus||''))&&['admin_approved','paid'].includes(String(q.status||''));}).map(d=>({id:d.id,...d.data()}));
+   let availableQuestions=inboxSnap.docs.filter(d=>{const q=d.data()||{};return q.astrologerId===currentUser.uid&&!!q.adminQuestionApprovedAt&&['assigned_to_astrologer','available_to_astrologers','reallocated'].includes(String(q.allocationStatus||''))&&['admin_approved','paid'].includes(String(q.status||''));}).map(d=>({id:d.id,...d.data()}));
+   try{const autoInbox=await withTimeout(renderApi('/astrologer/available-questions',{method:'GET'}),12000);const autoQuestions=(autoInbox?.questions||[]).map(q=>({id:q.id,...q}));availableQuestions=[...availableQuestions,...autoQuestions.filter(a=>!availableQuestions.some(x=>x.id===a.id))];}catch(e){console.warn('Auto-mode available questions load skipped:',e);}
    try{
      qs=await withTimeout(getDocs(query(collection(db,'smv_questions'),where('astrologerId','==',currentUser.uid))),12000);
    }catch(e){ console.warn('Astrologer own-questions query skipped:',e); }
@@ -7485,99 +7487,18 @@ ${ad.status === 'rejected' && ad.rejectionReason
 <div class="card" style="margin-top:16px"><h3>Earnings History</h3>${ep.ledger?.length?ep.ledger.slice(0,50).map(x=>`<div class="smv-history-row" style="padding:10px 0;border-bottom:1px solid #eee"><div class="smv-history-amount"><b>₹${Number(x.commission||0).toFixed(2)}</b> · <span class="success">Earning Credited</span></div><div class="smv-history-content">${escapeHtml(x.question||'Consultation')}</div><div class="smv-history-detail"><b>Date & Time:</b> ${escapeHtml(smvDateTime(x.date))}</div><div class="smv-history-detail"><b>Question ID:</b> ${escapeHtml(x.id||'')}</div></div>`).join(''):'<div class="empty">No credited earnings yet.</div>'}<div class="withdrawal-history-section" style="margin-top:14px;padding-top:10px;border-top:1px solid #eee"><div class="withdrawal-history-title">Withdrawal History</div>${withdrawalSnap?.docs?.length?withdrawalSnap.docs.slice().sort((a,b)=>Number(b.data().createdAt?.seconds||0)-Number(a.data().createdAt?.seconds||0)).slice(0,20).map(d=>{const w=d.data()||{};const st=String(w.status||'pending').toLowerCase();const cls=st==='paid'?'success':st==='rejected'?'error':st==='processing'?'small':'small';const label=st==='paid'?'Paid':st==='processing'?'Processing':st==='rejected'?'Rejected':'Pending';return `<div class="smv-history-row smv-withdrawal-row" style="padding:10px 0;border-bottom:1px solid #eee"><div class="smv-history-amount"><b>₹${Number(w.amount||0).toFixed(2)}</b> · <span class="${cls}">${label}</span></div><div class="smv-history-detail"><b>Withdrawal ID:</b> ${escapeHtml(w.withdrawalId||'—')}</div>${st==='paid' && /^SMV-PMT-/.test(String(w.adminPaymentId||'')) ? '<div class="small"><b>Admin Payment ID:</b> '+escapeHtml(w.adminPaymentId)+'</div>' : ''}<div class="small"><b>Requested:</b> ${escapeHtml(smvDateTime(w.createdAt||w.requestedAt))}${st==='paid' && w.paidAt ? '<br><b>Paid Date & Time:</b> '+escapeHtml(smvDateTime(w.paidAt)) : ''}</div></div>`}).join(''):'<div class="small">No withdrawal requests yet.</div>'}</div></div>
 <div class="card" style="margin-top:16px"><h3>Payment Method</h3><p class="small">Your bank/UPI details are private. Full details are not displayed again.</p><button class="btn gray" id="changePayoutBtn2">Change Payment Method</button></div>`;
   document.querySelectorAll('[data-claim-question]').forEach(b=>b.onclick=async()=>{
-  const questionId=b.dataset.claimQuestion;
-
-  if(!currentUser){
-    alert('Please login again.');
-    return;
-  }
-
-  b.disabled=true;
-  b.textContent='CLAIMING...';
-
+  const questionId=String(b?.dataset?.claimQuestion||'').trim();
+  if(!questionId){alert('Question ID is missing. Please refresh and try again.');return;}
+  if(!currentUser){alert('Please login again.');return;}
+  b.disabled=true;b.textContent='CLAIMING...';
   try{
-    const astroSnap=await withTimeout(
-      getDoc(doc(db,'smv_astrologers',currentUser.uid)),
-      15000
-    );
-
-    if(!astroSnap.exists()){
-      throw new Error('Astrologer profile not found.');
-    }
-
-    const astro=astroSnap.data();
-
-    if(astro.status!=='approved'){
-      throw new Error('Your astrologer profile is not approved by Admin.');
-    }
-
-    await withTimeout(
-      runTransaction(db,async(transaction)=>{
-
-        const questionRef=doc(db,'smv_questions',questionId);
-        const questionSnap=await transaction.get(questionRef);
-
-        if(!questionSnap.exists()){
-          throw new Error('Question not found.');
-        }
-
-        const q=questionSnap.data();
-
-        if(!['admin_approved','paid'].includes(String(q.status||''))){
-          throw new Error('This question is no longer available.');
-        }
-
-        if(q.astrologerId && q.astrologerId!==currentUser.uid){
-          throw new Error('This question is allocated to another astrologer.');
-        }
-        if(q.astrologerId!==currentUser.uid){
-          throw new Error('This question is not allocated to your account.');
-        }
-
-        if(!q.adminQuestionApprovedAt){
-          throw new Error('This question is still waiting for Admin approval.');
-        }
-
-        const commissionPercent=Number(
-          q.commissionPercent ||
-          q.commissionRate ||
-          20
-        );
-
-        const commissionAmount=
-          Math.round(Number(q.amount||0)*commissionPercent)/100;
-
-        transaction.update(questionRef,{
-          astrologerId:currentUser.uid,
-          astrologerName:q.astrologerName||astro.name||currentUser.displayName||'Astrologer',
-          status:'admin_approved',
-          allocationStatus:'claimed_by_astrologer',
-          claimedAt:serverTimestamp(),
-          claimedBy:currentUser.uid
-        });
-      }),
-      20000
-    );
-
-    await loadDashboard('astrologer');
-
-    // After CLAIM & ANSWER, keep all previously claimed questions visible and move directly to the unanswered queue.
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        const answerBox = $('ans_' + questionId);
-        if (answerBox) {
-          answerBox.style.minHeight = '400px'; answerBox.style.height = '400px'; answerBox.style.maxHeight = 'none'; answerBox.style.resize = 'vertical'; answerBox.focus(); answerBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        } else { $('astroQuestionQueue')?.scrollIntoView({ behavior:'smooth', block:'start' }); }
-      }, 100);
-    });
-
-  }catch(e){
-    console.error('Question claim error:',e);
-    alert(e.message||String(e));
-    b.disabled=false;
-    b.textContent='CLAIM & ANSWER';
-  }
+    const r=await renderApi('/astrologer/claim-question',{method:'POST',body:JSON.stringify({questionId})});
+    if(!r?.success)throw new Error(r?.error||'Unable to claim question.');
+    await loadDashboard('astrologer',true);
+    requestAnimationFrame(()=>setTimeout(()=>{const answerBox=$('ans_'+questionId);if(answerBox){answerBox.style.minHeight='400px';answerBox.style.height='400px';answerBox.style.maxHeight='none';answerBox.style.resize='vertical';answerBox.focus();answerBox.scrollIntoView({behavior:'smooth',block:'center'});}else $('astroQuestionQueue')?.scrollIntoView({behavior:'smooth',block:'start'});},100));
+  }catch(e){console.error('Question claim error:',e);alert(e.message||String(e));b.disabled=false;b.textContent='CLAIM & ANSWER';}
 });
+
    // Answer-box paste protection: use event delegation because answer textareas are
    // created/re-rendered dynamically after the dashboard loads. This ensures the
    // protection works even when a question is opened or claimed later.
@@ -8375,6 +8296,9 @@ async function loadAdminPanel(){
   let answerSettings={minimumWords:150}; try{const aw=await getDoc(doc(db,'smv_settings','answer'));if(aw.exists())answerSettings=aw.data();}catch(e){}
   $('minimumAnswerWords').value=Number(answerSettings.minimumWords||150);
   $('saveAnswerWords').onclick=async()=>{const n=Math.floor(Number($('minimumAnswerWords').value));if(!Number.isFinite(n)||n<1||n>10000){$('answerWordsMsg').innerHTML='<span class="error">Enter a minimum between 1 and 10000 words.</span>';return;}await setDoc(doc(db,'smv_settings','answer'),{minimumWords:n,updatedAt:serverTimestamp(),updatedBy:currentUser.uid});$('answerWordsMsg').innerHTML='<span class="success">Minimum answer length saved: '+n+' words. It applies to new paid questions.</span>';};
+  try{const qas=await getDoc(doc(db,'smv_settings','questionApproval'));const mode=String(qas.data()?.mode||'admin').toLowerCase()==='auto'?'auto':'admin';if($('questionApprovalMode'))$('questionApprovalMode').checked=mode==='admin';if($('questionApprovalModeLabel'))$('questionApprovalModeLabel').textContent=mode==='auto'?'Admin Approval: OFF':'Admin Approval: ON';}catch(e){}
+  $('questionApprovalMode')?.addEventListener('change',()=>{const on=$('questionApprovalMode').checked;if($('questionApprovalModeLabel'))$('questionApprovalModeLabel').textContent=on?'Admin Approval: ON':'Admin Approval: OFF';});
+  $('saveQuestionApprovalMode')?.addEventListener('click',async()=>{const b=$('saveQuestionApprovalMode');b.disabled=true;try{const mode=$('questionApprovalMode').checked?'admin':'auto';await setDoc(doc(db,'smv_settings','questionApproval'),{mode,updatedAt:serverTimestamp(),updatedBy:currentUser.uid});$('questionApprovalModeMsg').innerHTML='<span class="success">Approval mode saved. New paid questions use '+(mode==='admin'?'Admin approval.':'Automatic approval.')+' Existing questions keep their original workflow.</span>';}catch(e){$('questionApprovalModeMsg').innerHTML='<span class="error">Unable to save approval mode: '+escapeHtml(e.message||String(e))+'</span>';}finally{b.disabled=false;}});
   $('testRazorpayBtn').onclick=async()=>{const b=$('testRazorpayBtn');b.disabled=true;b.textContent='TESTING...';try{const r=await withTimeout(renderApi('/test-razorpay',{method:'GET'}),60000);$('razorpayTestMsg').innerHTML='<span class="success"><b>Razorpay connection OK.</b> '+escapeHtml(r?.message||'Render payment server and Razorpay API are working.')+'</span>';}catch(e){$('razorpayTestMsg').innerHTML='<span class="error"><b>Razorpay test failed:</b> '+escapeHtml(e.message||String(e))+'</span>';}b.disabled=false;b.textContent='TEST RAZORPAY CONNECTION';};
 
   const box=$('pendingAstros');
@@ -8397,6 +8321,7 @@ async function loadAdminPanel(){
   try{
     const pendingQuestions=questions.docs.filter(d=>{
       const q=d.data()||{};
+      if(String(q.workflowMode||'admin').toLowerCase()==='auto') return false;
       const waitingApproval = q.status==='pending_admin_approval' || (q.status==='paid' && !q.adminQuestionApprovedAt);
       const allocatedWaiting = !!q.adminQuestionApprovedAt && !q.answer && !['answered','question_rejected'].includes(String(q.status||'')) && ['assigned_to_astrologer','reallocated','available_to_astrologers','claimed_by_astrologer'].includes(String(q.allocationStatus||''));
       return waitingApproval || allocatedWaiting;
@@ -8578,7 +8503,7 @@ const answerBox = $('adminAnswers');
 const pendingAnswers =
   questions.docs.filter(d => {
     const q = d.data();
-    return (
+    return (String(q.workflowMode||'admin').toLowerCase() !== 'auto') && (
       q.status === 'processing' ||
       q.status === 'admin_review'
     );
