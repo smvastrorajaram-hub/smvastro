@@ -7390,11 +7390,14 @@ const userStatus=String(
      inboxSnap=await withTimeout(getDocs(query(collection(db,'smv_questions'),where('astrologerId','==',currentUser.uid))),12000);
    }catch(e){ console.warn('Astrologer available-questions query skipped:',e); }
    let availableQuestions=inboxSnap.docs.filter(d=>{const q=d.data()||{};return q.astrologerId===currentUser.uid&&!!q.adminQuestionApprovedAt&&['assigned_to_astrologer','available_to_astrologers','reallocated'].includes(String(q.allocationStatus||''))&&['admin_approved','paid'].includes(String(q.status||''));}).map(d=>({id:d.id,...d.data()}));
-   try{const autoInbox=await withTimeout(renderApi('/astrologer/available-questions',{method:'GET'}),12000);const autoQuestions=(autoInbox?.questions||[]).map(q=>({id:q.id,...q,astrologerCommissionAmount:Number(q.astrologerCommissionAmount||0)}));availableQuestions=[...availableQuestions,...autoQuestions.filter(a=>!availableQuestions.some(x=>x.id===a.id))];}catch(e){console.warn('Auto-mode available questions load skipped:',e);}
-   try{
-     qs=await withTimeout(getDocs(query(collection(db,'smv_questions'),where('astrologerId','==',currentUser.uid))),12000);
-   }catch(e){ console.warn('Astrologer own-questions query skipped:',e); }
-   const activeQuestions=qs.docs.filter(d=>['paid','admin_review','answer_draft','revision_required'].includes(d.data().status));
+   try{const autoInbox=await withTimeout(renderApi('/astrologer/available-questions',{method:'GET'}),12000);const autoQuestions=(autoInbox?.questions||[]).map(q=>{const amount=Number(q.amount??q.paymentAmount??q.paidAmount??q.price??0);const pct=Number(q.commissionPercent??q.commissionRate??autoInbox?.commissionPercent??0);const commission=Number(q.astrologerCommissionAmount??q.commissionAmount);const finalCommission=Number.isFinite(commission)&&commission>0?commission:((Number.isFinite(amount)&&amount>0&&Number.isFinite(pct))?Math.round(amount*pct)/100:0);return {id:q.id,...q,amount,commissionPercent:pct,commissionRate:pct,astrologerCommissionAmount:finalCommission};});availableQuestions=[...availableQuestions,...autoQuestions.filter(a=>!availableQuestions.some(x=>x.id===a.id))];}catch(e){console.warn('Auto-mode available questions load skipped:',e);}
+   // Reuse the already-loaded own-question snapshot. The duplicate Firestore
+   // query here was making the Astrologer dashboard unnecessarily slow.
+   const ownActiveQuestions=qs.docs.filter(d=>['paid','admin_review','answer_draft','revision_required'].includes(String(d.data().status||'')));
+   // In Auto Approval mode, unclaimed public questions are active work items too.
+   // Include them in the dashboard count without changing ownership/allocation.
+   const publicActiveQuestions=availableQuestions.filter(q=>!q.astrologerId && String(q.workflowMode||'').toLowerCase()==='auto' && String(q.allocationStatus||'').toLowerCase()==='available_to_astrologers' && ['available_to_astrologers','paid'].includes(String(q.status||'').toLowerCase()) && !String(q.answer||'').trim());
+   const activeQuestions=[...ownActiveQuestions,...publicActiveQuestions.filter(pq=>!ownActiveQuestions.some(d=>d.id===pq.id))];
    const approved=ad.status==='approved';
   // Canonical earnings ledger comes from the trusted Render backend. This
   // prevents a successfully credited astrologer payment from being omitted
@@ -7473,7 +7476,7 @@ ${ad.status === 'rejected' && ad.rejectionReason
   : ''}</div>
     <div class="card"><h3>Total Earnings</h3><p style="font-size:28px"><b class="smv-earnings-total ${Number(ep.totalEarnings||0)>=300?'is-green':''}">₹${Number(ep.totalEarnings||0).toFixed(2)}</b></p><p>Total Withdrawal: <b>₹${Number(ep.totalWithdrawals||0).toFixed(2)}</b></p><p>Available to Withdraw: <b class="smv-earnings-available ${Number(ep.availableToWithdraw||0)>=300?'is-green':'is-red'}">₹${Number(ep.availableToWithdraw||0).toFixed(2)}</b></p><p class="small">Minimum withdrawal: ₹${Number(ep.minimumWithdrawal||300).toFixed(2)}</p>${ep.withdrawalCooldownActive ? `<p class="smv-withdraw-locked"><b>🔒 Withdrawal locked for 7 days after the last withdrawal request.</b><br><span class="small">Available again: ${escapeHtml(smvDateTime(new Date(ep.withdrawalCooldownEndsAt)))}</span></p><button class="btn smv-withdraw-btn is-red" id="withdrawBtn" disabled>WITHDRAW</button>` : ep.withdrawalEligible ? '<p class="smv-withdraw-ready"><b>✓ You can withdraw</b></p><button class="btn smv-withdraw-btn is-green" id="withdrawBtn">WITHDRAW</button>' : '<p class="smv-withdraw-locked"><b>Reach ₹300 to request a withdrawal.</b></p><button class="btn smv-withdraw-btn is-red" id="withdrawBtn" disabled>WITHDRAW</button>'}</div>
    </div>
-   <div class="card" style="margin-top:16px"><h3>Public Question Inbox</h3><p class="small">Available questions are shown here with the birth details and the question price allocated to you by Admin.</p>${!approved?'<div class="empty">Your astrologer profile must be approved by Admin before you can claim questions.</div>':availableQuestions.length?availableQuestions.slice(0,50).map(q=>`<div class="card" style="margin:10px 0"><b>${escapeHtml(q.question||'Question')}</b><div class="small"><b>Birth Details:</b> ${escapeHtml(q.birthName||q.birthDetails?.name||'')} · ${escapeHtml(q.birthDate||q.birthDetails?.birthDate||'')} · ${escapeHtml(q.birthTime||q.birthDetails?.birthTime||'')} · ${escapeHtml(q.birthPlace||q.birthDetails?.birthPlace||'')} · ${escapeHtml(q.birthGender||q.birthDetails?.birthGender||'')}</div><div class="small"><b>Question ID: ${escapeHtml(q.id||'')}</b> · <b>Date & Time:</b> ${escapeHtml(smvDateTime(q.createdAt||q.paymentRecordedAt||q.updatedAt))}</div><div class="small"><b>Question Price: ₹${Number(q.astrologerCommissionAmount||0).toFixed(2)}</b></div><button class="btn" data-claim-question="${q.id}">CLAIM & ANSWER</button></div>`).join(''):'<div class="empty">No paid public questions are available right now.</div>'}</div>
+   <div class="card" style="margin-top:16px"><h3>Public Question Inbox</h3><p class="small">Available questions are shown here with the birth details and the question price allocated to you by Admin.</p>${!approved?'<div class="empty">Your astrologer profile must be approved by Admin before you can claim questions.</div>':availableQuestions.length?availableQuestions.slice(0,50).map(q=>`<div class="card" style="margin:10px 0"><b>${escapeHtml(q.question||'Question')}</b><div class="small"><b>Birth Details:</b> ${escapeHtml(q.birthName||q.birthDetails?.name||'')} · ${escapeHtml(q.birthDate||q.birthDetails?.birthDate||'')} · ${escapeHtml(q.birthTime||q.birthDetails?.birthTime||'')} · ${escapeHtml(q.birthPlace||q.birthDetails?.birthPlace||'')} · ${escapeHtml(q.birthGender||q.birthDetails?.birthGender||'')}</div><div class="small"><b>Question ID: ${escapeHtml(q.id||'')}</b> · <b>Date & Time:</b> ${escapeHtml(smvDateTime(q.createdAt||q.paymentRecordedAt||q.updatedAt))}</div><div class="small"><b>Question Price: ₹${Number(q.astrologerCommissionAmount??(Number(q.amount||q.paymentAmount||0)*Number(q.commissionPercent||q.commissionRate||0)/100||0)).toFixed(2)}</b></div><button class="btn" data-claim-question="${q.id}">CLAIM & ANSWER</button></div>`).join(''):'<div class="empty">No paid public questions are available right now.</div>'}</div>
 <div class="card" id="astroQuestionQueue" style="margin-top:16px">
   <h3>Questions — Unanswered Queue</h3>
   <p class="small">Claimed questions waiting for your answer are kept here. Claiming another question will not hide previous questions.</p>
@@ -7958,24 +7961,6 @@ ${ad.status === 'rejected' && ad.rejectionReason
      if(!cr?.success) throw new Error(cr?.error||'Unable to load consultations.');
      consultationItems=Array.isArray(cr.questions)?cr.questions:[];
 
-     // Reconcile approval/allocation fields from the exact Firestore question
-     // document. The Render consultation response may legitimately lag the
-     // Admin approval write by a moment; the dashboard must never show
-     // "Waiting for Admin Approval" when Admin has already approved it.
-     try{
-       consultationItems=await Promise.all(consultationItems.map(async item=>{
-         const qid=String(item?.questionId||item?.id||'');
-         if(!qid) return item;
-         try{
-           const freshSnap=await withTimeout(getDoc(doc(db,'smv_questions',qid)),10000);
-           if(freshSnap.exists()){
-             const fresh=freshSnap.data()||{};
-             if(String(fresh.customerId||currentUser.uid)===String(currentUser.uid)) return {...item,...fresh,questionId:qid,id:item.id||qid};
-           }
-         }catch(_e){}
-         return item;
-       }));
-     }catch(_reconcileError){}
    } catch(backendErr) {
      console.warn('Customer consultation backend load failed; using Firestore fallback:',backendErr);
      const fallback=await withTimeout(getDocs(query(collection(db,'smv_questions'),where('customerId','==',currentUser.uid))));
@@ -9356,7 +9341,7 @@ $('adminReviews')
     };
 
   });
-  $('adminQuestions').innerHTML=questions.empty?'<div class="empty">No questions yet.</div>':questions.docs.slice(-50).reverse().map(d=>{const q=d.data();return `<div style="padding:10px;border-bottom:1px solid #eee"><b>${escapeHtml(q.question||'Question')}</b><div class="small">Status: ${escapeHtml(q.status||'')} · Customer: ${escapeHtml(q.customerId||'')} · Price paid: ₹${Number(q.amount||0).toFixed(2)} · Astrologer share: ₹${Number(q.astrologerCommissionAmount||0).toFixed(2)} · Admin share: ₹${Number(q.adminCommissionAmount||0).toFixed(2)} · ${escapeHtml(q.astrologerName||'Unclaimed')}</div><div class="small"><b>Date & Time:</b> ${escapeHtml(smvDateTime(q.updatedAt||q.answerApprovedAt||q.adminQuestionApprovedAt||q.createdAt))}</div></div>`}).join('');
+  $('adminQuestions').innerHTML=questions.empty?'<div class="empty">No questions yet.</div>':questions.docs.slice(-50).reverse().map(d=>{const q=d.data();return `<div style="padding:10px;border-bottom:1px solid #eee"><b>${escapeHtml(q.question||'Question')}</b><div class="small">Status: ${escapeHtml(q.status||'')} · Customer: ${escapeHtml(q.customerId||'')} · Price paid: ₹${Number(q.amount||0).toFixed(2)} · Astrologer share: ₹${Number(q.astrologerCommissionAmount??(Number(q.amount||q.paymentAmount||0)*Number(q.commissionPercent||q.commissionRate||0)/100||0)).toFixed(2)} · Admin share: ₹${Number(q.adminCommissionAmount||0).toFixed(2)} · ${escapeHtml(q.astrologerName||'Unclaimed')}</div><div class="small"><b>Date & Time:</b> ${escapeHtml(smvDateTime(q.updatedAt||q.answerApprovedAt||q.adminQuestionApprovedAt||q.createdAt))}</div></div>`}).join('');
  }catch(e){$('adminSummary').innerHTML='';$('pendingAstros').innerHTML='<div class="empty error">Unable to load admin data: '+escapeHtml(e.message||String(e))+'</div>';}
 }
 if(auth){ onAuthStateChanged(auth,async user=>{
@@ -12962,6 +12947,22 @@ document.addEventListener('DOMContentLoaded', function(){
   }
 }
 </style>
+
+<script id="smv-install-app-homepage-only">
+(function(){
+  var section=document.getElementById('smvInstallAppSection');
+  if(!section) return;
+  function isDashboardVisible(){
+    var ids=['dashboard','admin'];
+    return ids.some(function(id){var el=document.getElementById(id);return el && !el.classList.contains('hidden') && getComputedStyle(el).display!=='none';});
+  }
+  function sync(){ section.style.display=isDashboardVisible()?'none':''; }
+  sync();
+  var obs=new MutationObserver(sync);
+  ['dashboard','admin'].forEach(function(id){var el=document.getElementById(id);if(el) obs.observe(el,{attributes:true,attributeFilter:['class','style']});});
+  setInterval(sync,1000);
+})();
+</script>
 
 </body>
   

@@ -477,8 +477,11 @@ app.post("/astrologer/edit-answer", async (req, res) => {
     }
 
     const q = snap.data() || {};
-    if (String(q.astrologerId || "") !== String(user.uid)) {
-      return res.status(403).json({ error: "This question is not assigned to you." });
+    const allocatedAstrologerId = String(q.astrologerId || "").trim();
+    const allocationStatus = String(q.allocationStatus || "").toLowerCase();
+    if (allocatedAstrologerId !== String(user.uid).trim() ||
+        !["assigned_to_astrologer", "claimed_by_astrologer", "reallocated"].includes(allocationStatus)) {
+      return res.status(403).json({ error: "This question is not allocated to you." });
     }
 
     // Approved/final answers can never be reopened by the astrologer.
@@ -1957,7 +1960,10 @@ app.get("/astrologer/available-questions", async (req, res) => {
   try {
     const profileSnap = await db.collection("smv_astrologers").doc(user.uid).get();
     if (!profileSnap.exists || String(profileSnap.data()?.status || "").toLowerCase() !== "approved") return res.status(403).json({error:"Only approved astrologers can view available questions."});
-    const snap = await db.collection("smv_questions").get();
+    // Auto-mode public inbox: query only auto-workflow questions instead of
+    // downloading the entire questions collection on every dashboard load.
+    // Remaining status/payment checks stay server-side so behaviour is unchanged.
+    const snap = await db.collection("smv_questions").where("workflowMode", "==", "auto").get();
     const commissionSnap = await db.collection("smv_settings").doc("commission").get();
     const currentCommissionPercent = Math.max(0, Math.min(100, Number(commissionSnap.data()?.astroPercent ?? 20)));
     const questions = snap.docs.map(d=>({id:d.id,...(d.data()||{})})).filter(q=>String(q.workflowMode||"admin").toLowerCase()==="auto" && String(q.paymentStatus||"").toLowerCase()==="paid" && q.allocationStatus==="available_to_astrologers" && ["available_to_astrologers","paid"].includes(String(q.status||"").toLowerCase()) && !q.astrologerId && !String(q.answer||"").trim()).map(q=>{
@@ -1979,8 +1985,14 @@ app.post("/astrologer/claim-question", express.json({limit:"10kb"}), async(req,r
     const result=await db.runTransaction(async tx=>{
       const qSnap=await tx.get(qRef); if(!qSnap.exists)throw new Error("Question not found.");
       const q=qSnap.data()||{}; if(String(q.workflowMode||"admin")!=="auto")throw new Error("This question uses Admin approval workflow.");
+      // Make claim safely idempotent for the same astrologer. A repeated tap,
+      // network retry, or dashboard refresh must not turn a successful claim
+      // into a misleading "already claimed" error.
+      if(String(q.astrologerId||"")===String(user.uid) && q.allocationStatus==="claimed_by_astrologer") {
+        return {pct:Number(q.commissionPercent??q.commissionRate??20),astroCommission:Number(q.astrologerCommissionAmount||0),alreadyClaimed:true};
+      }
       if(String(q.paymentStatus||"").toLowerCase()!=="paid")throw new Error("This question is not paid.");
-      if(q.allocationStatus!=="available_to_astrologers"||q.status!=="available_to_astrologers")throw new Error("This question has already been claimed.");
+      if(q.allocationStatus!=="available_to_astrologers"||q.status!=="available_to_astrologers")throw new Error("This question has already been claimed by another astrologer.");
       const a=profileSnap.data()||{}, amount=Number(q.amount||q.paymentAmount||0);
       const commissionSnap=await tx.get(db.collection("smv_settings").doc("commission"));
       const pct=Math.max(0, Math.min(100, Number(commissionSnap.data()?.astroPercent ?? 20)));
@@ -1988,9 +2000,11 @@ app.post("/astrologer/claim-question", express.json({limit:"10kb"}), async(req,r
       tx.update(qRef,{astrologerId:user.uid,astrologerName:a.name||"Astrologer",allocationStatus:"claimed_by_astrologer",status:"admin_approved",commissionPercent:pct,commissionRate:pct,astrologerCommissionAmount:astroCommission,adminCommissionAmount:adminCommission,commissionStatus:"allocated_pending_answer",claimedAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()});
       return {pct,astroCommission};
     });
-    await db.collection("smv_notifications").add({userId:user.uid,type:"question_claimed",title:"Question Claimed",message:"You have claimed a paid astrology question. Please submit your answer.",questionId,createdAt:FieldValue.serverTimestamp(),read:false});
-    await writeAdminAudit("QUESTION_CLAIMED_AUTO_MODE",questionId,user.uid,{commissionPercent:result.pct,astrologerCommissionAmount:result.astroCommission});
-    return res.json({success:true,questionId,status:"admin_approved",allocationStatus:"claimed_by_astrologer"});
+    if(!result.alreadyClaimed){
+      await db.collection("smv_notifications").add({userId:user.uid,type:"question_claimed",title:"Question Claimed",message:"You have claimed a paid astrology question. Please submit your answer.",questionId,createdAt:FieldValue.serverTimestamp(),read:false});
+      await writeAdminAudit("QUESTION_CLAIMED_AUTO_MODE",questionId,user.uid,{commissionPercent:result.pct,astrologerCommissionAmount:result.astroCommission});
+    }
+    return res.json({success:true,questionId,status:"admin_approved",allocationStatus:"claimed_by_astrologer",alreadyClaimed:!!result.alreadyClaimed});
   }catch(e){return res.status(409).json({error:e?.message||"Unable to claim question."});}
 });
 
