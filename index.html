@@ -7390,7 +7390,7 @@ const userStatus=String(
      inboxSnap=await withTimeout(getDocs(query(collection(db,'smv_questions'),where('astrologerId','==',currentUser.uid))),12000);
    }catch(e){ console.warn('Astrologer available-questions query skipped:',e); }
    let availableQuestions=inboxSnap.docs.filter(d=>{const q=d.data()||{};return q.astrologerId===currentUser.uid&&!!q.adminQuestionApprovedAt&&['assigned_to_astrologer','available_to_astrologers','reallocated'].includes(String(q.allocationStatus||''))&&['admin_approved','paid'].includes(String(q.status||''));}).map(d=>({id:d.id,...d.data()}));
-   try{const autoInbox=await withTimeout(renderApi('/astrologer/available-questions',{method:'GET'}),12000);const autoQuestions=(autoInbox?.questions||[]).map(q=>({id:q.id,...q}));availableQuestions=[...availableQuestions,...autoQuestions.filter(a=>!availableQuestions.some(x=>x.id===a.id))];}catch(e){console.warn('Auto-mode available questions load skipped:',e);}
+   try{const autoInbox=await withTimeout(renderApi('/astrologer/available-questions',{method:'GET'}),12000);const autoQuestions=(autoInbox?.questions||[]).map(q=>({id:q.id,...q,astrologerCommissionAmount:Number(q.astrologerCommissionAmount||0)}));availableQuestions=[...availableQuestions,...autoQuestions.filter(a=>!availableQuestions.some(x=>x.id===a.id))];}catch(e){console.warn('Auto-mode available questions load skipped:',e);}
    try{
      qs=await withTimeout(getDocs(query(collection(db,'smv_questions'),where('astrologerId','==',currentUser.uid))),12000);
    }catch(e){ console.warn('Astrologer own-questions query skipped:',e); }
