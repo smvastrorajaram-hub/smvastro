@@ -569,27 +569,44 @@ app.post("/submit-answer", async (req, res) => {
 
     // Save the answer before attempting email. This makes the submission
     // independent of browser notification calls and email-provider latency.
+    const workflowSettings = await getApprovalSettings();
+    const autoApproveAnswer = !workflowSettings.answerApprovalEnabled;
+    let autoAstrologerPaymentId = q.astrologerPaymentId || "";
+    if (autoApproveAnswer && (!autoAstrologerPaymentId || String(q.commissionStatus || "") !== "credited")) {
+      const paymentId = await nextPaymentId();
+      autoAstrologerPaymentId = paymentId.replace(/^SMV-PAY-/, "SMV-PAT-");
+      await db.collection("smv_payments").doc(autoAstrologerPaymentId).set({
+        paymentId: autoAstrologerPaymentId, type: "astrologer_earning", customerId: q.customerId || null,
+        astrologerId: q.astrologerId, questionId, bookingId: q.bookingId || null,
+        grossAmount: Number(q.amount || 0), commissionPercent, commissionAmount, earningAmount: commissionAmount,
+        status: "credited", paymentStatus: "pending_withdrawal", source: "answer_auto_approval",
+        createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp()
+      });
+    }
     await questionRef.update({
       answer,
       answerWordCount: wordCount,
       answerSubmittedAt: FieldValue.serverTimestamp(),
-      astrologerAnswerStatus: "submitted",
-      // Once resubmitted, remove edit mode so the same question is no longer
-      // shown in both the Question Box and Answers section.
+      astrologerAnswerStatus: autoApproveAnswer ? "approved" : "submitted",
       astrologerEditMode: false,
-      status: "processing",
+      status: autoApproveAnswer ? "answered" : "processing",
       astrologerCommissionAmount: commissionAmount,
       commissionPercent,
       commissionRate: commissionPercent,
-      commissionStatus: "pending_admin_approval",
-      answerEmailStatus: {
-        state: "pending",
-        updatedAt: FieldValue.serverTimestamp()
-      }
+      commissionStatus: autoApproveAnswer ? "credited" : "pending_admin_approval",
+      ...(autoApproveAnswer ? {
+        answerApprovedAt: FieldValue.serverTimestamp(),
+        autoAnswerApprovedAt: FieldValue.serverTimestamp(),
+        answerApprovedBy: "system",
+        commissionCreditedAt: q.commissionCreditedAt || FieldValue.serverTimestamp(),
+        commissionAmount,
+        astrologerPaymentId: autoAstrologerPaymentId
+      } : {}),
+      answerEmailStatus: { state: "pending", updatedAt: FieldValue.serverTimestamp() }
     });
 
     await writeAdminAudit("ASTROLOGER_ANSWER_SUBMITTED", questionId, user.uid, {
-      wordCount, previousStatus: String(q.status || ""), nextStatus: "processing"
+      wordCount, previousStatus: String(q.status || ""), nextStatus: autoApproveAnswer ? "answered" : "processing", autoApproved: autoApproveAnswer
     });
 
     const customerEmail = String(
@@ -599,11 +616,11 @@ app.post("/submit-answer", async (req, res) => {
     const astrologerEmail = String(await getUserEmail(q.astrologerId) || "").trim();
     const astrologerName = String(q.astrologerName || "Astrologer");
 
-    const subject = "SMV ASTRO — Astrologer answer submitted";
+    const subject = autoApproveAnswer ? "SMV ASTRO — Astrology answer ready" : "SMV ASTRO — Astrologer answer submitted";
     const text = [
       `Dear ${customerName},`,
       "",
-      `${astrologerName} has submitted an answer to your astrology question. It is now waiting for Admin review.`,
+      `${astrologerName} has submitted an answer to your astrology question.${autoApproveAnswer ? " The answer is now available to view." : " It is now waiting for Admin review."}`,
       "",
       `Question: ${q.question || ""}`,
       `Question ID: ${questionId}`,
@@ -668,7 +685,9 @@ app.post("/submit-answer", async (req, res) => {
     return res.json({
       ok: true,
       answerSaved: true,
-      status: "processing"
+      status: autoApproveAnswer ? "answered" : "processing",
+      autoApproved: autoApproveAnswer,
+      commissionAmount
     });
   } catch (e) {
     console.error(
@@ -1114,6 +1133,30 @@ app.get("/admin/appointments", async(req,res)=>{
 app.post("/admin/appointment-status", express.json({limit:"5kb"}), async(req,res)=>{
   const user=await requireUser(req,res); if(!user)return; if(!(await isAdminUser(user)))return res.status(403).json({error:"Admin access required."});
   try{const id=String(req.body?.id||"").trim(),status=String(req.body?.status||"").trim();if(!id||!["new","confirmed","completed","cancelled"].includes(status))return res.status(400).json({error:"Invalid appointment update."});await db.collection("smv_appointments").doc(id).update({status,updatedAt:FieldValue.serverTimestamp(),updatedBy:user.uid});return res.json({ok:true});}catch(e){return res.status(500).json({error:e?.message||"Unable to update appointment."});}
+});
+
+async function getApprovalSettings() {
+  try {
+    const snap = await db.collection("smv_settings").doc("workflow").get();
+    const d = snap.exists ? (snap.data() || {}) : {};
+    return {
+      questionApprovalEnabled: d.questionApprovalEnabled !== false,
+      answerApprovalEnabled: d.answerApprovalEnabled !== false
+    };
+  } catch (e) {
+    console.warn("Workflow settings read failed; using safe defaults:", e?.message || e);
+    return { questionApprovalEnabled: true, answerApprovalEnabled: true };
+  }
+}
+
+app.get("/workflow-settings", async (req, res) => {
+  const user = await requireUser(req, res); if (!user) return;
+  try {
+    const settings = await getApprovalSettings();
+    return res.json({ success: true, ...settings });
+  } catch (e) {
+    return res.status(500).json({ error: e?.message || "Unable to load workflow settings." });
+  }
 });
 
 app.post("/admin/approve-question", express.json({limit:"10kb"}), async (req,res)=>{
@@ -1764,10 +1807,15 @@ async function markQuestionPaid(questionId, orderId, paymentId, signature, sourc
       paymentId: customerPaymentId, type: "customer_payment", customerId: q.customerId, astrologerId: null, questionId, bookingId: q.bookingId || null,
       razorpayOrderId: orderId, razorpayPaymentId: paymentId, amount, status: "paid", paymentStatus: "paid", source, createdAt: FieldValue.serverTimestamp(), paymentRecordedAt, updatedAt: FieldValue.serverTimestamp()
     });
+    const workflowSettings = await getApprovalSettings();
+    const openWithoutAdmin = !workflowSettings.questionApprovalEnabled;
     tx.update(qRef, {
-      status: "pending_admin_approval", paymentStatus: "paid", allocationStatus: "awaiting_admin", razorpayPaymentId: paymentId, razorpaySignature: signature,
+      status: openWithoutAdmin ? "available_to_astrologers" : "pending_admin_approval",
+      paymentStatus: "paid",
+      allocationStatus: openWithoutAdmin ? "available_to_astrologers" : "awaiting_admin",
+      razorpayPaymentId: paymentId, razorpaySignature: signature,
       paidAt: q.paidAt || FieldValue.serverTimestamp(), paymentUpdatedAt: FieldValue.serverTimestamp(), paymentConfirmedBy: source, customerPaymentId, paymentRecordedAt,
-      astrologerPaymentId: FieldValue.delete(), commissionStatus: "awaiting_admin_allocation"
+      astrologerPaymentId: FieldValue.delete(), commissionStatus: openWithoutAdmin ? "awaiting_astrologer_claim" : "awaiting_admin_allocation"
     });
     return { already: false, customerId: q.customerId, customerPaymentId, paymentRecordedAt };
   });
@@ -1838,6 +1886,8 @@ app.post("/admin/reject-answer", express.json({limit:"10kb"}), async (req,res)=>
 app.post("/admin/approve-answer", express.json({limit:"20kb"}), async (req, res) => {
   const user = await requireUser(req, res); if (!user) return;
   if (!(await isAdminUser(user))) return res.status(403).json({ error: "Admin access denied." });
+  const workflowSettings = await getApprovalSettings();
+  if (!workflowSettings.answerApprovalEnabled) return res.status(409).json({ error: "Answer Approval is disabled. Answers are approved automatically." });
   const questionId = String(req.body?.questionId || "").trim();
   try {
     if (!questionId) return res.status(400).json({ error: "Question ID is required." });
