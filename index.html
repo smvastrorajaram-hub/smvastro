@@ -5708,7 +5708,6 @@ html body header .brand .brand-text .logo a {
 <div class="card" style="margin-top:16px"><h3>Customer Reviews</h3><div id="adminReviews"><div class="empty">Loading reviews...</div></div><div id="adminReviewMsg" class="small"></div><input id="adminReviewRating" type="hidden" value="5"><textarea id="adminReviewText" class="hidden"></textarea><button id="saveAdminReview" class="hidden" type="button">SAVE</button></div>
 <div class="card" style="margin-top:16px"><h3>Astrologer Withdrawals</h3><div id="adminWithdrawals"><div class="empty">Loading withdrawal requests...</div></div></div>
 <div class="card" style="margin-top:16px"><h3>Admin Earnings History</h3><p class="small">Admin earnings are shown for completed and approved consultations.</p><div id="adminEarningsHistory"><div class="empty">Loading admin earnings...</div></div></div>
-<div class="card" style="margin-top:16px" id="adminWorkflowControl"><h3>Approval Workflow Control</h3><p class="small">Use these controls when Admin is unavailable. Astrologer registration/approval is always controlled by Admin.</p><div class="action-row" style="align-items:center;gap:12px;flex-wrap:wrap"><label style="display:flex;align-items:center;gap:8px;font-weight:700"><input id="questionApprovalEnabled" type="checkbox"> Question Approval — ENABLE / DISABLE</label><label style="display:flex;align-items:center;gap:8px;font-weight:700"><input id="answerApprovalEnabled" type="checkbox"> Answer Approval — ENABLE / DISABLE</label><button id="saveWorkflowSettings" class="btn" type="button">SAVE APPROVAL CONTROL</button></div><div id="workflowSettingsMsg" class="small"></div><div class="small" style="margin-top:8px">Question OFF: paid questions become openly available to all approved astrologers without Admin allocation. Answer OFF: submitted answers become visible to the customer immediately and commission is credited automatically.</div></div>
 <div class="card" style="margin-top:16px"><h3>Question Price</h3><div class="action-row"><input id="questionPrice" type="number" min="1" step="0.01" placeholder="Question price"><button id="saveQuestionPrice" class="btn" type="button">SAVE PRICE</button></div><div id="questionPriceMsg" class="small"></div></div>
 <div class="card" style="margin-top:16px"><h3>Commission Settings</h3><div class="action-row"><input id="astroCommission" type="number" min="0" max="100" placeholder="Astrologer %"><input id="adminCommission" type="number" min="0" max="100" placeholder="Admin %"><button id="saveCommission" class="btn" type="button">SAVE COMMISSION</button></div><div id="commissionMsg" class="small"></div></div>
 <div class="card" style="margin-top:16px"><h3>Answer Word Limit</h3><div class="action-row"><input id="minimumAnswerWords" type="number" min="1" max="10000" placeholder="Minimum words"><button id="saveAnswerWords" class="btn" type="button">SAVE WORD LIMIT</button></div><div id="answerWordsMsg" class="small"></div></div>
@@ -7387,9 +7386,9 @@ const userStatus=String(
 }
    let inboxSnap={docs:[]}, qs={docs:[]};
    try{
-     inboxSnap=await withTimeout(getDocs(query(collection(db,'smv_questions'),where('allocationStatus','==','available_to_astrologers'))),12000);
+     inboxSnap=await withTimeout(getDocs(query(collection(db,'smv_questions'),where('astrologerId','==',currentUser.uid))),12000);
    }catch(e){ console.warn('Astrologer available-questions query skipped:',e); }
-   const availableQuestions=inboxSnap.docs.filter(d=>{const q=d.data()||{};return !q.astrologerId&&q.paymentStatus==='paid'&&q.status==='available_to_astrologers'&&q.allocationStatus==='available_to_astrologers';}).map(d=>({id:d.id,...d.data()}));
+   const availableQuestions=inboxSnap.docs.filter(d=>{const q=d.data()||{};return q.astrologerId===currentUser.uid&&!!q.adminQuestionApprovedAt&&['assigned_to_astrologer','available_to_astrologers','reallocated'].includes(String(q.allocationStatus||''))&&['admin_approved','paid'].includes(String(q.status||''));}).map(d=>({id:d.id,...d.data()}));
    try{
      qs=await withTimeout(getDocs(query(collection(db,'smv_questions'),where('astrologerId','==',currentUser.uid))),12000);
    }catch(e){ console.warn('Astrologer own-questions query skipped:',e); }
@@ -7524,13 +7523,19 @@ ${ad.status === 'rejected' && ad.rejectionReason
 
         const q=questionSnap.data();
 
-        const openPool = q.status==='available_to_astrologers' && q.allocationStatus==='available_to_astrologers' && !q.astrologerId && q.paymentStatus==='paid';
-        const allocatedToMe = ['admin_approved','paid'].includes(String(q.status||'')) && q.astrologerId===currentUser.uid;
-        if(!openPool && !allocatedToMe){
+        if(!['admin_approved','paid'].includes(String(q.status||''))){
           throw new Error('This question is no longer available.');
         }
+
         if(q.astrologerId && q.astrologerId!==currentUser.uid){
           throw new Error('This question is allocated to another astrologer.');
+        }
+        if(q.astrologerId!==currentUser.uid){
+          throw new Error('This question is not allocated to your account.');
+        }
+
+        if(!q.adminQuestionApprovedAt){
+          throw new Error('This question is still waiting for Admin approval.');
         }
 
         const commissionPercent=Number(
@@ -8361,11 +8366,6 @@ async function loadAdminPanel(){
   const customers=(adminData.customers||[]).length, pendingDocs=astros.docs.filter(d=>d.data().status==='pending');
   const userMap=new Map(users.docs.map(d=>[d.id,d.data()]));
   $('adminSummary').innerHTML=`<div class="stat">Customers <b>${customers}</b></div><div class="stat">Astrologers <b>${astros.size}</b></div><div class="stat">Pending <b>${pendingDocs.length}</b></div><div class="stat">Questions <b>${questions.size}</b></div>`;
-  let workflowSettings={questionApprovalEnabled:true,answerApprovalEnabled:true};
-  try{const ws=await getDoc(doc(db,'smv_settings','workflow'));if(ws.exists())workflowSettings={...workflowSettings,...ws.data()};}catch(e){}
-  $('questionApprovalEnabled').checked=workflowSettings.questionApprovalEnabled!==false;
-  $('answerApprovalEnabled').checked=workflowSettings.answerApprovalEnabled!==false;
-  $('saveWorkflowSettings').onclick=async()=>{const b=$('saveWorkflowSettings');b.disabled=true;b.textContent='SAVING...';try{await setDoc(doc(db,'smv_settings','workflow'),{questionApprovalEnabled:$('questionApprovalEnabled').checked,answerApprovalEnabled:$('answerApprovalEnabled').checked,updatedAt:serverTimestamp(),updatedBy:currentUser.uid});$('workflowSettingsMsg').innerHTML='<span class="success">Approval controls saved.</span>';}catch(e){$('workflowSettingsMsg').innerHTML='<span class="error">Unable to save approval controls: '+escapeHtml(e.message||String(e))+'</span>';}finally{b.disabled=false;b.textContent='SAVE APPROVAL CONTROL';}};
   let settings={astroPercent:20,adminPercent:80}; try{const ss=await getDoc(doc(db,'smv_settings','commission'));if(ss.exists())settings=ss.data();}catch(e){}
   let questionSettings={price:5}; try{const qps=await getDoc(doc(db,'smv_settings','question'));if(qps.exists())questionSettings=qps.data();}catch(e){}
   $('questionPrice').value=Number(questionSettings.price||5);
