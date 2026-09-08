@@ -644,6 +644,7 @@ app.post("/submit-answer", async (req, res) => {
       await writeAdminAudit("ASTROLOGER_ANSWER_SUBMITTED", questionId, user.uid, {wordCount, previousStatus: String(q.status || ""), nextStatus: "processing"});
     }
 
+    const finishAnswerEmailDelivery = async () => {
     const customerEmail = String(
       q.customerEmail || await getUserEmail(q.customerId) || ""
     ).trim();
@@ -714,6 +715,18 @@ app.post("/submit-answer", async (req, res) => {
     }
 
     await questionRef.set({ answerEmailStatus: emailStatusPatch }, { merge: true });
+
+    };
+
+    // Auto-approved answers must not wait for Resend/email latency. The business
+    // state is already saved as answered above; email delivery continues in the
+    // background without delaying the astrologer UI.
+    if (workflowMode === "auto") {
+      finishAnswerEmailDelivery().catch(e => console.error("Background answer email failed:", e?.message || e));
+      return res.json({ ok: true, answerSaved: true, status: "answered" });
+    }
+
+    await finishAnswerEmailDelivery();
 
     // Email delivery is intentionally independent from the business workflow.
     // Never expose Resend/email delivery state to Customer or Astrologer UI.

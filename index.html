@@ -7447,8 +7447,11 @@ const userStatus=String(
   // by client-side Firestore rules or stale question fields.
   let totalEarnings = 0;
   let ledger = [];
+  let withdrawalSnap={docs:[]};
+  const earningsPromise = withTimeout(renderApi('/astrologer/earnings', {method:'GET'}),8000);
+  const withdrawalsPromise = withTimeout(getDocs(query(collection(db,'smv_withdrawals'),where('astrologerId','==',currentUser.uid))),12000);
   try {
-    const epRemote = await withTimeout(renderApi('/astrologer/earnings', {method:'GET'}),8000);
+    const epRemote = await earningsPromise;
     totalEarnings = Number(epRemote?.totalEarnings || 0);
     ledger = Array.isArray(epRemote?.ledger) ? epRemote.ledger : [];
   } catch (earningsErr) {
@@ -7464,11 +7467,8 @@ const userStatus=String(
     totalEarnings = ledger.reduce((sum,x)=>sum+Number(x.commission||0),0);
   }
 
-  let withdrawalSnap={docs:[]};
   try{
-   withdrawalSnap = await withTimeout(
-    getDocs(query(collection(db,'smv_withdrawals'),where('astrologerId','==',currentUser.uid))),12000
-   );
+   withdrawalSnap = await withdrawalsPromise;
   }catch(e){ console.warn('Astrologer withdrawals query skipped:',e); }
 
   let reservedWithdrawals = 0;
@@ -7751,7 +7751,7 @@ ${ad.status === 'rejected' && ad.rejectionReason
          question record, so this remains safe even if this write is denied.
          ============================================================ */
       try{
-        const latestSnap=await withTimeout(getDoc(questionRef),15000);
+        const latestSnap=await withTimeout(getDoc(questionRef),5000);
         const latestQ=latestSnap.exists()?(latestSnap.data()||{}):q;
         const customerId=String(latestQ.customerId||q.customerId||'').trim();
         if(customerId){
@@ -7777,10 +7777,17 @@ ${ad.status === 'rejected' && ad.rejectionReason
 
       alert('Answer submitted successfully, Waiting for Approval');
 
-      await loadDashboard('astrologer');
-      requestAnimationFrame(() => setTimeout(() => {
-        $('astroAnsweredBox')?.scrollIntoView({ behavior:'smooth', block:'start' });
-      }, 120));
+      // Do not keep the Submit button/UI waiting for the full dashboard
+      // hydration. The server has already saved the final Auto status.
+      // Refresh the dashboard in the background so the question moves to
+      // Answers — Answered Questions without blocking the user.
+      loadDashboard('astrologer', true).then(() => {
+        requestAnimationFrame(() => setTimeout(() => {
+          $('astroAnsweredBox')?.scrollIntoView({ behavior:'smooth', block:'start' });
+        }, 120));
+      }).catch(err => console.warn('Post-submit dashboard refresh skipped:', err));
+      b.disabled = false;
+      b.textContent = 'SUBMIT ANSWER';
 
     } catch (e) {
 
