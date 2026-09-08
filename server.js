@@ -2054,8 +2054,13 @@ app.post("/astrologer/claim-question", express.json({limit:"10kb"}), async(req,r
       return {pct,astroCommission};
     });
     if(!result.alreadyClaimed){
-      await db.collection("smv_notifications").add({userId:user.uid,type:"question_claimed",title:"Question Claimed",message:"You have claimed a paid astrology question. Please submit your answer.",questionId,createdAt:FieldValue.serverTimestamp(),read:false});
-      await writeAdminAudit("QUESTION_CLAIMED_AUTO_MODE",questionId,user.uid,{commissionPercent:result.pct,astrologerCommissionAmount:result.astroCommission});
+      // These audit/notification writes are supplementary to the successful
+      // transaction. Do them in the background so CLAIM & ANSWER can open
+      // immediately after the claim is committed.
+      Promise.all([
+        db.collection("smv_notifications").add({userId:user.uid,type:"question_claimed",title:"Question Claimed",message:"You have claimed a paid astrology question. Please submit your answer.",questionId,createdAt:FieldValue.serverTimestamp(),read:false}),
+        writeAdminAudit("QUESTION_CLAIMED_AUTO_MODE",questionId,user.uid,{commissionPercent:result.pct,astrologerCommissionAmount:result.astroCommission})
+      ]).catch(sideEffectError=>console.warn("Claim side-effects skipped:",sideEffectError));
     }
     return res.json({success:true,questionId,status:"admin_approved",allocationStatus:"claimed_by_astrologer",alreadyClaimed:!!result.alreadyClaimed});
   }catch(e){return res.status(409).json({error:e?.message||"Unable to claim question."});}
