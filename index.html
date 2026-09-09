@@ -6084,8 +6084,14 @@ async function openQuestionService(options={}){
     if(!questionProfile){
       questionProfile=await getUserProfile(verifiedUser.uid);
     }
-    const questionRole=String(questionProfile?.role||"customer").toLowerCase();
-    if(questionRole!=="customer"){
+
+    // ASK NOW is strictly CUSTOMER-ONLY. Never treat a missing/failed profile
+    // lookup as a customer, because that could let Admin/Astrologer accounts
+    // enter the paid question/payment flow. Admin is also identified by UID.
+    const questionRole=String(questionProfile?.role||"").toLowerCase();
+    const isAdminAccount=verifiedUser.uid===ADMIN_UID || questionRole==="admin";
+    const isAstrologerAccount=questionRole==="astrologer";
+    if(isAdminAccount || isAstrologerAccount || questionRole!=="customer"){
       askNowTransitionLock=false;
       smvNotice("Customer Login Required","Please login with a Customer account to ask an astrology question.","!");
       return;
