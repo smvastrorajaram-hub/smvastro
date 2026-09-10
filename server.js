@@ -1150,6 +1150,43 @@ app.post("/admin/approve-question", express.json({limit:"10kb"}), async (req,res
 });
 
 
+
+function smvRazorpayError(err, fallback="Unable to process Razorpay refund."){
+  return {
+    statusCode:Number(err?.statusCode||err?.status||0)||null,
+    code:String(err?.error?.code||err?.code||"").trim()||null,
+    description:String(err?.error?.description||err?.description||err?.message||fallback).trim(),
+    reason:String(err?.error?.reason||err?.reason||"").trim()||null,
+    source:String(err?.error?.source||err?.source||"").trim()||null,
+    step:String(err?.error?.step||err?.step||"").trim()||null
+  };
+}
+
+async function smvCreateSafeRefund({questionId,q,amount,reason}){
+  const paymentId=String(q?.razorpayPaymentId||"").trim();
+  if(!paymentId){
+    const e=new Error("Razorpay Payment ID is missing. Refund cannot be created automatically.");
+    e.code="SMV_PAYMENT_ID_MISSING"; throw e;
+  }
+  // Read Razorpay first. This prevents accidental duplicate/full-over-refunds on retries.
+  const payment=await razorpay.payments.fetch(paymentId);
+  const paidPaise=Number(payment?.amount||0);
+  const alreadyRefundedPaise=Number(payment?.amount_refunded||0);
+  const refundablePaise=Math.max(0,paidPaise-alreadyRefundedPaise);
+  const wantedPaise=Math.max(0,Math.round(Number(amount||0)*100));
+  if(alreadyRefundedPaise>0 && refundablePaise===0){
+    return {alreadyFullyRefunded:true,payment,refund:null,amount:alreadyRefundedPaise/100,status:"processed"};
+  }
+  if(String(payment?.status||"").toLowerCase()!=="captured"){
+    const e=new Error(`Razorpay payment is ${payment?.status||"not captured"}; only a captured payment can be refunded.`);
+    e.code="SMV_PAYMENT_NOT_CAPTURED"; throw e;
+  }
+  const refundPaise=Math.min(wantedPaise||refundablePaise,refundablePaise);
+  if(refundPaise<=0){ const e=new Error("No refundable amount remains on this Razorpay payment."); e.code="SMV_NOTHING_TO_REFUND"; throw e; }
+  const refund=await razorpay.payments.refund(paymentId,{amount:refundPaise,notes:{questionId,reason:String(reason||"Admin rejected question").slice(0,240)}});
+  return {alreadyFullyRefunded:false,payment,refund,amount:refund?.amount!=null?Number(refund.amount)/100:refundPaise/100,status:String(refund?.status||"pending").toLowerCase()};
+}
+
 app.post("/admin/reject-question", express.json({limit:"10kb"}), async (req,res)=>{
   const user=await requireUser(req,res); if(!user)return;
   if(!(await isAdminUser(user))) return res.status(403).json({error:"Admin access denied."});
@@ -1194,29 +1231,29 @@ app.post("/admin/reject-question", express.json({limit:"10kb"}), async (req,res)
     await qRef.update(lockPatch);
     const patch={...lockPatch};
     let refund=null;
-    if(paid && amount>0 && q.razorpayPaymentId){
+    if(paid && amount>0){
       if(q.refundId){
         refund={id:q.refundId,status:q.refundStatus||"pending",amount:Number(q.refundAmount||amount)};
       }else{
         try{
-          refund=await razorpay.payments.refund(String(q.razorpayPaymentId), { amount:Math.round(amount*100), notes:{questionId,reason:"Admin rejected question before consultation"} });
-          patch.refundId=refund.id||FieldValue.delete();
-          patch.refundStatus=String(refund.status||"pending").toLowerCase();
-          patch.refundAmount=refund.amount!=null?Number(refund.amount)/100:amount;
-          patch.refundCreatedAt=FieldValue.serverTimestamp();
-          patch.refundPaymentId=refund.payment_id||q.razorpayPaymentId;
-          patch.refundRrn=refund?.acquirer_data?.rrn||refund?.acquirer_data?.bank_reference_number||refund?.acquirer_data?.reference_number||FieldValue.delete();
+          const rr=await smvCreateSafeRefund({questionId,q,amount,reason});
+          refund=rr.refund;
+          patch.refundStatus=rr.status;
+          patch.refundAmount=rr.amount;
+          patch.refundLastAttemptAt=FieldValue.serverTimestamp();
+          if(rr.alreadyFullyRefunded){
+            patch.refundProcessedAt=FieldValue.serverTimestamp();
+            patch.refundError=FieldValue.delete();
+            patch.refundErrorCode=FieldValue.delete();
+          }else{
+            patch.refundId=refund.id||FieldValue.delete();
+            patch.refundCreatedAt=FieldValue.serverTimestamp();
+            patch.refundPaymentId=refund.payment_id||q.razorpayPaymentId;
+            patch.refundRrn=refund?.acquirer_data?.rrn||refund?.acquirer_data?.bank_reference_number||refund?.acquirer_data?.reference_number||FieldValue.delete();
+          }
         }catch(refundError){
-          // Keep the exact Razorpay failure details in a safe, non-secret form.
-          // Never store the API secret or full request headers in Firestore.
-          const razorpayError = {
-            statusCode: Number(refundError?.statusCode || refundError?.status || 0) || null,
-            code: String(refundError?.error?.code || refundError?.code || "").trim() || null,
-            description: String(refundError?.error?.description || refundError?.description || refundError?.message || "Unable to create Razorpay refund.").trim(),
-            reason: String(refundError?.error?.reason || refundError?.reason || "").trim() || null,
-            source: String(refundError?.error?.source || refundError?.source || "").trim() || null,
-            step: String(refundError?.error?.step || refundError?.step || "").trim() || null
-          };
+          // Keep exact non-secret Razorpay details so Admin can diagnose/retry safely.
+          const razorpayError=smvRazorpayError(refundError,"Unable to create Razorpay refund.");
           console.error("[REFUND_TRACE] Razorpay refund creation failed", {
             questionId, razorpayPaymentId: String(q.razorpayPaymentId || ""),
             amount: Math.round(amount * 100), razorpayError
@@ -1348,6 +1385,38 @@ app.post("/customer/sync-refund", express.json({limit:"10kb"}), async (req,res)=
     console.error("Refund status sync failed:",e);
     return res.status(502).json({error:e?.error?.description||e?.description||e?.message||"Unable to sync refund status from Razorpay."});
   }
+});
+
+
+app.post("/admin/retry-refund", express.json({limit:"10kb"}), async (req,res)=>{
+  const user=await requireUser(req,res); if(!user)return;
+  if(!(await isAdminUser(user))) return res.status(403).json({error:"Admin access denied."});
+  try{
+    const questionId=String(req.body?.questionId||"").trim();
+    if(!questionId) return res.status(400).json({error:"Question ID is required."});
+    const qRef=db.collection("smv_questions").doc(questionId), qSnap=await qRef.get();
+    if(!qSnap.exists) return res.status(404).json({error:"Question not found."});
+    const q=qSnap.data()||{};
+    if(!["question_rejected","admin_rejected"].includes(String(q.status||""))) return res.status(409).json({error:"Only a rejected question refund can be retried."});
+    if(q.refundId) return res.status(409).json({error:"A Razorpay refund ID already exists. Use Sync Refund instead of creating another refund."});
+    const amount=Number(q.refundAmount||q.amount||q.paymentAmount||0);
+    if(!Number.isFinite(amount)||amount<=0) return res.status(409).json({error:"Refund amount is invalid."});
+    try{
+      const rr=await smvCreateSafeRefund({questionId,q,amount,reason:q.refundReason||q.adminQuestionRejectionReason||"Admin retry"});
+      const refund=rr.refund;
+      const patch={refundStatus:rr.status,refundAmount:rr.amount,refundLastAttemptAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp(),refundError:FieldValue.delete(),refundErrorCode:FieldValue.delete(),refundErrorStatusCode:FieldValue.delete(),refundErrorReason:FieldValue.delete(),refundErrorSource:FieldValue.delete(),refundErrorStep:FieldValue.delete()};
+      if(rr.alreadyFullyRefunded){ patch.refundProcessedAt=FieldValue.serverTimestamp(); }
+      else { patch.refundId=refund.id; patch.refundPaymentId=refund.payment_id||q.razorpayPaymentId; patch.refundCreatedAt=FieldValue.serverTimestamp(); patch.refundRrn=refund?.acquirer_data?.rrn||refund?.acquirer_data?.bank_reference_number||refund?.acquirer_data?.reference_number||FieldValue.delete(); }
+      await qRef.set(patch,{merge:true});
+      await writeAdminAudit("REFUND_RETRIED",questionId,user.uid,{refundId:refund?.id||null,refundStatus:patch.refundStatus,refundAmount:patch.refundAmount,alreadyFullyRefunded:!!rr.alreadyFullyRefunded});
+      return res.json({success:true,refundId:refund?.id||null,refundStatus:patch.refundStatus,refundAmount:patch.refundAmount,alreadyFullyRefunded:!!rr.alreadyFullyRefunded});
+    }catch(err){
+      const re=smvRazorpayError(err);
+      await qRef.set({refundStatus:"failed",refundError:re.description,refundErrorCode:re.code||FieldValue.delete(),refundErrorStatusCode:re.statusCode||FieldValue.delete(),refundErrorReason:re.reason||FieldValue.delete(),refundErrorSource:re.source||FieldValue.delete(),refundErrorStep:re.step||FieldValue.delete(),refundLastAttemptAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()},{merge:true});
+      console.error("[REFUND_TRACE] Admin retry failed",{questionId,error:re});
+      return res.status(502).json({error:re.description,code:re.code,statusCode:re.statusCode});
+    }
+  }catch(e){ console.error("Admin refund retry error:",e); return res.status(500).json({error:e?.message||"Unable to retry refund."}); }
 });
 
 app.post("/admin/sync-refund", express.json({limit:"10kb"}), async (req,res)=>{
