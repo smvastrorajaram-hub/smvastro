@@ -1,5 +1,5 @@
 
-import { renderAdminWorkflows } from "./admin-workflows.mjs?v=20260910";
+import { renderAdminWorkflows } from "./admin-workflows.mjs?v=20260910b";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendEmailVerification, deleteUser, setPersistence, browserSessionPersistence, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 import { getFirestore, collection, query, where, getDocs, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch, runTransaction, onSnapshot } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
@@ -55,6 +55,9 @@ async function renderApi(path, options={}, userOverride=null){
  })();
  if(method==='GET')smvReadRequests.set(key,task);
  try{return await task;}finally{if(smvReadRequests.get(key)===task)smvReadRequests.delete(key);}
+}
+function smvAssertLiveCheckout(key){
+ if(!/^rzp_live_[A-Za-z0-9]+$/.test(String(key||'')))throw new Error('Payment blocked: this backend returned a Test or invalid Razorpay key. Live payment is required. Backend: '+RAZORPAY_BACKEND_URL);
 }
 async function renderPublicApi(path, options={}){
   const headers={"Content-Type":"application/json",...(options.headers||{})};
@@ -1062,6 +1065,7 @@ $("submitQuestionBtn")?.addEventListener("click",async()=>{
      btn.disabled=false;btn.textContent="RETRY PAYMENT";
    }}
   };
+  smvAssertLiveCheckout(options.key);
   const rzp=new Razorpay(options);
   rzp.on("payment.failed",function(resp){
     try{ sessionStorage.removeItem("smv_last_payment_success"); }catch(_e){}
@@ -1479,7 +1483,12 @@ function smvWatchQuestions(role){
    if(button)button.textContent="New activity \u2014 refresh";
  },e=>console.warn('Live dashboard updates unavailable:',e));
 }
-window.__smvRefreshDashboard=()=>loadDashboard(null,true);
+window.__smvRefreshDashboard=()=>{
+ if(!currentUser)throw new Error('Please login again.');
+ smvInternalView='dashboard'; dashboardReadyAt=0;
+ hidePrimarySections('dashboard');show('dashboard');show('dashboardContent');
+ return loadDashboard(dashboardReadyRole||null,true);
+};
 window.addEventListener('smv:logged-out',()=>{smvQuestionWatch?.();smvQuestionWatch=null;smvWatchUid=null;dashboardReadyAt=0;});
 async function loadDashboard(expectedRole=null,force=false){
  const box=$('dashboardContent');
@@ -1501,7 +1510,8 @@ async function loadDashboard(expectedRole=null,force=false){
  // must not invalidate the first caller's active render and then wait on the
  // already-invalidated promise. This was the cause of the permanent "Loading your dashboard..." state when the auth listener and Dashboard navigation
  // both called loadDashboard during first login.
- if(dashboardLoadPromise && dashboardLoadUid===loadUid) return dashboardLoadPromise;
+ if(force){++dashboardLoadSeq;dashboardLoadPromise=null;dashboardLoadUid=null;}
+ if(!force && dashboardLoadPromise && dashboardLoadUid===loadUid) return dashboardLoadPromise;
  const loadId=++dashboardLoadSeq;
  const active=()=>loadId===dashboardLoadSeq && !!currentUser && currentUser.uid===loadUid && smvInternalView==='dashboard';
  dashboardLoadUid=loadUid;
@@ -1752,70 +1762,9 @@ ${ad.status === 'rejected' && ad.rejectionReason
   b.textContent='CLAIMING...';
 
   try{
-    const astroSnap=await withTimeout(
-      getDoc(doc(db,'smv_astrologers',currentUser.uid)),
-      15000
-    );
-
-    if(!astroSnap.exists()){
-      throw new Error('Astrologer profile not found.');
-    }
-
-    const astro=astroSnap.data();
-
-    if(astro.status!=='approved'){
-      throw new Error('Your astrologer profile is not approved by Admin.');
-    }
-
-    await withTimeout(
-      runTransaction(db,async(transaction)=>{
-
-        const questionRef=doc(db,'smv_questions',questionId);
-        const questionSnap=await transaction.get(questionRef);
-
-        if(!questionSnap.exists()){
-          throw new Error('Question not found.');
-        }
-
-        const q=questionSnap.data();
-
-        if(!['admin_approved','paid'].includes(String(q.status||''))){
-          throw new Error('This question is no longer available.');
-        }
-
-        if(q.astrologerId && q.astrologerId!==currentUser.uid){
-          throw new Error('This question is allocated to another astrologer.');
-        }
-        if(q.astrologerId!==currentUser.uid){
-          throw new Error('This question is not allocated to your account.');
-        }
-
-        if(!q.adminQuestionApprovedAt){
-          throw new Error('This question is still waiting for Admin approval.');
-        }
-
-        const commissionPercent=Number(
-          q.commissionPercent ||
-          q.commissionRate ||
-          20
-        );
-
-        const commissionAmount=
-          Math.round(Number(q.amount||0)*commissionPercent)/100;
-
-        transaction.update(questionRef,{
-          astrologerId:currentUser.uid,
-          astrologerName:q.astrologerName||astro.name||currentUser.displayName||'Astrologer',
-          status:'admin_approved',
-          allocationStatus:'claimed_by_astrologer',
-          claimedAt:serverTimestamp(),
-          claimedBy:currentUser.uid
-        });
-      }),
-      20000
-    );
-
-    await loadDashboard('astrologer');
+    const claimed=await renderApi('/astrologer/claim-question',{method:'POST',body:JSON.stringify({questionId})});
+    if(!claimed?.success)throw new Error(claimed?.error||'Unable to claim this question.');
+    await loadDashboard('astrologer',true);
 
     // After CLAIM & ANSWER, keep all previously claimed questions visible and move directly to the unanswered queue.
     requestAnimationFrame(() => {
@@ -2287,21 +2236,12 @@ ${ad.status === 'rejected' && ad.rejectionReason
    // Customer consultations are loaded from the trusted Render backend. This
    // keeps payment/question ownership and the final answer visible even when
    // the browser's Firestore rules or indexes prevent the direct query.
-   let consultationItems=[];
-   try {
-     const cr=await withTimeout(renderApi('/customer/consultations',{method:'GET'}),15000);
-     if(!cr?.success) throw new Error(cr?.error||'Unable to load consultations.');
-     consultationItems=Array.isArray(cr.questions)?cr.questions:[];
-
-     // The authenticated backend returns the current consultation records.
-   } catch(backendErr) {
-     console.warn('Customer consultation backend load failed; using Firestore fallback:',backendErr);
-     const fallback=await withTimeout(getDocs(query(collection(db,'smv_questions'),where('customerId','==',currentUser.uid))));
-     consultationItems=fallback.docs.map(d=>({id:d.id,questionId:d.id,...(d.data()||{})}));
-   }
+   const cr=await renderApi('/customer/consultations?_fresh='+Date.now()+'-'+loadId,{method:'GET'});
+   if(!cr?.success||!Array.isArray(cr.questions))throw new Error(cr?.error||'Unable to load current questions.');
+   if(cr.customerId && cr.customerId!==loadUid)throw new Error('The response belongs to a different login session.');
+   if(!active())return;
+   const consultationItems=cr.questions.slice().sort((a,b)=>Date.parse(b.createdAt||'')-Date.parse(a.createdAt||''));
    const hasPendingRefund=false;
-   // Refund reconciliation is performed by the webhook and explicit Admin refresh.
-   // Do not block every customer dashboard on one remote payment request per refund.
    const paid=consultationItems.filter(q=>q.status!=='awaiting_payment').length;
    const qCount=consultationItems.length;
    if(!active()) return;
@@ -2334,7 +2274,8 @@ ${ad.status === 'rejected' && ad.rejectionReason
    $('dashboardRetry')?.addEventListener('click',()=>loadDashboard(expectedRole));
  }
  })();
- try{return await dashboardLoadPromise;}finally{if(dashboardLoadUid===loadUid){dashboardLoadPromise=null;dashboardLoadUid=null;}}
+ const ownedRequest=dashboardLoadPromise;
+ try{return await ownedRequest;}finally{if(dashboardLoadPromise===ownedRequest){dashboardLoadPromise=null;dashboardLoadUid=null;}}
 }
 function openPayoutChange(){
  openModal(`<h2>Change Payment Method</h2><p class="small">For security, your previous bank/UPI details are not displayed. Enter the new details. The new method will remain pending until Admin approval.</p>

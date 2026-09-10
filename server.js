@@ -349,6 +349,7 @@ app.get("/test-razorpay", async (req, res) => {
   try {
     if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) return res.status(500).json({ ok: false, error: "Razorpay credentials are missing in Render." });
     const mode = RAZORPAY_KEY_ID.startsWith("rzp_test_") ? "test" : (RAZORPAY_KEY_ID.startsWith("rzp_live_") ? "live" : "unknown");
+    if(mode!=='live')return res.status(503).json({ok:false,mode,error:'This deployed backend is using '+mode+' credentials. Live credentials are required.'});
     await razorpay.orders.all({ count: 1 });
     return res.json({ ok: true, mode, keyPrefix: RAZORPAY_KEY_ID.slice(0, 9), message: `Razorpay ${mode} credentials accepted by Render.` });
   } catch (e) {
@@ -1150,6 +1151,27 @@ app.post("/admin/approve-question", express.json({limit:"10kb"}), async (req,res
 });
 
 
+app.post('/astrologer/claim-question', express.json({limit:'10kb'}), async(req,res)=>{
+ const user=await requireUser(req,res);if(!user)return;
+ const questionId=String(req.body?.questionId||'').trim();
+ if(!questionId)return res.status(400).json({error:'Question ID is required.'});
+ try{
+  await db.runTransaction(async tx=>{
+   const qRef=db.collection('smv_questions').doc(questionId),aRef=db.collection('smv_astrologers').doc(user.uid);
+   const [qs,as]=await Promise.all([tx.get(qRef),tx.get(aRef)]);
+   const fail=(status,message)=>{throw Object.assign(new Error(message),{httpStatus:status});};
+   if(!qs.exists)fail(404,'Question not found.');
+   if(!as.exists||as.data()?.status!=='approved')fail(403,'Your astrologer profile is not approved.');
+   const q=qs.data()||{};
+   if(q.astrologerId!==user.uid)fail(403,'This question is not allocated to your account.');
+   if(!q.adminQuestionApprovedAt)fail(409,'This question is waiting for Admin approval.');
+   if(!['paid','admin_approved'].includes(q.status)||!['assigned_to_astrologer','available_to_astrologers','reallocated','claimed_by_astrologer'].includes(q.allocationStatus))fail(409,'This question is no longer available to claim.');
+   if(q.allocationStatus!=='claimed_by_astrologer')tx.update(qRef,{status:'admin_approved',allocationStatus:'claimed_by_astrologer',claimedAt:FieldValue.serverTimestamp(),claimedBy:user.uid,updatedAt:FieldValue.serverTimestamp()});
+  });
+  return res.json({success:true,questionId,astrologerId:user.uid,status:'admin_approved',allocationStatus:'claimed_by_astrologer'});
+ }catch(e){return res.status(e.httpStatus||500).json({error:e.message||'Unable to claim the question.'});}
+});
+
 app.post("/admin/reject-question", express.json({limit:"10kb"}), async (req,res)=>{
   const user=await requireUser(req,res); if(!user)return;
   if(!(await isAdminUser(user))) return res.status(403).json({error:"Admin access denied."});
@@ -1567,6 +1589,10 @@ app.get("/admin-data", async (req, res) => {
 });
 
 app.post("/create-order", express.json(), async (req, res) => {
+  if(!/^rzp_live_[A-Za-z0-9]+$/.test(RAZORPAY_KEY_ID)){
+    return res.status(503).json({error:'Live payments are required, but this deployed backend is not configured with a Live Razorpay key.',code:'LIVE_KEY_REQUIRED',mode:RAZORPAY_KEY_ID.startsWith('rzp_test_')?'test':'invalid'});
+  }
+
   const user = await requireUser(req, res);
   if (!user) return;
   try {
@@ -1732,7 +1758,7 @@ app.post("/create-order", express.json(), async (req, res) => {
 
     const answerSettings = await db.collection("smv_settings").doc("answer").get();
     const minimumWords = Math.max(1, Math.min(10000, Math.floor(Number(answerSettings.data()?.minimumWords || 150))));
-    await qRef.set({ razorpayOrderId: order.id, paymentCurrency: "INR", paymentStatus: "order_created", answerMinWords: minimumWords, paymentUpdatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    await qRef.set({ paymentMode:"live", razorpayOrderId: order.id, paymentCurrency: "INR", paymentStatus: "order_created", answerMinWords: minimumWords, paymentUpdatedAt: FieldValue.serverTimestamp() }, { merge: true });
     await db.collection("razorpay_orders").doc(order.id).set({
       razorpayOrderId: order.id, questionId, amount: order.amount, currency: order.currency,
       firebaseUid: user.uid, customerEmail: user.email || null, astrologerId: String(q.astrologerId || ""),
@@ -1989,13 +2015,15 @@ app.get("/astrologer/earnings", async (req, res) => {
 });
 
 app.get("/customer/consultations", async (req, res) => {
+  res.set("Cache-Control","private, no-store, max-age=0");
+  res.set("Pragma","no-cache");
   const user = await requireUser(req, res);
   if (!user) return;
   try {
     // Read through the trusted backend so Customer Dashboard is not blocked by
     // client-side Firestore rules/indexes. Always return the canonical document
     // ID as questionId, even for older questions created before this fix.
-    const snap = await db.collection("smv_questions").get();
+    const snap = await db.collection("smv_questions").where("customerId","==",user.uid).get();
     const toIso = (v) => {
       try {
         if (!v) return null;
@@ -2031,7 +2059,7 @@ app.get("/customer/consultations", async (req, res) => {
         };
       })
       .sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
-    return res.json({ success: true, questions });
+    return res.json({ success: true, customerId:user.uid, fetchedAt:new Date().toISOString(), questions });
   } catch (e) {
     console.error("Customer consultations load failed:", e);
     return res.status(500).json({ error: "Unable to load your consultations right now." });
