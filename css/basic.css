@@ -1,1 +1,107 @@
+/* Primary website design. Horoscope geometry remains in preserved.css. */
+:root{--primary:#a51d2d;--primary2:#851323;--gold:#a51d2d;--gold2:#a51d2d;--cream:#fff;--bg:#fff;--text:#242424;--card:#fff;--muted:#606060;--line:#ddd;--soft:#fafafa;--maroon:#a51d2d;--deep:#851323}
+html{scroll-behavior:smooth;scroll-padding-top:20px}body{margin:0!important;background:#fff!important;color:#242424!important;font-family:Arial,'Noto Sans Tamil',sans-serif!important;font-size:16px!important;line-height:1.65!important;overflow-x:hidden}
+body:before,body:after,header:before,header:after,.hero:before,.hero:after{display:none!important}
+header{position:relative!important;top:auto!important;background:#fff!important;border:0!important;border-bottom:2px solid #a51d2d!important;box-shadow:none!important;padding:16px 0!important;height:auto!important;min-height:0!important}
+header .nav{display:flex!important;align-items:center!important;flex-wrap:wrap!important;gap:18px!important;width:min(1160px,94%)!important;max-width:1160px!important;margin:auto!important;padding:0!important}
+header .brand{display:flex!important;align-items:center!important;gap:12px!important;text-decoration:none!important;width:auto!important;min-width:0!important;margin:0!important;padding:0!important;flex:1 1 300px!important}
+header .brand-logo{width:52px!important;height:52px!important;object-fit:contain!important;border:0!important;border-radius:0!important;box-shadow:none!important}
+header .brand-text{display:flex!important;flex-direction:column!important;align-items:flex-start!important;gap:2px!important}
+header .logo{color:#a51d2d!important;font-size:25px!important;font-weight:800!important;letter-spacing:0!important;text-shadow:none!important;white-space:nowrap!important}
+header .brand-sub{font-size:14px!important;color:#555!important;white-space:normal!important;letter-spacing:0!important}
+header nav{display:flex!important;flex-wrap:wrap!important;justify-content:flex-start!important;gap:8px!important;width:auto!important;margin:0!important;padding:0!important;overflow:visible!important;flex:1 1 500px!important}
+header nav a,header nav button,body .btn,body .smv-new-asknow-button,body .smv-install-app-btn{display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:5px!important;background:#a51d2d!important;color:#fff!important;border:1px solid #a51d2d!important;border-radius:5px!important;padding:10px 16px!important;min-height:44px!important;height:auto!important;width:auto!important;min-width:0!important;max-width:100%!important;flex:0 1 auto!important;font:inherit!important;font-size:16px!important;font-weight:600!important;line-height:1.5!important;letter-spacing:0!important;text-decoration:none!important;text-transform:none!important;box-shadow:none!important;transform:none!important;white-space:normal!important;animation:none!important;cursor:pointer}
+header nav a,header nav button,body .btn.gray{background:#fff!important;color:#a51d2d!important;border-color:#d4b7bb!important}
+button:disabled{opacity:.55!important;cursor:wait!important}a:hover,button:hover{filter:brightness(.94)}:focus-visible{outline:3px solid #1777c9!important;outline-offset:3px}
+.language-control{display:flex;align-items:center;gap:8px;font-size:14px;white-space:nowrap}.language-control select{width:auto!important;margin:0!important;min-height:44px!important}
+.container{width:min(1100px,94%)!important;max-width:1100px!important;margin:auto!important;padding:0!important}
+.hero{display:block!important;text-align:left!important;background:#fff!important;color:#242424!important;border:0!important;border-bottom:1px solid #ddd!important;border-radius:0!important;box-shadow:none!important;padding:38px 0!important;margin:0!important;min-height:0!important}
+.hero h1{font-size:clamp(25px,4vw,38px)!important;line-height:1.4!important;color:#242424!important;max-width:850px!important;margin:8px 0 14px!important;text-shadow:none!important}.hero p{font-size:17px!important;line-height:1.8!important;max-width:760px!important;margin:8px 0!important;color:#555!important}.hero .eyebrow{color:#a51d2d!important;font-weight:600}
+.feature-section,#askNowSection,#smvInstallAppSection{margin:0!important;padding:26px 0!important;border:0!important;border-bottom:1px solid #ddd!important;border-radius:0!important;background:#fff!important;box-shadow:none!important;min-height:0!important}
+#askNowSection .smv-new-asknow-inner{padding:0!important;text-align:left!important;max-width:none!important;background:#fff!important;border:0!important;box-shadow:none!important;border-radius:0!important}.smv-new-asknow-kicker,.asknow-arrow{display:none!important}#askNowSection h2{font-size:24px!important;color:#242424!important;margin:0 0 8px!important}#askNowSection p{font-size:16px!important;color:#555!important;max-width:800px!important}#askNowSection .smv-new-asknow-action{justify-content:flex-start!important;margin-top:12px!important}
+h2{font-size:24px;line-height:1.5}h3{line-height:1.5}.home-rule,.badge,.hero-quote,.hero-subline{display:none!important}
+.card,.feature-shell,.smv-install-app-card{border:1px solid #ddd!important;background:#fff!important;border-radius:6px!important;box-shadow:none!important;padding:20px!important;color:#242424!important}
+#horoscope>.feature-section{padding:0!important;border:0!important}#horoscope>.feature-section> .card{max-width:none!important}#horoscope .grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:16px!important}
+input,select,textarea{font:inherit!important;font-size:16px!important;border:1px solid #aaa!important;border-radius:4px!important;padding:10px!important;max-width:100%;background:#fff;color:#222}label,.small{font-size:14px!important;line-height:1.65!important}.action-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+.hidden,[hidden],.language-exclusive-hide,header nav .hidden{display:none!important}
+#adminLink{display:none!important}.modal{z-index:10000!important}.modalbox{max-height:90vh;overflow:auto;background:#fff!important;color:#242424!important}.modalbox input,.modalbox select,.modalbox textarea{width:100%}
+footer{background:#fff!important;color:#666!important;text-align:center!important;padding:24px!important;border-top:1px solid #ddd;font-size:14px!important}
+@media(max-width:600px){header .nav{gap:14px!important}header nav{gap:7px!important}header nav a,header nav button{padding:8px 12px!important;font-size:14px!important}.hero{padding:24px 0!important}#horoscope .grid{grid-template-columns:1fr!important}.card{padding:14px!important}.feature-section,#askNowSection{padding:22px 0!important}.smv-install-app-card{flex-wrap:wrap!important}.brand-sub{max-width:240px}table{font-size:14px}.modalbox{width:94vw!important;padding:18px!important}}
+@media print{header,.hero,#askNowSection,#smv-content-hub,#approved-astrologers,#faq,#smvInstallAppSection,footer{display:none!important}}
+/* Status badges carry payment/approval information and must remain visible. */
+body .badge{display:inline-block!important;padding:4px 9px!important;border:1px solid #ddd!important;border-radius:4px!important;background:#fafafa!important;color:#444!important;font-size:14px!important}
 
+/* V2: plain navigation, readable consultation action, and one auth layout. */
+header .nav nav a,header .nav nav button{
+ background:transparent!important;border:0!important;border-radius:0!important;
+ color:#962033!important;padding:8px 6px!important;min-height:44px!important;
+ font-size:16px!important;font-weight:600!important;box-shadow:none!important;
+ text-decoration:none!important;white-space:normal!important;
+}
+header .nav nav a:hover,header .nav nav button:hover{text-decoration:underline!important;text-underline-offset:5px}
+header .nav nav{gap:4px 14px!important;flex:1 1 auto!important}
+header .nav .brand{flex:1 1 280px!important}
+header .nav .brand-logo{width:44px!important;height:44px!important;flex:0 0 44px!important}
+header .nav .logo{font-size:23px!important}
+header .nav .brand-sub{font-size:14px!important;line-height:1.6!important;max-width:430px}
+header .nav .language-control{font-size:14px!important;gap:8px}
+header .nav .language-control select{border:0!important;border-bottom:1px solid #bbb!important;border-radius:0!important;padding:7px 24px 7px 6px!important;background:#fff!important;font-size:15px!important}
+#askNowSection #askNowButton{
+ position:static!important;display:inline-flex!important;width:auto!important;
+ min-width:160px!important;max-width:100%!important;height:auto!important;
+ min-height:46px!important;padding:10px 20px!important;overflow:visible!important;
+ white-space:normal!important;line-height:1.7!important;font-size:16px!important;
+ text-indent:0!important;clip-path:none!important;transform:none!important;
+}
+#askNowSection #askNowButton:before,#askNowSection #askNowButton:after{display:none!important}
+#modal.auth-modal-active{
+ display:grid!important;place-items:center!important;padding:16px!important;
+ background:rgba(20,20,20,.5)!important;overflow:hidden!important;
+ width:100%!important;height:100vh!important;height:100dvh!important;
+}
+#modal.auth-modal-active.hidden{display:none!important}
+#modal.auth-modal-active .modalbox{
+ width:min(480px,100%)!important;max-width:480px!important;min-width:0!important;
+ max-height:calc(100vh - 32px)!important;max-height:calc(100dvh - 32px)!important;
+ height:auto!important;padding:40px 24px 24px!important;overflow:auto!important;
+ overscroll-behavior:contain;border:0!important;border-radius:8px!important;
+ background:#fff!important;box-shadow:none!important;
+}
+#modal.auth-modal-active #modalContent,#modal.auth-modal-active .auth-shell{width:100%!important;min-width:0!important;max-width:100%!important;padding:0!important;margin:0!important}
+#modal.auth-modal-active .auth-hero{text-align:left!important;margin:0 0 18px!important;padding:0!important;background:none!important;border:0!important}
+#modal.auth-modal-active .auth-hero h2{font-size:23px!important;line-height:1.6!important;margin:0 0 6px!important;color:#962033!important;overflow-wrap:anywhere}
+#modal.auth-modal-active .auth-hero p{font-size:14px!important;line-height:1.75!important;margin:0!important;color:#555!important}
+#modal.auth-modal-active .auth-tabs{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:8px!important;margin:0 0 18px!important}
+#modal.auth-modal-active .auth-tabs .btn{
+ display:block!important;width:100%!important;min-width:0!important;max-width:100%!important;
+ min-height:44px!important;height:auto!important;padding:8px 4px!important;
+ white-space:normal!important;overflow-wrap:anywhere!important;word-break:normal!important;
+ font-size:14px!important;line-height:1.7!important;border:0!important;border-bottom:2px solid transparent!important;
+ border-radius:0!important;background:#fff!important;color:#555!important;text-align:center!important;
+}
+#modal.auth-modal-active .auth-tabs .btn.active{border-bottom-color:#a51d2d!important;color:#962033!important;background:#faf4f5!important}
+#modal.auth-modal-active .auth-field-label{display:block!important;margin:12px 0 5px!important;font-size:14px!important;line-height:1.7!important;color:#333!important}
+#modal.auth-modal-active .auth-field{display:block!important;width:100%!important;min-width:0!important;min-height:46px!important;height:auto!important;margin:0!important;padding:10px 12px!important;font-size:16px!important;line-height:1.5!important;font-weight:400!important;background:#fff!important}
+#modal.auth-modal-active .auth-field::placeholder{font-size:14px!important;font-weight:400!important;color:#777!important;opacity:1}
+#modal.auth-modal-active .password-wrap{position:relative!important;width:100%!important;min-width:0!important}
+#modal.auth-modal-active #password{padding-right:48px!important}
+#modal.auth-modal-active .password-toggle{position:absolute!important;right:2px!important;top:2px!important;width:42px!important;min-width:42px!important;height:42px!important;padding:4px!important;background:transparent!important;color:#555!important;border:0!important;font-size:19px!important;cursor:pointer}
+#modal.auth-modal-active .auth-submit,#modal.auth-modal-active .auth-google{display:flex!important;width:100%!important;min-height:46px!important;height:auto!important;white-space:normal!important;font-size:16px!important;line-height:1.7!important;margin-top:18px!important;padding:10px 12px!important}
+#modal.auth-modal-active .auth-google{margin-top:0!important;gap:10px!important}
+#modal.auth-modal-active .auth-secondary{display:block!important;width:100%!important;min-height:44px!important;height:auto!important;white-space:normal!important;overflow-wrap:anywhere!important;font-size:14px!important;line-height:1.8!important;margin-top:8px!important;padding:8px 2px!important;background:#fff!important;border:0!important;border-radius:0!important;color:#962033!important}
+#modal.auth-modal-active .auth-divider{display:flex!important;align-items:center;gap:12px;margin:16px 0!important;color:#777;font-size:14px!important}
+#modal.auth-modal-active .auth-divider:before,#modal.auth-modal-active .auth-divider:after{content:'';height:1px;background:#ddd;flex:1}
+@media(max-width:600px){
+ header .nav{gap:10px!important}header .nav nav{flex-basis:100%!important;gap:2px 12px!important}
+ header .nav nav a,header .nav nav button{font-size:15px!important;padding:7px 3px!important}
+ header .nav .brand-sub{font-size:13px!important;max-width:290px}
+ .hero h1{font-size:26px!important;line-height:1.6!important}.hero p{font-size:16px!important;line-height:1.8!important}
+}
+@media(max-width:480px){
+ #modal.auth-modal-active{padding:12px!important}
+ #modal.auth-modal-active .modalbox{padding:36px 18px 20px!important;max-height:calc(100dvh - 24px)!important}
+ #modal.auth-modal-active .auth-hero h2{font-size:21px!important}
+ #modal.auth-modal-active .auth-tabs{grid-template-columns:minmax(0,1fr)!important;gap:0!important;margin-bottom:12px!important}
+ #modal.auth-modal-active .auth-tabs .btn{text-align:left!important;padding:8px 10px!important;border-bottom:1px solid #eee!important}
+ #modal.auth-modal-active .auth-tabs .btn.active{border-left:3px solid #a51d2d!important;border-bottom-color:#eee!important}
+}
