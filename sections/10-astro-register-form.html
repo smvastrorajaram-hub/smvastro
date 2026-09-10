@@ -1,0 +1,27 @@
+<section class="hidden" id="astro-register-form" style="margin-top:30px">
+<div class="card">
+<button class="btn gray" id="astroRegBackBtn">← Back</button>
+<h2 style="margin-top:18px">Astrologer Registration</h2>
+<p class="small">Your profile will remain pending until SMV ASTRO approves it.</p>
+<form id="astroRegistrationForm">
+<input id="arName" placeholder="Full Name" required="" style="width:100%;box-sizing:border-box;padding:12px;margin:6px 0;border:1px solid #ddd;border-radius:10px"/>
+<input id="arMobile" placeholder="Mobile Number" required="" style="width:100%;box-sizing:border-box;padding:12px;margin:6px 0;border:1px solid #ddd;border-radius:10px"/>
+<input id="arEmail" placeholder="Email" required="" style="width:100%;box-sizing:border-box;padding:12px;margin:6px 0;border:1px solid #ddd;border-radius:10px" type="email"/>
+<label class="small">Profile Photo</label>
+<input accept="image/*" id="arPhoto" required="" type="file"/>
+<input id="arSpecialization" placeholder="Expertise / Specialization (Vedic, KP, Numerology...)" required="" style="width:100%;box-sizing:border-box;padding:12px;margin:6px 0;border:1px solid #ddd;border-radius:10px"/>
+<input id="arExperience" min="0" placeholder="Experience (years)" required="" style="width:100%;box-sizing:border-box;padding:12px;margin:6px 0;border:1px solid #ddd;border-radius:10px" type="number"/>
+<textarea id="arBio" placeholder="Professional Bio" required="" rows="5" style="width:100%;box-sizing:border-box;padding:12px;margin:6px 0;border:1px solid #ddd;border-radius:10px"></textarea>
+<h3>Payment Method</h3>
+<input id="arBankName" placeholder="Bank Name" required=""/>
+<input id="arAccountName" placeholder="Account Holder Name" required=""/>
+<input id="arAccountNumber" inputmode="numeric" placeholder="Bank Account Number" required=""/>
+<input id="arIfsc" placeholder="IFSC Code" required=""/>
+<input id="arUpi" placeholder="UPI ID (optional)"/>
+<p class="small">Bank/UPI details are private and visible only to Admin. They will not be shown again in full to the Astrologer.</p>
+<input id="arPassword" minlength="6" placeholder="Password (min 6 characters)" required="" style="width:100%;box-sizing:border-box;padding:12px;margin:6px 0;border:1px solid #ddd;border-radius:10px" type="password"/>
+<button class="btn" style="margin-top:8px" type="submit">SUBMIT REGISTRATION</button>
+<div class="small" id="astroRegMsg" style="margin-top:10px"></div>
+</form>
+</div>
+</section>

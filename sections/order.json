@@ -1,1 +1,18 @@
-
+[
+  "01-header.html",
+  "02-home.html",
+  "03-askNowSection.html",
+  "04-approved-astrologers.html",
+  "05-smv-content-hub.html",
+  "06-horoscope.html",
+  "07-faq.html",
+  "08-register-flow.html",
+  "09-dashboard.html",
+  "10-astro-register-form.html",
+  "11-astro-flow.html",
+  "12-ask-flow.html",
+  "13-contact.html",
+  "14-admin.html",
+  "15-smvInstallAppSection.html",
+  "16-footer.html"
+]

@@ -1,0 +1,21 @@
+<section class="hidden" id="ask-flow" style="margin-top:30px">
+<div class="card">
+<button class="btn gray" id="askNowBackBtn">← Back</button>
+<h2 id="askTitle" style="margin-top:18px">Ask Your Question</h2>
+<p class="small" id="askRate"><b>Loading current question price...</b></p>
+<h3>Birth Details</h3>
+<p class="small">Enter the birth details of the person for whom you are asking the question.</p>
+<div class="grid">
+<div><label class="small"><b>Name</b></label><input autocomplete="name" id="birthName" placeholder="Full name" required="" type="text"/></div>
+<div><label class="small"><b>Date of Birth</b></label><input id="birthDate" required="" type="date"/></div>
+<div><label class="small"><b>Time of Birth</b></label><input id="birthTime" required="" type="time"/></div>
+<div><label class="small"><b>Place of Birth</b></label><input id="birthPlace" placeholder="City, State, Country" required="" type="text"/></div>
+<div><label class="small"><b>Gender (Optional)</b></label><select id="birthGender"><option value="">Prefer not to say</option><option>Male</option><option>Female</option><option>Other</option></select></div>
+</div>
+<h3 style="margin-top:18px">Your Question</h3>
+<textarea id="questionText" placeholder="Write your astrology question here..." rows="6" style="width:100%;max-width:100%;min-width:0;box-sizing:border-box;padding:12px;border:1px solid #d7dde7;border-radius:10px;font:inherit;overflow-wrap:anywhere;word-break:break-word"></textarea>
+<button class="btn" id="submitQuestionBtn" style="margin-top:12px">Proceed to Secure Payment</button>
+<div class="small" id="askMsg" style="margin-top:10px"></div>
+<div class="card hidden" id="paymentSuccessPanel" style="margin-top:16px;border:2px solid #b8860b;background:#fffaf0"><h3 style="margin-top:0">Payment Successful ✓</h3><p>Your payment has been securely verified.</p><div class="small" id="paymentSuccessDetails" style="line-height:1.8"></div><button class="btn" id="continueAfterPayment" type="button">CONTINUE TO DASHBOARD</button></div>
+</div>
+</section>

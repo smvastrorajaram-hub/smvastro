@@ -1,0 +1,51 @@
+<section class="hidden" id="admin" style="margin-top:45px">
+<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div><h2 style="margin:0">Admin Dashboard</h2><p class="small" style="margin:6px 0 0">SMV ASTRO administration and approval center</p></div></div><div id="adminDataLoadMsg" style="margin-top:12px"></div><div id="adminSummary" class="stats-grid admin-summary-grid" style="margin-top:16px"></div></div>
+<div class="card" style="margin-top:16px"><h3>Public Question Approval</h3><div id="adminPendingQuestions"><div class="empty">Loading questions...</div></div></div>
+<div class="card" style="margin-top:16px"><h3>Astrologer Applications</h3><div id="pendingAstros"><div class="empty">Loading applications...</div></div></div>
+<div class="card" style="margin-top:16px"><h3>Payment Method Changes — Admin Approval</h3><div id="adminPayoutChanges"><div class="empty">Loading payment method changes...</div></div></div>
+<div class="card" style="margin-top:16px"><h3>Answers Awaiting Approval</h3><div id="adminAnswers"><div class="empty">Loading answers...</div></div></div>
+<div class="card" style="margin-top:16px"><h3>Recent Questions</h3><div id="adminQuestions"><div class="empty">Loading questions...</div></div></div>
+<div class="card" style="margin-top:16px"><h3>Refunds — Rejected Paid Questions</h3><div id="adminRefunds"><div class="empty">Loading refunds...</div></div></div>
+<div class="card" style="margin-top:16px"><h3>Customer Reviews</h3><div id="adminReviews"><div class="empty">Loading reviews...</div></div><div id="adminReviewMsg" class="small"></div><input id="adminReviewRating" type="hidden" value="5"><textarea id="adminReviewText" class="hidden"></textarea><button id="saveAdminReview" class="hidden" type="button">SAVE</button></div>
+<div class="card" style="margin-top:16px"><h3>Astrologer Withdrawals</h3><div id="adminWithdrawals"><div class="empty">Loading withdrawal requests...</div></div></div>
+<div class="card" style="margin-top:16px"><h3>Admin Earnings History</h3><p class="small">Admin earnings are shown for completed and approved consultations.</p><div id="adminEarningsHistory"><div class="empty">Loading admin earnings...</div></div></div>
+<div class="card" style="margin-top:16px"><h3>Question Price</h3><div class="action-row"><input id="questionPrice" type="number" min="1" step="0.01" placeholder="Question price"><button id="saveQuestionPrice" class="btn" type="button">SAVE PRICE</button></div><div id="questionPriceMsg" class="small"></div></div>
+<div class="card" style="margin-top:16px"><h3>Commission Settings</h3><div class="action-row"><input id="astroCommission" type="number" min="0" max="100" placeholder="Astrologer %"><input id="adminCommission" type="number" min="0" max="100" placeholder="Admin %"><button id="saveCommission" class="btn" type="button">SAVE COMMISSION</button></div><div id="commissionMsg" class="small"></div></div>
+<div class="card" style="margin-top:16px"><h3>Answer Word Limit</h3><div class="action-row"><input id="minimumAnswerWords" type="number" min="1" max="10000" placeholder="Minimum words"><button id="saveAnswerWords" class="btn" type="button">SAVE WORD LIMIT</button></div><div id="answerWordsMsg" class="small"></div></div>
+<div class="card" style="margin-top:16px" id="adminContentManager">
+<h3>Blogs &amp; Downloadable Content</h3>
+<p class="small">Create, edit and publish blogs. Upload PDF documents, images and videos for customers to view or download.</p>
+<div class="card" style="margin-top:12px;background:#fffdf8">
+<h4 style="margin:0 0 10px">Blog Writer &amp; Publisher</h4>
+<input id="blogEditId" type="hidden">
+<label>Blog Title *</label><input id="blogTitle" maxlength="180" placeholder="Blog title">
+<label>Short Description</label><textarea id="blogSummary" maxlength="500" rows="3" placeholder="Short description"></textarea>
+<label>Blog Content *</label><textarea id="blogBody" rows="10" placeholder="Write your full blog here..."></textarea>
+<label>Cover Image (optional)</label><input id="blogCoverFile" accept="image/*" type="file">
+<div class="action-row"><button id="saveBlogBtn" class="btn" type="button">PUBLISH BLOG</button><button id="clearBlogBtn" class="btn gray" type="button">CLEAR</button></div>
+<div id="blogManagerMsg" class="small"></div>
+</div>
+<div class="card" style="margin-top:12px;background:#fffdf8">
+<h4 style="margin:0 0 10px">Upload PDF / Image / Video / Music</h4>
+<input id="mediaEditId" type="hidden">
+<label>Title *</label><input id="mediaTitle" maxlength="180" placeholder="Content title">
+<label>Description</label><textarea id="mediaDescription" maxlength="500" rows="3" placeholder="Description"></textarea>
+<label>Choose Content Type *</label>
+<div class="action-row" style="flex-wrap:wrap">
+  <button id="chooseMediaImage" class="btn gray" type="button">🖼️ CHOOSE IMAGE</button>
+  <button id="chooseMediaPdf" class="btn gray" type="button">📄 CHOOSE PDF</button>
+  <button id="chooseMediaVideo" class="btn gray" type="button">🎥 CHOOSE VIDEO</button>
+  <button id="chooseMediaMusic" class="btn gray" type="button">🎵 CHOOSE MUSIC</button>
+</div>
+<input id="mediaImageFile" accept="image/*" type="file" style="display:none">
+<input id="mediaPdfFile" accept="application/pdf,.pdf" type="file" style="display:none">
+<input id="mediaVideoFile" accept="video/*,.mp4,.webm,.mov,.m4v" type="file" style="display:none">
+<input id="mediaMusicFile" accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac,.flac" type="file" style="display:none">
+<div id="mediaSelectedFile" class="small" style="margin-top:8px">No file selected.</div>
+<div class="action-row"><button id="uploadMediaBtn" class="btn" type="button">UPLOAD &amp; PUBLISH</button><button id="clearMediaBtn" class="btn gray" type="button">CLEAR</button></div>
+<div id="mediaManagerMsg" class="small"></div>
+</div>
+<div id="adminBlogsMedia" style="margin-top:14px"><div class="empty">Loading content...</div></div>
+</div>
+<div class="card" style="margin-top:16px"><h3>Razorpay Connection</h3><button id="testRazorpayBtn" class="btn" type="button">TEST RAZORPAY CONNECTION</button><div id="razorpayTestMsg" class="small" style="margin-top:8px"></div></div>
+</section>

@@ -1,0 +1,29 @@
+<section class="card contact-section hidden" id="contact" style="max-width:900px;margin:30px auto;padding:28px 20px;">
+<h2>Contact Us</h2>
+<p class="small">Have a question? Send us your details and query. Our admin team will contact you soon.</p>
+<form id="contactForm" style="display:grid;gap:12px;margin-top:18px;">
+<div>
+<label for="contactName">Name *</label>
+<input autocomplete="name" id="contactName" maxlength="100" name="name" placeholder="Your name" required="" type="text"/>
+</div>
+<div>
+<label for="contactEmail">Email *</label>
+<input autocomplete="email" id="contactEmail" maxlength="160" name="email" placeholder="your@email.com" required="" type="email"/>
+</div>
+<div>
+<label for="contactPlace">Place / City *</label>
+<input autocomplete="address-level2" id="contactPlace" maxlength="120" name="place" placeholder="Your place" required="" type="text"/>
+</div>
+<div>
+<label for="contactMobile">Mobile Number *</label>
+<input autocomplete="tel" id="contactMobile" maxlength="20" name="mobile" placeholder="Your mobile number" required="" type="tel"/>
+</div>
+<div>
+<label for="contactQuery">Query *</label>
+<textarea id="contactQuery" maxlength="3000" name="query" placeholder="Write your query here..." required=""></textarea>
+</div>
+<input aria-hidden="true" autocomplete="off" id="contactWebsite" name="website" style="position:absolute;left:-9999px;" tabindex="-1" type="text"/>
+<button class="btn" id="contactSubmit" type="submit">SEND QUERY</button>
+<div aria-live="polite" class="small" id="contactMsg" role="status"></div>
+</form>
+</section>

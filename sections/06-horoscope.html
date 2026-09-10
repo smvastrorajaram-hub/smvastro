@@ -1,0 +1,45 @@
+<section id="horoscope" class="feature-section"><h2 data-site-i18n="Horoscope">Horoscope</h2><section class="feature-section tamil-only-section" id="tamil-horoscope">
+
+<div class="card" style="max-width:980px;margin:0 auto">
+  <h2>தமிழில் ஜாதகம் உருவாக்குக</h2>
+  <p class="small">பிறந்த தேதி, நேரம் மற்றும் பிறந்த இடத்தைத் தேர்வு செய்து sidereal/Vedic ஜாதகத்தை உருவாக்கலாம்.</p>
+  <div class="grid">
+    <div><label class="small"><b>பெயர்</b></label><input id="tamilAstroName" placeholder="உங்கள் பெயர்" maxlength="80"></div>
+    <div><label class="small"><b>ராசி</b></label><select id="tamilRasi"><option value="மேஷம்">மேஷம்</option><option value="ரிஷபம்">ரிஷபம்</option><option value="மிதுனம்">மிதுனம்</option><option value="கடகம்">கடகம்</option><option value="சிம்மம்">சிம்மம்</option><option value="கன்னி">கன்னி</option><option value="துலாம்">துலாம்</option><option value="விருச்சிகம்">விருச்சிகம்</option><option value="தனுசு">தனுசு</option><option value="மகரம்">மகரம்</option><option value="கும்பம்">கும்பம்</option><option value="மீனம்">மீனம்</option></select></div>
+    <div><label class="small"><b>பிறந்த தேதி</b></label><input id="tamilDob" type="date"></div>
+    <div><label class="small"><b>பிறந்த நேரம்</b></label><input id="tamilTob" type="time"></div>
+    <div><label class="small"><b>பிறந்த இடம்</b></label><input id="tamilBirthPlace" placeholder="நகரம், மாநிலம்" maxlength="120"></div>
+    <div><label class="small"><b>Latitude</b></label><input id="tamilLat" type="number" step="0.000001" min="-90" max="90" placeholder="எ.கா. 11.230000"></div>
+    <div><label class="small"><b>Longitude</b></label><input id="tamilLon" type="number" step="0.000001" min="-180" max="180" placeholder="எ.கா. 78.879997"></div>
+    <div><label class="small"><b>நட்சத்திரம் (விருப்பம்)</b></label><input id="tamilNakshatra" placeholder="எ.கா. ரோகிணி" maxlength="50"></div>
+  </div>
+  <div class="action-row">
+    <button class="btn" id="generateTamilHoroscope" type="button">🔮 தமிழில் ஜாதகம் உருவாக்குக</button>
+    <button class="btn gray" id="clearTamilHoroscope" type="button">மீட்டமை</button>
+  </div>
+  <div id="tamilHoroscopeResult" class="hidden" style="margin-top:20px"></div>
+</div>
+</section>
+
+<section class="feature-section english-only-section" id="english-horoscope">
+
+<div class="card" style="max-width:980px;margin:0 auto">
+  <h2>Create Horoscope</h2>
+  <p class="small">Enter birth date, birth time and select the exact birth place.</p>
+  <div class="grid">
+    <div><label class="small"><b>Name</b></label><input id="englishAstroName" placeholder="Your name" maxlength="80"></div>
+    <div><label class="small"><b>Rasi</b></label><select id="englishRasi"><option>Aries</option><option>Taurus</option><option>Gemini</option><option>Cancer</option><option>Leo</option><option>Virgo</option><option>Libra</option><option>Scorpio</option><option>Sagittarius</option><option>Capricorn</option><option>Aquarius</option><option>Pisces</option></select></div>
+    <div><label class="small"><b>Date of Birth</b></label><input id="englishDob" type="date"></div>
+    <div><label class="small"><b>Time of Birth</b></label><input id="englishTob" type="time"></div>
+    <div><label class="small"><b>Place of Birth</b></label><input id="englishBirthPlace" placeholder="City, State or City, State, Country" maxlength="120"></div>
+    <div><label class="small"><b>Latitude</b></label><input id="englishLat" type="number" step="0.000001" min="-90" max="90" placeholder="e.g. 11.230000"></div>
+    <div><label class="small"><b>Longitude</b></label><input id="englishLon" type="number" step="0.000001" min="-180" max="180" placeholder="e.g. 78.879997"></div>
+    <div><label class="small"><b>Nakshatra (Optional)</b></label><input id="englishNakshatra" placeholder="e.g. Rohini" maxlength="50"></div>
+  </div>
+  <div class="action-row">
+    <button class="btn" id="generateEnglishHoroscope" type="button">🔮 Create Horoscope</button>
+    <button class="btn gray" id="clearEnglishHoroscope" type="button">Reset</button>
+  </div>
+  <div id="englishHoroscopeResult" class="hidden" style="margin-top:20px"></div>
+</div>
+</section></section>
