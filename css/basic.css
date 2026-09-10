@@ -105,3 +105,8 @@ header .nav .language-control select{border:0!important;border-bottom:1px solid 
  #modal.auth-modal-active .auth-tabs .btn{text-align:left!important;padding:8px 10px!important;border-bottom:1px solid #eee!important}
  #modal.auth-modal-active .auth-tabs .btn.active{border-left:3px solid #a51d2d!important;border-bottom-color:#eee!important}
 }
+
+
+/* SMV V2026-09-10: final authenticated header colours. Plain text only. */
+header .nav nav #authBtn.smv-logout-btn{background:transparent!important;background-image:none!important;border:0!important;border-color:transparent!important;border-radius:0!important;box-shadow:none!important;color:#b00020!important;font-weight:800!important;padding:8px 6px!important;}
+header .nav nav #dashLink.smv-role-green,header .nav nav #adminLink.smv-role-green{background:transparent!important;background-image:none!important;border:0!important;border-color:transparent!important;border-radius:0!important;box-shadow:none!important;color:#16803a!important;font-weight:800!important;}
