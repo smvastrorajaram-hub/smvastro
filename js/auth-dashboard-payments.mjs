@@ -3,7 +3,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebas
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendEmailVerification, deleteUser, setPersistence, browserSessionPersistence, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 import { getFirestore, collection, query, where, getDocs, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch, runTransaction, onSnapshot } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
-window.__SMV_BUILD="V120-UI";
+window.__SMV_BUILD="V123-PAYMENT-PWA-HOME";
 const firebaseConfig={apiKey:"AIzaSyCKXyfZ9sjGmej7ygxHpzHNcNysMXHuvSs",authDomain:"smv-astro.firebaseapp.com",projectId:"smv-astro",storageBucket:"smv-astro.firebasestorage.app",messagingSenderId:"299081899217",appId:"1:299081899217:web:8d558df08e86037ea539f0"};
 let app=null, auth=null, db=null, functions=null, httpsCallableFn=null, firebaseInitError=null;
 try{
@@ -18,6 +18,48 @@ const RAZORPAY_BACKEND_URL=window.SMV_CONFIG.backendUrl;
 // Single backend URL used by all protected API calls, including astrologer answer submission.
 // Keep this in the main Firebase module so it is available to the answer-submit handler.
 const BACKEND=RAZORPAY_BACKEND_URL; window.SMV_BACKEND_URL=RAZORPAY_BACKEND_URL;
+let razorpayLoaderPromise=null;
+async function ensureRazorpayCheckout(){
+  if(typeof window.Razorpay === "function") return window.Razorpay;
+  if(!razorpayLoaderPromise){
+    razorpayLoaderPromise=new Promise((resolve,reject)=>{
+      const existing=document.querySelector('script[src*="checkout.razorpay.com/v1/checkout.js"]');
+      const finish=()=>{
+        if(typeof window.Razorpay === "function") resolve(window.Razorpay);
+        else reject(new Error("Razorpay checkout library did not load. Please check internet access or browser content blocking, then retry."));
+      };
+      if(existing){
+        existing.addEventListener("load",finish,{once:true});
+        existing.addEventListener("error",()=>reject(new Error("Razorpay checkout library could not be loaded.")),{once:true});
+        // The original script may already have failed or may still be loading. Give it a short grace period,
+        // then inject a cache-busted replacement instead of throwing `Razorpay is not defined`.
+        setTimeout(()=>{
+          if(typeof window.Razorpay === "function") return resolve(window.Razorpay);
+          try{
+            const retry=document.createElement("script");
+            retry.src="https://checkout.razorpay.com/v1/checkout.js?smv="+Date.now();
+            retry.async=true;
+            retry.onload=finish;
+            retry.onerror=()=>reject(new Error("Razorpay checkout library could not be loaded. Please check the network and retry."));
+            document.head.appendChild(retry);
+          }catch(e){reject(e);}
+        },1200);
+      }else{
+        const script=document.createElement("script");
+        script.src="https://checkout.razorpay.com/v1/checkout.js?smv="+Date.now();
+        script.async=true;
+        script.onload=finish;
+        script.onerror=()=>reject(new Error("Razorpay checkout library could not be loaded. Please check the network and retry."));
+        document.head.appendChild(script);
+      }
+      setTimeout(()=>{
+        if(typeof window.Razorpay !== "function") reject(new Error("Razorpay checkout is taking too long to load. Please retry payment."));
+      },12000);
+    }).catch(err=>{razorpayLoaderPromise=null;throw err;});
+  }
+  return razorpayLoaderPromise;
+}
+
 let firebaseFunctionsPromise=null;
 async function ensureFirebaseFunctions(){
   if(functions && httpsCallableFn) return {functions,httpsCallable:httpsCallableFn};
@@ -37,17 +79,17 @@ async function callFunction(name,data={}){
 async function renderApi(path, options={}, userOverride=null){
   const user=userOverride || auth?.currentUser;
   if(!user) throw new Error("Login session is missing. Please login again.");
-  const token=await user.getIdToken(true);
+  const token=await user.getIdToken(false);
   if(!token) throw new Error("Firebase login token could not be created. Please try again.");
   const headers={"Content-Type":"application/json",...(options.headers||{}),Authorization:`Bearer ${token}`};
-  const response=await fetch(RAZORPAY_BACKEND_URL+path,{...options,headers});
+  const response=await fetch(RAZORPAY_BACKEND_URL+path,{...options,headers,cache:"no-store"});
   let data=null; try{data=await response.json();}catch(e){data={};}
   if(!response.ok) throw new Error(data?.error||`Render backend error (${response.status})`);
   return data;
 }
 async function renderPublicApi(path, options={}){
   const headers={"Content-Type":"application/json",...(options.headers||{})};
-  const response=await fetch(RAZORPAY_BACKEND_URL+path,{...options,headers});
+  const response=await fetch(RAZORPAY_BACKEND_URL+path,{...options,headers,cache:"no-store"});
   let data=null; try{data=await response.json();}catch(e){data={};}
   if(!response.ok) throw new Error(data?.error||`Render backend error (${response.status})`);
   return data;
@@ -446,7 +488,7 @@ $("contentNav")?.addEventListener("click",(e)=>{
         ["admin","ask-flow","register-flow","astro-register-form","astro-flow","appointment","contact"].forEach(hide);
         show("dashboard"); show("dashboardContent"); show("dashLink"); hide("adminLink"); hideDashboardPublicSections();
         setHeaderRoleLabel(role); smvEnterInternalView("dashboard",true); go("dashboard");
-        await loadDashboard(role);
+        await loadDashboard(role,true);
       }
     }catch(err){
       console.error("Role dashboard navigation failed:",err);
@@ -1023,7 +1065,8 @@ $("submitQuestionBtn")?.addEventListener("click",async()=>{
      btn.disabled=false;btn.textContent="RETRY PAYMENT";
    }}
   };
-  const rzp=new Razorpay(options);
+  const RazorpayCheckout=await ensureRazorpayCheckout();
+  const rzp=new RazorpayCheckout(options);
   rzp.on("payment.failed",function(resp){
     try{ sessionStorage.removeItem("smv_last_payment_success"); }catch(_e){}
     message("askMsg",'<span class="error">Payment failed: '+escapeHtml(resp.error?.description||"Please try again.")+'</span>');
@@ -1579,7 +1622,7 @@ const userStatus=String(
 
   $('astroRefreshApproval')?.addEventListener(
     'click',
-    ()=>loadDashboard()
+    ()=>loadDashboard(null,true)
   );
 
   $('astroLogoutPending')?.addEventListener(
@@ -1764,7 +1807,7 @@ ${ad.status === 'rejected' && ad.rejectionReason
       20000
     );
 
-    await loadDashboard('astrologer');
+    await loadDashboard('astrologer',true);
 
     // After CLAIM & ANSWER, keep all previously claimed questions visible and move directly to the unanswered queue.
     requestAnimationFrame(() => {
@@ -1987,7 +2030,7 @@ ${ad.status === 'rejected' && ad.rejectionReason
 
       alert('Answer submitted successfully, Waiting for Approval');
 
-      await loadDashboard('astrologer');
+      await loadDashboard('astrologer',true);
       requestAnimationFrame(() => setTimeout(() => {
         $('astroAnsweredBox')?.scrollIntoView({ behavior:'smooth', block:'start' });
       }, 120));
@@ -2242,24 +2285,9 @@ ${ad.status === 'rejected' && ad.rejectionReason
      if(!cr?.success) throw new Error(cr?.error||'Unable to load consultations.');
      consultationItems=Array.isArray(cr.questions)?cr.questions:[];
 
-     // Reconcile approval/allocation fields from the exact Firestore question
-     // document. The Render consultation response may legitimately lag the
-     // Admin approval write by a moment; the dashboard must never show
-     // "Waiting for Admin Approval" when Admin has already approved it.
-     try{
-       consultationItems=await Promise.all(consultationItems.map(async item=>{
-         const qid=String(item?.questionId||item?.id||'');
-         if(!qid) return item;
-         try{
-           const freshSnap=await withTimeout(getDoc(doc(db,'smv_questions',qid)),10000);
-           if(freshSnap.exists()){
-             const fresh=freshSnap.data()||{};
-             if(String(fresh.customerId||currentUser.uid)===String(currentUser.uid)) return {...item,...fresh,questionId:qid,id:item.id||qid};
-           }
-         }catch(_e){}
-         return item;
-       }));
-     }catch(_reconcileError){}
+     // V122: /customer/consultations already reads the current Firestore documents on
+     // the trusted backend. Do not perform one extra browser Firestore read per
+     // consultation: that N+1 pattern was the main cause of slow dashboards.
    } catch(backendErr) {
      console.warn('Customer consultation backend load failed; using Firestore fallback:',backendErr);
      const fallback=await withTimeout(getDocs(query(collection(db,'smv_questions'),where('customerId','==',currentUser.uid))));
@@ -2275,14 +2303,17 @@ ${ad.status === 'rejected' && ad.rejectionReason
        const st=String(item.refundStatus||'').toLowerCase();
        const rejected=['question_rejected','admin_rejected'].includes(String(item.status||''));
        if(rejected && item.refundId && (!item.refundRrn || ['pending','created','initiated','processing'].includes(st))){
+         // Render immediately; reconcile Razorpay in the background after the
+         // dashboard is visible. This prevents a 15-second refund API timeout from
+         // making the whole Customer Dashboard look frozen.
          hasPendingRefund=true;
-         try{
-           const sync=await withTimeout(renderApi('/customer/sync-refund',{method:'POST',body:JSON.stringify({questionId:String(item.questionId||item.id||'')})}),15000);
-           if(sync?.success){
-             consultationItems[i]={...item,refundStatus:String(sync.refundStatus||st).toLowerCase(),refundId:sync.refundId||item.refundId,refundAmount:sync.refundAmount??item.refundAmount,refundRrn:sync.refundRrn||item.refundRrn,refundProcessedAt:(sync.refundProcessed?new Date().toISOString():item.refundProcessedAt)};
-             if(['processed','completed'].includes(String(sync.refundStatus||'').toLowerCase())) hasPendingRefund=false;
-           }
-         }catch(syncError){console.warn('Customer refund sync skipped:',syncError);}
+         const qid=String(item.questionId||item.id||'');
+         setTimeout(async()=>{
+           try{
+             await withTimeout(renderApi('/customer/sync-refund',{method:'POST',body:JSON.stringify({questionId:qid})}),12000);
+             if(currentUser && smvInternalView==='dashboard') loadDashboard('customer',true).catch(()=>{});
+           }catch(syncError){console.warn('Background refund sync skipped:',syncError);}
+         },400);
        }
      }
    }catch(refundSyncError){console.warn('Refund reconciliation skipped:',refundSyncError);}
@@ -2290,7 +2321,7 @@ ${ad.status === 'rejected' && ad.rejectionReason
    const qCount=consultationItems.length;
    if(!active()) return;
    box.innerHTML=`<div class="grid"><div class="card"><span class="badge">CUSTOMER</span><h3>Welcome, ${escapeHtml(data.name||currentUser.email||'Customer')}</h3><p>Email verification: ${currentUser.emailVerified?'<span class="smv-verified-badge"><span class="smv-check">✓</span>Verified</span>':'<b>Pending from registration</b>'}</p><p>Mobile: Private</p></div><div class="card"><h3>My Questions</h3><p>Total: <b>${qCount}</b></p><p>Paid/processed: <b>${paid}</b></p></div></div>
-   <div class="card" style="margin-top:16px"><h3 class="customer-consultations-title">My Consultations</h3>${!consultationItems.length?'<div class="empty">No consultations yet. Start a private consultation to choose an astrologer.</div>':consultationItems.slice(0,20).map(q=>{const qid=String(q.questionId||q.id||''); const reviewButton=q.status==='answered'&&!q.reviewed?`<button class="btn" data-review="${escapeHtml(qid)}" data-astro="${escapeHtml(q.astrologerId||'')}">Rate & Review</button>`:''; const statusMap={awaiting_payment:'Payment Pending',payment_failed:'Payment Failed',pending_admin_approval:'Waiting for Admin Approval',assigned_to_astrologer:'Assigned to Astrologer',available_to_astrologers:'Available to Astrologers',claimed_by_astrologer:'Astrologer Answering',admin_approved:'Waiting for Answers',processing:'Processing',answer_draft:'Processing',admin_review:'Processing',revision_required:'Revision Required',answered:'Answer Ready',question_rejected:'Question Rejected',admin_rejected:'Question Rejected'}; const astroName=q.astrologerName||'Selected Astrologer'; const adminQuestionApproved=!!q.adminQuestionApprovedAt||['assigned_to_astrologer','reallocated','available_to_astrologers','claimed_by_astrologer','admin_approved','processing','answer_draft','admin_review','answered'].includes(String(q.status||'')); const statusText=q.status==='paid'&&!adminQuestionApproved?'Waiting for Admin Approval':adminQuestionApproved&&['paid','admin_approved'].includes(String(q.status||''))?`Waiting for Answers — ${astroName}`:q.status==='processing'||q.status==='answer_draft'||q.status==='admin_review'?`Processing — ${astroName} answer received and under Admin review`:q.status==='revision_required'?`Revision Required — ${astroName}`:q.status==='answered'?'Answer Ready':(statusMap[q.status]||q.status||'Processing'); const paymentReceived=!!q.customerPaymentId || !!q.paymentRecordedAt || !!q.paidAt || !!q.paymentDate || !['awaiting_payment','payment_failed'].includes(String(q.status||'')); const refundStatuses=['pending','created','initiated','processing']; const refundCompleted=['processed','completed']; const isQuestionRejected=['question_rejected','admin_rejected'].includes(String(q.status||'')); const refundAmount=Number(q.refundAmount||q.amount||q.paymentAmount||0); const refundStatus=String(q.refundStatus||'').toLowerCase(); const steps=isQuestionRejected?[['Payment Received',paymentReceived],['Question Rejected',true],['Refund Status',refundCompleted.includes(refundStatus)]]:[['Payment Received',paymentReceived],['Question Approved',adminQuestionApproved],['Astrologer Answer Submitted',['processing','answer_draft','admin_review','revision_required','answered'].includes(String(q.status||''))],['Admin Approval',['answered'].includes(String(q.status||''))],['Answer Ready',['answered'].includes(String(q.status||''))]]; const timeline=`<div class="timeline">${steps.map(x=>`<div class="timeline-step ${x[1]?'done':''}"><span>${x[1]?'✓':'○'}</span>${x[0]}</div>`).join('')}</div>`; const paymentLine=q.customerPaymentId?`<div class="small"><b>Customer Payment ID:</b> ${escapeHtml(q.customerPaymentId)} · <b>Payment Date & Time:</b> ${escapeHtml(smvDateTime(q.paymentRecordedAt||q.paidAt||q.paymentUpdatedAt||q.paymentDate))}</div>`:''; const isRejected=isQuestionRejected; const refundLine='';; const questionIdLine=qid?`<div class="small"><b>Question ID:</b> ${escapeHtml(qid)}</div>`:''; return `<div style="padding:14px 0;border-bottom:1px solid #eee"><b>${escapeHtml(q.question||'Question')}</b>${questionIdLine}<div class="small">Astrologer: <b>${escapeHtml(astroName)}</b> · Status: <b>${escapeHtml(statusText)}</b></div><div class="small"><b>Date & Time:</b> ${escapeHtml(smvDateTime(q.updatedAt||q.answerApprovedAt||q.adminQuestionApprovedAt||q.createdAt))}</div>${paymentLine}${refundLine}${isRejected&&refundAmount>0?`<div class="refund-summary" style="margin-top:12px;padding:12px 14px;border-radius:10px;border:1px solid #e6e6e6"><div><b>Question Status:</b> 🔴 Rejected</div><div style="margin-top:4px"><b>Payment:</b> ${paymentReceived?'✅ Payment Received':'⏳ Payment Pending'}</div><div class="small"><b>Paid Amount:</b> ₹${refundAmount.toFixed(2)}</div><div style="margin-top:8px"><b>Refund Status:</b> ${refundCompleted.includes(refundStatus)?'<span class="success"><b>🟢 Refund Completed</b></span>':refundStatus==='failed'?'<span class="error"><b>🔴 Refund Failed — Admin Review Required</b></span>':'<span style="color:#b26a00"><b>🟠 Refund Pending</b></span>'}</div><div class="small"><b>Refund Amount:</b> ₹${refundAmount.toFixed(2)}</div>${q.refundId?`<div class="small"><b>Refund ID:</b> ${escapeHtml(q.refundId)}</div>`:''}${q.refundRrn?`<div class="small"><b>RRN:</b> ${escapeHtml(q.refundRrn)}</div>`:''}${refundCompleted.includes(refundStatus)&&q.refundProcessedAt?`<div class="small"><b>Refund Date:</b> ${escapeHtml(smvDateTime(q.refundProcessedAt))}</div>`:''}<div class="small" style="margin-top:6px"><b>Refund Reason:</b> ${escapeHtml(q.refundReason||q.adminQuestionRejectionReason||'Question rejected by Admin')}</div>${q.adminQuestionRejectedAt?`<div class="small"><b>Rejected On:</b> ${escapeHtml(smvDateTime(q.adminQuestionRejectedAt))}</div>`:''}${refundCompleted.includes(refundStatus)?`<div class="small" style="margin-top:6px">Refund has been processed successfully.<br>The amount may take 5–7 working days to reflect in your bank account/card. You can use the RRN for bank tracking.</div>`:''}</div>`:''}${timeline}${q.answer&&q.status==='answered'?`<div class="card" style="margin-top:10px"><b>${q.answerAuthorType==='admin'||q.adminAnswered?'Admin Answer':'Astrologer Answer'}</b><p style="white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word">${escapeHtml(q.answer)}</p>${q.answerAuthorType==='admin'||q.adminAnswered?'<p class="small success"><b>Answered directly by SMV ASTRO Admin.</b></p>':''}</div>`:''}${reviewButton}</div>`}).join('')}</div>`;
+   <div class="card" style="margin-top:16px"><h3 class="customer-consultations-title">My Consultations</h3>${!consultationItems.length?'<div class="empty">No consultations yet. Start a private consultation to choose an astrologer.</div>':consultationItems.slice(0,20).map(q=>{const qid=String(q.questionId||q.id||''); const reviewButton=q.status==='answered'&&!q.reviewed?`<button class="btn" data-review="${escapeHtml(qid)}" data-astro="${escapeHtml(q.astrologerId||'')}">Rate & Review</button>`:''; const statusMap={awaiting_payment:'Payment Pending',payment_failed:'Payment Failed',pending_admin_approval:'Waiting for Admin Approval',assigned_to_astrologer:'Assigned to Astrologer',available_to_astrologers:'Available to Astrologers',claimed_by_astrologer:'Astrologer Answering',admin_approved:'Waiting for Answers',processing:'Processing',answer_draft:'Processing',admin_review:'Processing',revision_required:'Revision Required',answered:'Answer Ready',question_rejected:'Question Rejected',admin_rejected:'Question Rejected'}; const astroName=q.astrologerName||'Selected Astrologer'; const adminQuestionApproved=!!q.adminQuestionApprovedAt||['assigned_to_astrologer','reallocated','available_to_astrologers','claimed_by_astrologer','admin_approved','processing','answer_draft','admin_review','answered'].includes(String(q.status||'')); const statusText=q.status==='paid'&&!adminQuestionApproved?'Waiting for Admin Approval':adminQuestionApproved&&['paid','admin_approved'].includes(String(q.status||''))?`Waiting for Answers — ${astroName}`:q.status==='processing'||q.status==='answer_draft'||q.status==='admin_review'?`Processing — ${astroName} answer received and under Admin review`:q.status==='revision_required'?`Revision Required — ${astroName}`:q.status==='answered'?'Answer Ready':(statusMap[q.status]||q.status||'Processing'); const paymentReceived=!!q.customerPaymentId || !!q.paymentRecordedAt || !!q.paidAt || !!q.paymentDate || !['awaiting_payment','payment_failed'].includes(String(q.status||'')); const refundStatuses=['pending','created','initiated','processing']; const refundCompleted=['processed','completed']; const isQuestionRejected=['question_rejected','admin_rejected'].includes(String(q.status||'')); const refundAmount=Number(q.refundAmount||q.amount||q.paymentAmount||0); const refundStatus=String(q.refundStatus||'').toLowerCase(); const steps=isQuestionRejected?[['Payment Received',paymentReceived],['Question Rejected',true],['Refund Status',refundCompleted.includes(refundStatus)]]:[['Payment Received',paymentReceived],['Question Approved',adminQuestionApproved],['Astrologer Answer Submitted',['processing','answer_draft','admin_review','revision_required','answered'].includes(String(q.status||''))],['Admin Approval',['answered'].includes(String(q.status||''))],['Answer Ready',['answered'].includes(String(q.status||''))]]; const timeline=`<div class="timeline">${steps.map(x=>`<div class="timeline-step ${x[1]?'done':''}"><span>${x[1]?'✓':'○'}</span>${x[0]}</div>`).join('')}</div>`; const paymentLine=q.customerPaymentId?`<div class="small"><b>Customer Payment ID:</b> ${escapeHtml(q.customerPaymentId)} · <b>Payment Date & Time:</b> ${escapeHtml(smvDateTime(q.paymentRecordedAt||q.paidAt||q.paymentUpdatedAt||q.paymentDate))}</div>`:''; const isRejected=isQuestionRejected; const refundLine='';; const questionIdLine=qid?`<div class="small"><b>Question ID:</b> ${escapeHtml(qid)}</div>`:''; return `<div style="padding:14px 0;border-bottom:1px solid #eee"><b>${escapeHtml(q.question||'Question')}</b>${questionIdLine}<div class="small">Astrologer: <b>${escapeHtml(astroName)}</b> · Status: <b>${escapeHtml(statusText)}</b></div><div class="small"><b>Date & Time:</b> ${escapeHtml(smvDateTime(q.updatedAt||q.answerApprovedAt||q.adminQuestionApprovedAt||q.createdAt))}</div>${paymentLine}${refundLine}${isRejected&&refundAmount>0?`<div class="refund-summary" style="margin-top:12px;padding:12px 14px;border-radius:10px;border:1px solid #e6e6e6"><div><b>Question Status:</b> 🔴 Rejected</div><div style="margin-top:4px"><b>Payment:</b> ${paymentReceived?'✅ Payment Received':'⏳ Payment Pending'}</div><div class="small"><b>Paid Amount:</b> ₹${refundAmount.toFixed(2)}</div><div style="margin-top:8px"><b>Refund Status:</b> ${refundCompleted.includes(refundStatus)?'<span class="success"><b>🟢 Refund Completed</b></span>':refundStatus==='failed'?'<span class="error"><b>🔴 Refund Failed — Admin Retry Required</b></span>':'<span style="color:#b26a00"><b>🟠 Refund Pending</b></span>'}</div><div class="small"><b>Refund Amount:</b> ₹${refundAmount.toFixed(2)}</div>${q.refundId?`<div class="small"><b>Refund ID:</b> ${escapeHtml(q.refundId)}</div>`:''}${q.refundRrn?`<div class="small"><b>RRN:</b> ${escapeHtml(q.refundRrn)}</div>`:''}${refundCompleted.includes(refundStatus)&&q.refundProcessedAt?`<div class="small"><b>Refund Date:</b> ${escapeHtml(smvDateTime(q.refundProcessedAt))}</div>`:''}<div class="small" style="margin-top:6px"><b>Refund Reason:</b> ${escapeHtml(q.refundReason||q.adminQuestionRejectionReason||'Question rejected by Admin')}</div>${q.adminQuestionRejectedAt?`<div class="small"><b>Rejected On:</b> ${escapeHtml(smvDateTime(q.adminQuestionRejectedAt))}</div>`:''}${refundCompleted.includes(refundStatus)?`<div class="small" style="margin-top:6px">Refund has been processed successfully.<br>The amount may take 5–7 working days to reflect in your bank account/card. You can use the RRN for bank tracking.</div>`:''}</div>`:''}${timeline}${q.answer&&q.status==='answered'?`<div class="card" style="margin-top:10px"><b>${q.answerAuthorType==='admin'||q.adminAnswered?'Admin Answer':'Astrologer Answer'}</b><p style="white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word">${escapeHtml(q.answer)}</p>${q.answerAuthorType==='admin'||q.adminAnswered?'<p class="small success"><b>Answered directly by SMV ASTRO Admin.</b></p>':''}</div>`:''}${reviewButton}</div>`}).join('')}</div>`;
    document.querySelectorAll('[data-review]').forEach(b=>b.onclick=()=>openReview(b.dataset.review,b.dataset.astro)); if(window.__smvRefundRefreshTimer){clearTimeout(window.__smvRefundRefreshTimer);window.__smvRefundRefreshTimer=null;} if(hasPendingRefund){window.__smvRefundRefreshTimer=setTimeout(()=>{if(currentUser&&document.getElementById('dashboard')&&!document.getElementById('dashboard').classList.contains('hidden'))loadDashboard().catch(()=>{});},20000);}
   }
   if(!active()) return;
@@ -2315,7 +2346,7 @@ ${ad.status === 'rejected' && ad.rejectionReason
    console.error('Dashboard load failed:',e);
    if(dashboardReadyUid===loadUid){ dashboardReadyUid=null; dashboardReadyRole=null; }
    box.innerHTML='<div class="card error"><b>Dashboard could not be loaded.</b><p class="small">Your login session is active, but some dashboard data could not be read. The basic dashboard is being kept available.</p><button class="btn gray" id="dashboardRetry">RETRY</button></div>';
-   $('dashboardRetry')?.addEventListener('click',()=>loadDashboard(expectedRole));
+   $('dashboardRetry')?.addEventListener('click',()=>loadDashboard(expectedRole,true));
  }
  })();
  try{return await dashboardLoadPromise;}finally{if(dashboardLoadUid===loadUid){dashboardLoadPromise=null;dashboardLoadUid=null;}}
@@ -2335,7 +2366,7 @@ function openPayoutChange(){
      const r=await withTimeout(renderApi('/astrologer/change-payout',{method:'POST',body:JSON.stringify(payload)}),20000);
      if(!r?.success) throw new Error(r?.error||'Unable to submit payment method change.');
      msg.innerHTML='<span class="success"><b>Payment method submitted successfully.</b><br>Waiting for Admin Approval.</span>';
-     setTimeout(()=>{closeModal();loadDashboard();},900);
+     setTimeout(()=>{closeModal();loadDashboard(null,true);},900);
    }catch(e){console.error('Payment method change error:',e);msg.innerHTML='<span class="error">'+escapeHtml(e?.message||String(e))+'</span>';btn.disabled=false;btn.textContent='Submit for Admin Review';}
  };
 }
@@ -2364,7 +2395,7 @@ function openReview(questionId, astroId) {
       try { await withTimeout(updateDoc(doc(db,'smv_questions',questionId),{reviewed:true,reviewSubmittedAt:serverTimestamp()}),15000); }
       catch(markError){ console.warn('Review saved but review flag could not be updated:',markError); }
       msg.innerHTML='<span class="success"><b>Thank you!</b> Your review was submitted and is waiting for Admin approval.</span>';
-      setTimeout(()=>{closeModal();loadDashboard();},700);
+      setTimeout(()=>{closeModal();loadDashboard(null,true);},700);
     } catch(e) {
       console.error('Review submission error:',e);
       const raw=String(e?.message||e);
@@ -2571,13 +2602,21 @@ async function loadAdminPanel(){
   const customers=(adminData.customers||[]).length, pendingDocs=astros.docs.filter(d=>d.data().status==='pending');
   const userMap=new Map(users.docs.map(d=>[d.id,d.data()]));
   $('adminSummary').innerHTML=`<div class="stat">Customers <b>${customers}</b></div><div class="stat">Astrologers <b>${astros.size}</b></div><div class="stat">Pending <b>${pendingDocs.length}</b></div><div class="stat">Questions <b>${questions.size}</b></div>`;
-  let settings={astroPercent:20,adminPercent:80}; try{const ss=await getDoc(doc(db,'smv_settings','commission'));if(ss.exists())settings=ss.data();}catch(e){}
-  let questionSettings={price:5}; try{const qps=await getDoc(doc(db,'smv_settings','question'));if(qps.exists())questionSettings=qps.data();}catch(e){}
+  let settings={astroPercent:20,adminPercent:80}, questionSettings={price:5}, answerSettings={minimumWords:150};
+  try{
+    const [ss,qps,aw]=await Promise.all([
+      getDoc(doc(db,'smv_settings','commission')),
+      getDoc(doc(db,'smv_settings','question')),
+      getDoc(doc(db,'smv_settings','answer'))
+    ]);
+    if(ss.exists()) settings=ss.data();
+    if(qps.exists()) questionSettings=qps.data();
+    if(aw.exists()) answerSettings=aw.data();
+  }catch(e){console.warn('Admin settings load partially skipped:',e);}
   $('questionPrice').value=Number(questionSettings.price||5);
   $('saveQuestionPrice').onclick=async()=>{const price=Math.round(Number($('questionPrice').value)*100)/100;if(!Number.isFinite(price)||price<1){$('questionPriceMsg').innerHTML='<span class="error">Enter a valid price of at least ₹1.</span>';return;}const b=$('saveQuestionPrice');b.disabled=true;b.textContent='SAVING...';try{await setDoc(doc(db,'smv_settings','question'),{price,updatedAt:serverTimestamp(),updatedBy:currentUser.uid});questionServicePrice=price;if($('askRate'))$('askRate').innerHTML=`<b>₹${price.toFixed(2)} per Question</b>`;if($('publicQuestionPrice'))$('publicQuestionPrice').textContent=`₹${price.toFixed(2)}`;$('questionPriceMsg').innerHTML='<span class="success">Current public question price saved: ₹'+price.toFixed(2)+'</span>';}catch(e){$('questionPriceMsg').innerHTML='<span class="error">Unable to save price: '+escapeHtml(e.message||String(e))+'</span>';}finally{b.disabled=false;b.textContent='SAVE PRICE';}};
   $('astroCommission').value=settings.astroPercent??20;$('adminCommission').value=settings.adminPercent??80;
   $('saveCommission').onclick=async()=>{const a=Number($('astroCommission').value),ad=Number($('adminCommission').value);if(a<0||ad<0||Math.abs(a+ad-100)>0.001){$('commissionMsg').innerHTML='<span class="error">Astrologer % + Admin % must equal 100%.</span>';return;}await setDoc(doc(db,'smv_settings','commission'),{astroPercent:a,adminPercent:ad,updatedAt:serverTimestamp(),updatedBy:currentUser.uid});$('commissionMsg').innerHTML='<span class="success">Commission settings saved.</span>';};
-  let answerSettings={minimumWords:150}; try{const aw=await getDoc(doc(db,'smv_settings','answer'));if(aw.exists())answerSettings=aw.data();}catch(e){}
   $('minimumAnswerWords').value=Number(answerSettings.minimumWords||150);
   $('saveAnswerWords').onclick=async()=>{const n=Math.floor(Number($('minimumAnswerWords').value));if(!Number.isFinite(n)||n<1||n>10000){$('answerWordsMsg').innerHTML='<span class="error">Enter a minimum between 1 and 10000 words.</span>';return;}await setDoc(doc(db,'smv_settings','answer'),{minimumWords:n,updatedAt:serverTimestamp(),updatedBy:currentUser.uid});$('answerWordsMsg').innerHTML='<span class="success">Minimum answer length saved: '+n+' words. It applies to new paid questions.</span>';};
   $('testRazorpayBtn').onclick=async()=>{const b=$('testRazorpayBtn');b.disabled=true;b.textContent='TESTING...';try{const r=await withTimeout(renderApi('/test-razorpay',{method:'GET'}),60000);$('razorpayTestMsg').innerHTML='<span class="success"><b>Razorpay connection OK.</b> '+escapeHtml(r?.message||'Render payment server and Razorpay API are working.')+'</span>';}catch(e){$('razorpayTestMsg').innerHTML='<span class="error"><b>Razorpay test failed:</b> '+escapeHtml(e.message||String(e))+'</span>';}b.disabled=false;b.textContent='TEST RAZORPAY CONNECTION';};
@@ -2771,7 +2810,8 @@ async function loadAdminPanel(){
       const completed=['processed','completed'].includes(rs);
       const badge=rs==='failed'?'<span class="error"><b>🔴 Refund Failed</b></span>':(completed?'<span class="success"><b>🟢 Refund Completed</b></span>':'<span style="color:#b26a00"><b>🟠 Refund Pending</b></span>');
       const action=!completed ? (q.refundId?`<button class="btn gray" data-sync-refund="${escapeHtml(d.id)}">SYNC RAZORPAY REFUND</button>`:`<button class="btn" data-retry-refund="${escapeHtml(d.id)}">RETRY REFUND</button>`) : '';
-      return `<div class="card" style="margin:10px 0"><h3>${escapeHtml(q.customerName||q.birthName||'Customer')}</h3><div class="small"><b>Question ID:</b> ${escapeHtml(d.id)} · <b>Paid:</b> ₹${Number(q.amount||q.paymentAmount||q.refundAmount||0).toFixed(2)}</div><div class="small"><b>Payment ID:</b> ${escapeHtml(q.customerPaymentId||q.razorpayPaymentId||'')}</div><div class="small"><b>Question Status:</b> 🔴 Question Rejected · <b>Refund:</b> ${badge}</div><div class="small"><b>Refund Amount:</b> ₹${Number(q.refundAmount||q.amount||q.paymentAmount||0).toFixed(2)} · <b>Refund ID:</b> ${escapeHtml(q.refundId||'Not created')}</div>${q.refundReason||q.adminQuestionRejectionReason?`<div class="small"><b>Reason:</b> ${escapeHtml(q.refundReason||q.adminQuestionRejectionReason)}</div>`:''}${q.refundProcessedAt?`<div class="small"><b>Refund Date:</b> ${escapeHtml(smvDateTime(q.refundProcessedAt))}</div>`:''}${q.refundError?`<div class="small error"><b>Refund Error:</b> ${escapeHtml(q.refundError)}</div>`:''}${action?`<div class="action-row" style="margin-top:8px">${action}</div>`:''}</div>`;
+      const actionHelp=!completed?(q.refundId?'A Razorpay Refund ID exists. Sync reads the latest refund status without creating another refund.':'No Razorpay Refund ID exists. RETRY REFUND safely checks the original payment before creating a refund.') : 'Refund is complete.';
+      return `<div class="card" style="margin:10px 0"><h3>${escapeHtml(q.customerName||q.birthName||'Customer')}</h3><div class="small"><b>Question ID:</b> ${escapeHtml(d.id)} · <b>Paid:</b> ₹${Number(q.amount||q.paymentAmount||q.refundAmount||0).toFixed(2)}</div><div class="small"><b>Payment ID:</b> ${escapeHtml(q.customerPaymentId||q.razorpayPaymentId||'')}</div><div class="small"><b>Question Status:</b> 🔴 Question Rejected · <b>Refund:</b> ${badge}</div><div class="small"><b>Refund Amount:</b> ₹${Number(q.refundAmount||q.amount||q.paymentAmount||0).toFixed(2)} · <b>Refund ID:</b> ${escapeHtml(q.refundId||'Not created')}</div>${q.refundReason||q.adminQuestionRejectionReason?`<div class="small"><b>Reason:</b> ${escapeHtml(q.refundReason||q.adminQuestionRejectionReason)}</div>`:''}${q.refundProcessedAt?`<div class="small"><b>Refund Date:</b> ${escapeHtml(smvDateTime(q.refundProcessedAt))}</div>`:''}${q.refundError?`<div class="small error"><b>Refund Error:</b> ${escapeHtml(q.refundError)}</div>`:''}<div class="small" style="margin-top:6px">${escapeHtml(actionHelp)}</div>${action?`<div class="action-row" style="margin-top:8px">${action}</div>`:''}</div>`;
     }).join(''):'<div class="empty">No rejected paid questions with refunds.</div>';
     adminRefundBox.querySelectorAll('[data-sync-refund]').forEach(b=>b.onclick=async()=>{
       const id=b.dataset.syncRefund; b.disabled=true; b.textContent='SYNCING...';
