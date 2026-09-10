@@ -1,7 +1,6 @@
 services:
   - type: web
     name: smv-astro
-    rootDir: backend
     env: node
     plan: free
     buildCommand: npm install
