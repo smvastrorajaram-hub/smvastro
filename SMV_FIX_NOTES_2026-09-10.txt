@@ -1,0 +1,19 @@
+SMV ASTRO — Refund + Header Fix (2026-09-10)
+
+1. Header
+- Logout is now plain bold red text with no white outer box/background/border.
+- Logged-in Customer / Astrologer / Admin dashboard role label is bold green.
+- Logged-out navigation remains unchanged.
+
+2. Refund safety and retry
+- Rejection refund now first checks the original Razorpay payment.
+- Prevents duplicate/full-over-refund during retries.
+- Detects already fully refunded payments.
+- Detects missing Razorpay payment ID / uncaptured payment / no refundable balance and stores the exact safe error details.
+- Added Admin-only POST /admin/retry-refund endpoint.
+- Admin Refund Monitor now shows RETRY REFUND when a refund ID was not created, and SYNC RAZORPAY REFUND when a refund ID exists.
+- Both root server.js and backend/server.js updated.
+
+Deployment note:
+- Upload/deploy the backend server.js used by Render, not only the GitHub Pages frontend.
+- Frontend files css/basic.css and js/auth-dashboard-payments.mjs must also be published.
