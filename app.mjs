@@ -884,7 +884,7 @@ async function submitAuth(mode){
     // created Auth account behind.
     profileResponse=await renderApi("/register-customer-profile",{
       method:"POST",
-      body:JSON.stringify({name,phone})
+      body:JSON.stringify({name,phone,language:"en"})
     },cred.user);
     if(!profileResponse?.ok) throw new Error(profileResponse?.error||"Customer profile setup failed.");
     try{await withTimeout(sendEmailVerification(cred.user),15000);}catch(ve){console.warn("Verification email could not be sent immediately",ve);}
@@ -900,7 +900,7 @@ async function submitAuth(mode){
     throw profileErr;
   }
   const createdId = profileResponse?.publicId ? `<br><b>Your Customer ID:</b> ${escapeHtml(profileResponse.publicId)}<br><span class="small">Keep this ID safe. It can be used for future Customer ID login.</span>` : '';
-  msg.innerHTML='<span class="success"><b>Registration successful ✓</b>'+createdId+'<br>Mobile number saved. No SMS/OTP verification is required.<br>Verification email sent. Please verify your email and login again.</span><button class="btn" id="registrationLoginBtn" style="margin-top:10px">Go to Login</button>';
+  msg.innerHTML='<span class="success"><b>Registration successful ✓</b>'+createdId+'<br>Mobile number saved. One mobile number can be used for only one account.<br>No SMS/OTP is required. Verification email sent. Please verify your email and login again.</span><button class="btn" id="registrationLoginBtn" style="margin-top:10px">Go to Login</button>';
   $("registrationLoginBtn").onclick=async()=>{await logoutToHome();openAuth("login");};
  }catch(e){
   let t=e?.message||String(e);
@@ -1178,7 +1178,7 @@ $("astroRegistrationForm")?.addEventListener("submit",async e=>{
   try {
     profileResponse=await withTimeout(renderApi("/register-astrologer-profile",{
       method:"POST",
-      body:JSON.stringify({name,mobile,specialization,experience,bio,bankName,accountName,accountNumber,ifsc,upi,photoData})
+      body:JSON.stringify({name,mobile,specialization,experience,bio,bankName,accountName,accountNumber,ifsc,upi,photoData,language:"en"})
     }),30000);
   } catch(networkErr) {
     const raw=String(networkErr?.message||networkErr||"");
