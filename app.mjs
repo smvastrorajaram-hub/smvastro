@@ -1131,7 +1131,7 @@ $("submitQuestionBtn")?.addEventListener("click",async()=>{
       // existing Customer Dashboard and show its existing payment-success state.
       try{ if(askFlow.parentElement!==$("dashboardContent")) $("dashboardContent")?.prepend(askFlow); }catch(_e){}
       try{ hide("paymentSuccessPanel"); }catch(_e){}
-      try{ window.__SMV_ASK_NOW_INTENT=false; show("dashboard"); show("dashboardContent"); await loadDashboard('customer'); await showDashboardPaymentSuccess(); window.scrollTo(0,0); }
+      try{ window.__SMV_ASK_NOW_INTENT=false; show("dashboard"); show("dashboardContent"); await loadDashboard('customer',true); await showDashboardPaymentSuccess(); window.scrollTo(0,0); }
       catch(dashErr){ console.error("Automatic customer dashboard transition failed:",dashErr); }
       btn.disabled=false; btn.textContent="PAYMENT DONE ✓";
       return;
@@ -1570,14 +1570,23 @@ async function showDashboardPaymentSuccess(){
 }
 
 let smvQuestionWatch=null,smvWatchUid=null;
+let smvDashboardDirty=false;
 function smvWatchQuestions(role){
  const uid=currentUser?.uid;if(!uid||smvWatchUid===uid)return;
  smvQuestionWatch?.();smvWatchUid=uid;let first=true;
  smvQuestionWatch=onSnapshot(query(collection(db,'smv_questions'),where(role==='astrologer'?'astrologerId':'customerId','==',uid)),()=>{
-   if(first){first=false;return;} dashboardReadyAt=0;
+   if(first){first=false;return;}
+   dashboardReadyAt=0;
+   smvDashboardDirty=true;
    if(currentUser?.uid!==uid)return;
    const button=document.getElementById('smvRefreshDashboard');
-   if(smvInternalView==='dashboard' && !document.querySelector('#dashboard [data-smv-dirty],#dashboard input:focus,#dashboard textarea:focus'))setTimeout(()=>loadDashboard(role,true),200);
+   if(smvInternalView==='dashboard' && !document.querySelector('#dashboard [data-smv-dirty],#dashboard input:focus,#dashboard textarea:focus')){
+     setTimeout(()=>{
+       if(currentUser?.uid===uid && smvInternalView==='dashboard'){
+         loadDashboard(role,true).then(()=>{smvDashboardDirty=false;}).catch(err=>console.warn('Live dashboard refresh skipped:',err));
+       }
+     },120);
+   }
    if(button)button.textContent="New activity \u2014 refresh";
  },e=>console.warn('Live dashboard updates unavailable:',e));
 }
@@ -1598,7 +1607,7 @@ async function loadDashboard(expectedRole=null,force=false){
  // the Question Form Back button was pressed, which could create a repeated
  // Loading -> open -> Loading cycle. Explicit data-changing actions can pass
  // force=true when a fresh render is actually required.
- if(!force && Date.now()-dashboardReadyAt<15000 && dashboardReadyUid===loadUid && (!requestedRole || dashboardReadyRole===requestedRole) && smvInternalView==='dashboard' && box && !box.querySelector('.error')){
+ if(!force && !smvDashboardDirty && Date.now()-dashboardReadyAt<15000 && dashboardReadyUid===loadUid && (!requestedRole || dashboardReadyRole===requestedRole) && smvInternalView==='dashboard' && box && !box.querySelector('.error')){
    show('dashboard');
    touchSession();
    armIdleTimer();
@@ -2377,7 +2386,7 @@ ${ad.status === 'rejected' && ad.rejectionReason
   }
   if(!active()) return;
   show('dashboard');
-  dashboardReadyUid=loadUid; dashboardReadyAt=Date.now();
+  dashboardReadyUid=loadUid; dashboardReadyAt=Date.now(); smvDashboardDirty=false;
   dashboardReadyRole=role; smvWatchQuestions(role);
   touchSession();
   armIdleTimer();
