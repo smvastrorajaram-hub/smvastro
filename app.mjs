@@ -1,7 +1,7 @@
 
 import { renderAdminWorkflows } from "./admin-workflows.mjs?v=20260911c";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendEmailVerification, deleteUser, setPersistence, browserSessionPersistence, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendEmailVerification, deleteUser, updateProfile, setPersistence, browserSessionPersistence, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
 import { getFirestore, collection, query, where, getDocs, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch, runTransaction, onSnapshot } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
 window.__SMV_BUILD="V120-UI";
@@ -95,6 +95,14 @@ let smvNavigationEpoch=0;
 let dashboardReadyUid=null;
 let dashboardReadyAt=0;
 let dashboardReadyRole=null;
+let dashboardShellUid=null;
+function renderDashboardShell(role=null){
+  const r=String(role||'').toLowerCase();
+  const box=$("dashboardContent");
+  if($("dashboardTitle")) $("dashboardTitle").textContent=r==='astrologer'?'Astrologer Dashboard':r==='customer'?'Customer Dashboard':'Dashboard';
+  if(!box)return;
+  box.innerHTML=`<div class="grid" style="margin-top:10px"><div class="card"><h3 style="margin-top:0">Welcome to SMV ASTRO</h3><p class="small" style="margin-bottom:0">Your dashboard is ready. Latest account data is loading in the background.</p></div><div class="card"><h3 style="margin-top:0">Dashboard</h3><p class="small" style="margin-bottom:0">Your current account information will appear here.</p></div></div>`;
+}
 const $=id=>document.getElementById(id);
 const show=id=>$(id)?.classList.remove("hidden"); const hide=id=>$(id)?.classList.add("hidden");
 const go=id=>$(id)?.scrollIntoView({behavior:"smooth",block:"start"});
@@ -842,7 +850,7 @@ async function submitAuth(mode){
       show("dashboard");
       show("dashboardContent");
       if($("dashboardTitle")) $("dashboardTitle").textContent="Dashboard";
-      if($("dashboardContent")) $("dashboardContent").innerHTML='<div class="card"><div class="small">Loading your dashboard...</div></div>';
+      renderDashboardShell(role); dashboardShellUid=currentUser?.uid||null;
       smvShowRoleNav();
       smvEnterInternalView("dashboard",true);
       go("dashboard");
@@ -857,6 +865,7 @@ async function submitAuth(mode){
   let cred=null;
   let createdNewAuthUser=false;
   let profileResponse=null;
+  try{localStorage.setItem("smv_customer_registration_draft",JSON.stringify({email,name,phone,at:Date.now()}));}catch(_e){}
   try{
     try{
       cred=await withTimeout(createUserWithEmailAndPassword(auth,email,password),20000);
@@ -867,9 +876,32 @@ async function submitAuth(mode){
       // that this email belongs to an existing account, so stop registration
       // and give the user a clear next step.
       if(authErr?.code==="auth/email-already-in-use") {
-        const existingMsg = '<span class="error"><b>This email is already registered.</b><br>If you have not verified your email, please use <b>Login</b> and choose <b>Resend Verification Email</b>. If you have already verified it, please use Login normally.</span>';
-        msg.innerHTML=existingMsg;
-        return;
+        // V10.1 PROFILE RECOVERY: an earlier registration may have created the
+        // Firebase Auth user before smv_users profile creation completed.
+        // Authenticate the owner with the password they just entered, then let
+        // the trusted backend create/return the customer profile while keeping
+        // the existing one-phone-one-account transaction unchanged.
+        try{
+          const existingCred=await withTimeout(signInWithEmailAndPassword(auth,email,password),20000);
+          cred=existingCred;
+          currentUser=existingCred.user;
+          profileResponse=await renderApi("/register-customer-profile",{
+            method:"POST",body:JSON.stringify({name,phone,language:"en"})
+          },existingCred.user);
+          if(!profileResponse?.ok) throw new Error(profileResponse?.error||"Customer profile recovery failed.");
+          try{await updateProfile(existingCred.user,{displayName:name});}catch(_e){}
+          if(!existingCred.user.emailVerified){try{await withTimeout(sendEmailVerification(existingCred.user),15000);}catch(_e){}}
+          msg.innerHTML='<span class="success"><b>Existing account recovered ✓</b><br>Your customer profile has been restored. '+(existingCred.user.emailVerified?'You can login normally now.':'Verification email has been sent again.')+'</span>';
+          try{localStorage.removeItem("smv_customer_registration_draft");}catch(_e){}
+          await signOut(auth).catch(()=>{}); currentUser=null;
+          return;
+        }catch(recoverErr){
+          if(recoverErr?.code==="auth/wrong-password"||recoverErr?.code==="auth/invalid-credential"){
+            msg.innerHTML='<span class="error"><b>This email is already registered.</b><br>Please use the correct existing password, then retry registration once to restore any missing customer profile.</span>';
+            return;
+          }
+          throw recoverErr;
+        }
       }
       throw authErr;
     }
@@ -887,6 +919,8 @@ async function submitAuth(mode){
       body:JSON.stringify({name,phone,language:"en"})
     },cred.user);
     if(!profileResponse?.ok) throw new Error(profileResponse?.error||"Customer profile setup failed.");
+    try{await updateProfile(cred.user,{displayName:name});}catch(_e){}
+    try{localStorage.removeItem("smv_customer_registration_draft");}catch(_e){}
     try{await withTimeout(sendEmailVerification(cred.user),15000);}catch(ve){console.warn("Verification email could not be sent immediately",ve);}
   }catch(profileErr){
     console.error("Customer registration/profile save failed",profileErr);
@@ -1592,7 +1626,7 @@ async function loadDashboard(expectedRole=null,force=false){
  dashboardLoadUid=loadUid;
  dashboardLoadPromise=(async()=>{
  try{
-  if(box && active()) box.innerHTML='<div class="card"><div class="small">Loading your dashboard...</div></div>';
+  if(box && active() && dashboardShellUid!==loadUid){renderDashboardShell(requestedRole);dashboardShellUid=loadUid;}
   const u=await withTimeout(getDoc(doc(db,'smv_users',loadUid))), data=u.exists()?u.data():{};
   if(!active()) return;
    let role=String(expectedRole||data.role||'').toLowerCase();
@@ -2333,7 +2367,7 @@ ${ad.status === 'rejected' && ad.rejectionReason
    const paid=consultationItems.filter(q=>q.status!=='awaiting_payment').length;
    const qCount=consultationItems.length;
    if(!active()) return;
-   box.innerHTML=`<div class="grid"><div class="card"><span class="badge">CUSTOMER</span><h3>Welcome, ${escapeHtml(data.name||currentUser.email||'Customer')}</h3><p>Email verification: ${currentUser.emailVerified?'<span class="smv-verified-badge"><span class="smv-check">✓</span>Verified</span>':'<b>Pending from registration</b>'}</p><p>Mobile: Private</p></div><div class="card"><h3>My Questions</h3><p>Total: <b>${qCount}</b></p><p>Paid/processed: <b>${paid}</b></p></div></div>
+   box.innerHTML=`<div class="grid"><div class="card"><span class="badge">CUSTOMER</span><h3>Welcome, ${escapeHtml(data.name||currentUser.displayName||currentUser.email||'Customer')}</h3><p>Email verification: ${currentUser.emailVerified?'<span class="smv-verified-badge"><span class="smv-check">✓</span>Verified</span>':'<b>Pending from registration</b>'}</p><p>Mobile: Private</p></div><div class="card"><h3>My Questions</h3><p>Total: <b>${qCount}</b></p><p>Paid/processed: <b>${paid}</b></p></div></div>
    <div class="card" style="margin-top:16px"><h3 class="customer-consultations-title">My Consultations</h3>${!consultationItems.length?'<div class="empty">No consultations yet. Start a private consultation to choose an astrologer.</div>':consultationItems.slice(0,20).map(q=>{const qid=String(q.questionId||q.id||''); const reviewButton=q.status==='answered'&&!q.reviewed?`<button class="btn" data-review="${escapeHtml(qid)}" data-astro="${escapeHtml(q.astrologerId||'')}">Rate & Review</button>`:''; const paymentRetryButton=["awaiting_payment","payment_failed"].includes(String(q.status||""))&&q.paymentStatus!=="paid"&&qid?`<button class="btn" data-retry-payment="${escapeHtml(qid)}" type="button">Retry Payment · ₹${Number(q.amount||0).toFixed(2)}</button>`:""; const statusMap={awaiting_payment:'Payment Pending',payment_failed:'Payment Failed',pending_admin_approval:'Waiting for Admin Approval',assigned_to_astrologer:'Assigned to Astrologer',available_to_astrologers:'Available to Astrologers',claimed_by_astrologer:'Astrologer Answering',admin_approved:'Waiting for Answers',processing:'Processing',answer_draft:'Processing',admin_review:'Processing',revision_required:'Revision Required',answered:'Answer Ready',question_rejected:'Question Rejected',admin_rejected:'Question Rejected'}; const astroName=q.astrologerName||'Selected Astrologer'; const adminQuestionApproved=!!q.adminQuestionApprovedAt||['assigned_to_astrologer','reallocated','available_to_astrologers','claimed_by_astrologer','admin_approved','processing','answer_draft','admin_review','answered'].includes(String(q.status||'')); const statusText=q.status==='paid'&&!adminQuestionApproved?'Waiting for Admin Approval':adminQuestionApproved&&['paid','admin_approved'].includes(String(q.status||''))?`Waiting for Answers — ${astroName}`:q.status==='processing'||q.status==='answer_draft'||q.status==='admin_review'?`Processing — ${astroName} answer received and under Admin review`:q.status==='revision_required'?`Revision Required — ${astroName}`:q.status==='answered'?'Answer Ready':(statusMap[q.status]||q.status||'Processing'); const paymentReceived=!!q.customerPaymentId || !!q.paymentRecordedAt || !!q.paidAt || !!q.paymentDate || !['awaiting_payment','payment_failed'].includes(String(q.status||'')); const refundStatuses=['pending','created','initiated','processing']; const refundCompleted=['processed','completed']; const isQuestionRejected=['question_rejected','admin_rejected'].includes(String(q.status||'')); const refundAmount=Number(q.refundAmount||q.amount||q.paymentAmount||0); const refundStatus=String(q.refundStatus||'').toLowerCase(); const steps=isQuestionRejected?[['Payment Received',paymentReceived],['Question Rejected',true],['Refund Status',refundCompleted.includes(refundStatus)]]:[['Payment Received',paymentReceived],['Question Approved',adminQuestionApproved],['Astrologer Answer Submitted',['processing','answer_draft','admin_review','revision_required','answered'].includes(String(q.status||''))],['Admin Approval',['answered'].includes(String(q.status||''))],['Answer Ready',['answered'].includes(String(q.status||''))]]; const timeline=`<div class="timeline">${steps.map(x=>`<div class="timeline-step ${x[1]?'done':''}"><span>${x[1]?'✓':'○'}</span>${x[0]}</div>`).join('')}</div>`; const paymentLine=q.customerPaymentId?`<div class="small"><b>Customer Payment ID:</b> ${escapeHtml(q.customerPaymentId)} · <b>Payment Date & Time:</b> ${escapeHtml(smvDateTime(q.paymentRecordedAt||q.paidAt||q.paymentUpdatedAt||q.paymentDate))}</div>`:''; const isRejected=isQuestionRejected; const refundLine='';; const questionIdLine=qid?`<div class="small"><b>Question ID:</b> ${escapeHtml(qid)}</div>`:''; return `<div class="smv-consultation-item" style="padding:14px 0;border-bottom:1px solid #eee"><b>${escapeHtml(q.question||'Question')}</b>${questionIdLine}<div class="small">Astrologer: <b>${escapeHtml(astroName)}</b> · Status: <b>${escapeHtml(statusText)}</b></div><div class="small"><b>Date & Time:</b> ${escapeHtml(smvDateTime(q.updatedAt||q.answerApprovedAt||q.adminQuestionApprovedAt||q.createdAt))}</div>${paymentLine}${refundLine}${isRejected&&refundAmount>0?`<div class="refund-summary" style="margin-top:12px;padding:12px 14px;border-radius:10px;border:1px solid #e6e6e6"><div><b>Question Status:</b> 🔴 Rejected</div><div style="margin-top:4px"><b>Payment:</b> ${paymentReceived?'✅ Payment Received':'⏳ Payment Pending'}</div><div class="small"><b>Paid Amount:</b> ₹${refundAmount.toFixed(2)}</div><div style="margin-top:8px"><b>Refund Status:</b> ${refundCompleted.includes(refundStatus)?'<span class="success">🟢 Refund Completed</span>':refundStatus==='waiting_balance'?'<span style="color:#b26a00">🟠 Waiting for Razorpay Balance — Admin Retry Required</span>':refundStatus==='failed'?'<span class="error">🔴 Refund Failed — Admin Review Required</span>':'<span style="color:#b26a00">🟠 Refund Pending</span>'}</div><div class="small"><b>Refund Amount:</b> ₹${refundAmount.toFixed(2)}</div>${q.refundId?`<div class="small"><b>Refund ID:</b> ${escapeHtml(q.refundId)}</div>`:''}<div class="small"><b>RRN:</b> ${escapeHtml(q.refundRrn||"Available after Razorpay processes the refund")}</div>${q.refundArn?`<div class="small"><b>ARN:</b> ${escapeHtml(q.refundArn)}</div>`:''}${q.refundUtr?`<div class="small"><b>UTR:</b> ${escapeHtml(q.refundUtr)}</div>`:''}${refundCompleted.includes(refundStatus)&&q.refundProcessedAt?`<div class="small"><b>Refund Date:</b> ${escapeHtml(smvDateTime(q.refundProcessedAt))}</div>`:''}<div class="small" style="margin-top:6px"><b>Refund Reason:</b> ${escapeHtml(q.refundReason||q.adminQuestionRejectionReason||'Question rejected by Admin')}</div>${q.adminQuestionRejectedAt?`<div class="small"><b>Rejected On:</b> ${escapeHtml(smvDateTime(q.adminQuestionRejectedAt))}</div>`:''}${refundCompleted.includes(refundStatus)?`<div class="small" style="margin-top:6px">Refund has been processed successfully.<br>The amount may take 5–7 working days to reflect in your bank account/card. You can use the RRN for bank tracking.</div>`:''}</div>`:''}${timeline}${q.answer&&q.status==='answered'?`<div class="card" style="margin-top:10px"><b>${q.answerAuthorType==='admin'||q.adminAnswered?'Admin Answer':'Astrologer Answer'}</b><p style="white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word">${escapeHtml(q.answer)}</p>${q.answerAuthorType==='admin'||q.adminAnswered?'<p class="small success"><b>Answered directly by SMV ASTRO Admin.</b></p>':''}</div>`:''}${paymentRetryButton?`<div style="margin-top:10px"><p class="small">Retry this saved question at its original price. Current price changes do not apply.</p>${paymentRetryButton}</div>`:""}${reviewButton}</div>`}).join('')}</div>`;
    document.querySelectorAll('[data-retry-payment]').forEach(b=>b.onclick=()=>retryCustomerPayment(b.dataset.retryPayment,b));
    document.querySelectorAll('[data-review]').forEach(b=>b.onclick=()=>openReview(b.dataset.review,b.dataset.astro)); if(window.__smvRefundRefreshTimer){clearTimeout(window.__smvRefundRefreshTimer);window.__smvRefundRefreshTimer=null;} if(hasPendingRefund){window.__smvRefundRefreshTimer=setTimeout(()=>{if(currentUser&&document.getElementById('dashboard')&&!document.getElementById('dashboard').classList.contains('hidden'))loadDashboard().catch(()=>{});},20000);}
@@ -3288,7 +3322,7 @@ if(auth){ onAuthStateChanged(auth,async user=>{
        show('dashboard');
        show('dashboardContent');
        $('dashboardTitle').textContent='Dashboard';
-       $('dashboardContent').innerHTML='<div class="card"><div class="small">Loading your dashboard...</div></div>';
+       renderDashboardShell(headerRole); dashboardShellUid=user.uid;
        smvShowRoleNav(); smvInternalView="dashboard";
        try{history.replaceState({smvView:"dashboard"},"","#dashboard");}catch(_e){}
        go('dashboard');
