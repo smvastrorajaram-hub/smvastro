@@ -1,0 +1,10 @@
+/* SMV brand and authentication refinements. */
+html body.smv-v12-theme #modal #modalContent .auth-hero h2{color:#e52222!important;font-weight:800!important}
+html body.smv-v12-theme #modal #modalContent .auth-shell[data-auth-mode="login"] #submitAuth{background:#e52222!important;background-image:none!important;border-color:#e52222!important;color:#fff!important;font-weight:800!important}
+html body.smv-v12-theme #modal #modalContent .auth-hero-icon{display:flex!important;align-items:center!important;justify-content:center!important;width:72px!important;height:72px!important;margin:0 auto 10px!important;padding:0!important;border:0!important;border-radius:50%!important;background:transparent!important;box-shadow:none!important;overflow:hidden!important;flex-shrink:0}
+html body.smv-v12-theme #modal #modalContent .auth-hero-icon img{display:block!important;width:100%!important;height:100%!important;max-width:none!important;object-fit:contain!important;border:0!important;border-radius:50%!important}
+.smv-brand-symbol{display:inline-block!important;width:20px!important;height:20px!important;object-fit:contain!important;vertical-align:middle!important;border:0!important;border-radius:50%!important}
+html body.smv-v12-theme .feature-section::before{content:""!important;display:block!important;width:22px!important;height:22px!important;margin:0 auto 6px!important;background:url('./assets/smv-brand-logo-v17.png') center/contain no-repeat!important}
+html body.smv-v12-theme .hero .badge::before,html body.smv-v12-theme .hero .badge::after{content:""!important;display:inline-block;width:20px;height:20px;vertical-align:middle;background:url('./assets/smv-brand-logo-v17.png') center/contain no-repeat}
+
+html body.smv-v12-theme .feature-section::before,html body.smv-v12-theme .hero .badge::before,html body.smv-v12-theme .hero .badge::after{border-radius:50%!important;overflow:hidden!important}

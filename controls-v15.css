@@ -1,0 +1,18 @@
+/* Header keeps its existing pink current-item underline, without colored boxes. */
+html :is(#smv-v15-header-root,body.smv-v12-theme) #smvPremiumHeaderV9 .smv9-menu>:is(a,button){
+ background:transparent!important;background-image:none!important;border-color:transparent!important;
+ color:#30252c!important;box-shadow:none!important;border-radius:0!important;text-shadow:none!important;
+}
+html :is(#smv-v15-header-root,body.smv-v12-theme) #smvPremiumHeaderV9 .smv9-menu>.smv-nav-current{color:#e60066!important}
+html :is(#smv-v15-header-root,body.smv-v12-theme) #smvPremiumHeaderV9 .smv9-menu>.smv-role-green{color:#187442!important}
+html :is(#smv-v15-header-root,body.smv-v12-theme) #smvPremiumHeaderV9 .smv9-menu>.smv-logout-btn{color:#e52222!important}
+/* Icon controls retain a comfortable hit area, with no colored background. */
+html :is(#smv-v15-icon-root,body.smv-v12-theme) :is(#smv-v15-icon,button[aria-label="Close"],.password-toggle,#dashboardPaymentSuccessClose){
+ background:transparent!important;background-image:none!important;border:0!important;
+ color:#30252c!important;box-shadow:none!important;border-radius:0!important;
+ text-shadow:none!important;filter:none!important;
+}
+html body.smv-v12-theme .password-toggle{display:inline-flex!important;align-items:center!important;justify-content:center!important;width:44px!important;height:44px!important;min-width:44px!important;padding:10px!important}
+.password-toggle svg{display:block;width:24px;height:24px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+#about{scroll-margin-top:16px}
+#about p{max-width:850px;line-height:1.75}

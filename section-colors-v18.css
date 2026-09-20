@@ -1,0 +1,13 @@
+/* Specific requested headings; leave footer and other brand text unchanged. */
+html body.smv-v12-theme #faq#faq > h2,
+html body.smv-v12-theme #english-horoscope#english-horoscope > .card > h2,
+html body.smv-v12-theme #about #aboutTitle,
+html body.smv-v12-theme :is(#smv-heading-v18, .smv-new-asknow-kicker),
+html body.smv-v12-theme .smv9-kicker,
+html body.smv-v12-theme .smv-master-service[href="#english-horoscope"] strong{color:#000!important}
+/* Media's role=button previously picked up the global pink control skin.
+   Both subheadings now explicitly share the existing Blog palette. */
+html body.smv-v12-theme #smv-content-hub#smv-content-hub .smv-v173-subhead{background:linear-gradient(90deg,#fff2f6,#fff9de)!important;background-image:linear-gradient(90deg,#fff2f6,#fff9de)!important;border-color:#f3dde4!important;color:var(--maroon)!important;text-shadow:none!important;filter:none!important}
+html body.smv-v12-theme #smv-content-hub#smv-content-hub .smv-v173-subhead > span{color:var(--maroon)!important}
+/* A CSS icon survives the existing button text resets after calculation. */
+#generateEnglishHoroscope::before,#generateTamilHoroscope::before{content:"";display:inline-block;width:22px;height:22px;flex:0 0 22px;vertical-align:middle;margin-right:7px;border-radius:50%;background:url('./assets/smv-brand-logo-v17.png') center/contain no-repeat;overflow:hidden}

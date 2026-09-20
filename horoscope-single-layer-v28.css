@@ -1,0 +1,105 @@
+/* SMV V27 — Horoscope single-layer compact-wide presentation only.
+   No calculation, API, Firebase, Razorpay or workflow code is changed. */
+#englishHoroscopeResult,
+#tamilHoroscopeResult{
+  width:100%!important;max-width:1600px!important;margin:0 auto!important;
+  padding:6px!important;box-sizing:border-box!important;
+}
+/* One visual layer: nested result cards no longer create boxes inside boxes. */
+#englishHoroscopeResult .card,
+#tamilHoroscopeResult .card,
+#englishHoroscopeResult .smv-year-reckoning,
+#tamilHoroscopeResult .smv-year-reckoning,
+#englishHoroscopeResult .smv-birth-summary,
+#tamilHoroscopeResult .smv-birth-summary,
+#englishHoroscopeResult .smv-summary-grid>div,
+#tamilHoroscopeResult .smv-summary-grid>div,
+#englishHoroscopeResult .smv-year-grid>div,
+#tamilHoroscopeResult .smv-year-grid>div,
+#englishHoroscopeResult .birth-panchang-grid>div,
+#tamilHoroscopeResult .birth-panchang-grid>div{
+  box-shadow:none!important;background:transparent!important;
+}
+#englishHoroscopeResult .card,
+#tamilHoroscopeResult .card,
+#englishHoroscopeResult .smv-year-reckoning,
+#tamilHoroscopeResult .smv-year-reckoning,
+#englishHoroscopeResult .smv-birth-summary,
+#tamilHoroscopeResult .smv-birth-summary{
+  border:0!important;border-radius:0!important;margin:4px 0!important;padding:6px 4px!important;
+}
+/* Values are compact rows/cells instead of tall individual rounded cards. */
+#englishHoroscopeResult .smv-summary-grid,
+#tamilHoroscopeResult .smv-summary-grid,
+#englishHoroscopeResult .smv-year-grid,
+#tamilHoroscopeResult .smv-year-grid,
+#englishHoroscopeResult .birth-panchang-grid,
+#tamilHoroscopeResult .birth-panchang-grid{
+  display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;
+  gap:0!important;border:1px solid #eadfca!important;border-radius:8px!important;overflow:hidden!important;
+}
+#englishHoroscopeResult .smv-summary-grid>div,
+#tamilHoroscopeResult .smv-summary-grid>div,
+#englishHoroscopeResult .smv-year-grid>div,
+#tamilHoroscopeResult .smv-year-grid>div,
+#englishHoroscopeResult .birth-panchang-grid>div,
+#tamilHoroscopeResult .birth-panchang-grid>div{
+  border:0!important;border-right:1px solid #eadfca!important;border-bottom:1px solid #eadfca!important;
+  border-radius:0!important;padding:5px 7px!important;min-height:0!important;
+  display:flex!important;align-items:center!important;gap:7px!important;line-height:1.2!important;
+}
+#englishHoroscopeResult .smv-summary-grid b,
+#tamilHoroscopeResult .smv-summary-grid b,
+#englishHoroscopeResult .smv-year-grid b,
+#tamilHoroscopeResult .smv-year-grid b,
+#englishHoroscopeResult .birth-panchang-grid b,
+#tamilHoroscopeResult .birth-panchang-grid b{
+  display:inline!important;margin:0!important;flex:0 0 auto!important;font-size:12px!important;
+}
+#englishHoroscopeResult .smv-summary-grid span,
+#tamilHoroscopeResult .smv-summary-grid span,
+#englishHoroscopeResult .smv-year-grid span,
+#tamilHoroscopeResult .smv-year-grid span,
+#englishHoroscopeResult .birth-panchang-grid span,
+#tamilHoroscopeResult .birth-panchang-grid span{
+  display:inline!important;margin:0!important;font-size:12px!important;min-width:0!important;
+}
+#englishHoroscopeResult h2,#tamilHoroscopeResult h2,
+#englishHoroscopeResult h3,#tamilHoroscopeResult h3{margin:5px 0!important;padding:3px 0!important;line-height:1.2!important}
+#englishHoroscopeResult p,#tamilHoroscopeResult p{margin:4px 0!important;line-height:1.35!important}
+#englishHoroscopeResult .smv-birth-prelude,#tamilHoroscopeResult .smv-birth-prelude{margin:0!important}
+#englishHoroscopeResult .smv-panchang-sentence,#tamilHoroscopeResult .smv-panchang-sentence{margin:5px 0!important;padding:5px 7px!important}
+#englishHoroscopeResult table,#tamilHoroscopeResult table{margin:4px 0!important}
+#englishHoroscopeResult th,#englishHoroscopeResult td,#tamilHoroscopeResult th,#tamilHoroscopeResult td{padding:5px 6px!important;line-height:1.2!important}
+
+@media(max-width:700px){
+  #englishHoroscopeResult,#tamilHoroscopeResult{width:100%!important;padding:2px!important}
+  #englishHoroscopeResult .smv-summary-grid,
+  #tamilHoroscopeResult .smv-summary-grid,
+  #englishHoroscopeResult .smv-year-grid,
+  #tamilHoroscopeResult .smv-year-grid,
+  #englishHoroscopeResult .birth-panchang-grid,
+  #tamilHoroscopeResult .birth-panchang-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  }
+  #englishHoroscopeResult .smv-summary-grid>div,
+  #tamilHoroscopeResult .smv-summary-grid>div,
+  #englishHoroscopeResult .smv-year-grid>div,
+  #tamilHoroscopeResult .smv-year-grid>div,
+  #englishHoroscopeResult .birth-panchang-grid>div,
+  #tamilHoroscopeResult .birth-panchang-grid>div{
+    padding:5px!important;display:block!important;min-width:0!important;
+  }
+  #englishHoroscopeResult .smv-summary-grid b,
+  #tamilHoroscopeResult .smv-summary-grid b,
+  #englishHoroscopeResult .smv-year-grid b,
+  #tamilHoroscopeResult .smv-year-grid b,
+  #englishHoroscopeResult .birth-panchang-grid b,
+  #tamilHoroscopeResult .birth-panchang-grid b{display:block!important;font-size:11px!important;margin:0 0 2px!important}
+  #englishHoroscopeResult .smv-summary-grid span,
+  #tamilHoroscopeResult .smv-summary-grid span,
+  #englishHoroscopeResult .smv-year-grid span,
+  #tamilHoroscopeResult .smv-year-grid span,
+  #englishHoroscopeResult .birth-panchang-grid span,
+  #tamilHoroscopeResult .birth-panchang-grid span{display:block!important;font-size:12px!important;line-height:1.15!important}
+}

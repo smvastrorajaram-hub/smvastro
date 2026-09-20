@@ -1,0 +1,32 @@
+/* The requested pink buttons replace the previous yellow variant. */
+body.smv-v12-theme{--smv-action-yellow:#e60066}
+html :is(#smv-v12-theme-root,body.smv-v12-theme) :is(#smv-v12-control,.btn.gray,.btn.alt,.auth-google,.password-toggle,.smv9-actions .horoscope,.smv9-menu a,.smv9-menu #contentNav,.smv9-menu .register,button[data-cancel],input[type="reset"],.smv-admin-jump){color:#fff!important}
+html :is(#smv-v12-theme-root,body.smv-v12-theme) :is(#smv-v12-control,.btn.danger,.smv-logout-btn,[data-reject],[data-payout-reject],[data-content-delete],[data-status="rejected"],[data-workflow^="reject"],button[aria-label="Close"],.smv9-menu a.active,.smv9-menu .smv-nav-current,.smv9-actions .horoscope,#submitQuestionBtn){background:#e52222!important;border-color:#e52222!important;color:#fff!important}
+html body.smv-v12-theme .smv-master-footer h4{color:#ffdc24!important}
+html body.smv-v12-theme .smv-master-footer{min-height:0!important;padding:0!important}
+html body.smv-v12-theme .smv-master-footer-in{grid-template-columns:1.5fr 1fr 1fr!important;gap:20px!important;padding:24px 24px 18px!important}
+html body.smv-v12-theme .smv-master-footer h3{margin:0 0 10px!important;display:flex;align-items:center;justify-content:flex-start;gap:8px}
+html body.smv-v12-theme .smv-footer-sun{display:inline-block;font-size:1.55em;line-height:1;color:#ffdc24}
+html body.smv-v12-theme .smv-master-footer h4{margin:0 0 10px!important}
+html body.smv-v12-theme .smv-master-footer p{margin:6px 0!important;line-height:1.5!important}
+html body.smv-v12-theme .smv-master-links{gap:8px!important}
+html body.smv-v12-theme .smv-master-copyline{padding:14px 18px!important;margin:0!important;line-height:1.5!important}
+html body.smv-v12-theme .smv-master-footer:after{height:100%!important;top:0!important;bottom:0!important;opacity:.17!important}
+#smv-dashboard-page{min-height:65vh;padding:20px 16px 40px;max-width:1320px;margin:auto}
+#smv-dashboard-page.hidden{display:none!important}
+.smv-workspace-bar{display:flex;justify-content:space-between;align-items:center;gap:14px;margin:0 0 16px}
+#smvLiveStatus{font-size:13px;color:#5c4650}
+html body #smv-dashboard-page :is(#dashboard,#admin){margin-top:0!important}
+/* Highest priority keeps legacy !important Home skins out of account screens. */
+html body[data-smv-workspace="open"] #smv-public-page,
+html body[data-smv-workspace="open"] #home,
+html body[data-smv-workspace="open"] #smvInstallAppSection,
+html body[data-smv-workspace="open"] :is(#ask-flow,#astro-flow,#astro-register-form,#contact){display:none!important}
+@media(max-width:600px){
+ html body.smv-v12-theme #home .smv12-mobile-visual{height:clamp(205px,58vw,300px)!important;aspect-ratio:auto!important;object-fit:contain!important;object-position:center!important;background:#291608}
+ html body.smv-v12-theme .smv-master-footer-in{grid-template-columns:1fr 1fr!important;gap:16px 20px!important;padding:20px 20px 18px!important}
+ html body.smv-v12-theme .smv-master-footer h3{justify-content:center!important;font-size:1.45rem!important}
+ html body.smv-v12-theme .smv-master-footer p{font-size:13px!important}
+ html body.smv-v12-theme .smv-master-links a{font-size:13px!important;line-height:1.45!important}
+ html body.smv-v12-theme .smv-master-copyline{font-size:11px!important;padding:12px 14px!important}
+}

@@ -1,0 +1,38 @@
+/* Readable, consistent final interface. Calculation layouts are preserved. */
+[hidden],#smvInstallAppSection[hidden]{display:none!important}
+html[lang="en"] #tamil-horoscope,html[lang="ta"] #english-horoscope{display:none!important}
+@media(display-mode:standalone){#smvInstallAppSection{display:none!important}}
+@media(display-mode:fullscreen){#smvInstallAppSection{display:none!important}}
+html body{background:#fff!important;color:#242424!important;line-height:1.6}
+html body :is(#admin,#dashboard){font-size:16px!important;letter-spacing:normal!important}
+html body :is(#admin,#dashboard) .card{background:#fff!important;border:1px solid #e4e4e4!important;border-radius:10px!important;box-shadow:none!important;padding:18px!important;margin-bottom:16px!important}
+html body :is(#admin,#dashboard) :is(p,div,label,td,textarea,input,select){letter-spacing:normal!important;line-height:1.6!important}
+html body :is(#admin,#dashboard) :is(h2,h3){color:#a31920!important;letter-spacing:normal!important;font-weight:700!important;line-height:1.5!important;text-transform:none!important}
+html body :is(#admin,#dashboard) .small{font-size:14px!important;line-height:1.6!important}
+html body :is(#admin,#dashboard) :is(button,input,select,textarea){font-size:16px!important;min-height:44px!important;border-radius:6px!important;text-transform:none!important;letter-spacing:normal!important}
+html body :is(#admin,#dashboard) button{background:#a31920!important;color:#fff!important;border:1px solid #a31920!important;box-shadow:none!important;font-weight:600!important;white-space:normal!important}
+html body :is(#admin,#dashboard) button:disabled{opacity:.6!important;cursor:wait}
+html body :is(#admin,#dashboard) input,html body :is(#admin,#dashboard) select,html body :is(#admin,#dashboard) textarea{background:#fff!important;color:#242424!important;border:1px solid #aaa!important;padding:10px!important;width:100%;box-sizing:border-box}
+html body :is(#admin,#dashboard) label{display:block;font-size:14px!important}
+.smv-workflow-card{scroll-margin-top:100px;overflow-wrap:anywhere}
+.smv-workflow-card .action-row{display:flex!important;flex-wrap:wrap!important;gap:10px!important;align-items:end!important;margin:12px 0!important}
+.smv-workflow-card .action-row>label{flex:1 1 180px}
+.smv-workflow-card details{margin:12px 0}
+.smv-workflow-card summary{cursor:pointer;font-weight:600;min-height:44px;padding:8px 0}
+.smv-workflow-card [data-workflow="reject-question"],.smv-workflow-card [data-workflow="reject-answer"]{border-style:dashed!important}
+.smv-admin-nav{display:flex!important;gap:8px!important;flex-wrap:wrap!important;justify-content:flex-start!important;padding:12px 0!important;margin-bottom:10px!important;background:#fff!important}
+.smv-refresh{margin:8px 0 16px!important}
+#adminPendingQuestions,#adminAnswers,#adminRefunds{scroll-margin-top:100px}
+html body .smv-install-app-card{background:#fff!important;box-shadow:none!important;border:1px solid #ddd!important}
+@media(max-width:650px){html body :is(#admin,#dashboard) .card{padding:14px!important}.smv-workflow-card .action-row>button{flex:0 0 auto}html body :is(#admin,#dashboard){margin-top:20px!important}}
+
+/* Admin shortcuts have their own layout; header nav rules must not size them. */
+html body #admin div.smv-admin-nav{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:12px!important;width:100%!important;max-width:100%!important;box-sizing:border-box!important;margin:0 0 16px!important;padding:12px 0!important;position:static!important;transform:none!important}
+html body #admin div.smv-admin-nav button.smv-admin-jump{display:block!important;position:static!important;width:100%!important;min-width:0!important;max-width:100%!important;height:auto!important;min-height:52px!important;max-height:none!important;margin:0!important;padding:12px 16px!important;box-sizing:border-box!important;font-size:16px!important;line-height:1.65!important;white-space:normal!important;word-break:normal!important;overflow-wrap:anywhere!important;overflow:visible!important;text-indent:0!important;letter-spacing:normal!important;transform:none!important;font-weight:600!important;text-align:center!important;flex:none!important}
+@media(max-width:600px){html body #admin div.smv-admin-nav{grid-template-columns:1fr!important}}
+
+/* Flex basis was becoming a 180px height when the existing mobile row changed to a column. */
+html body #admin .smv-workflow-card .action-row{display:flex!important;flex-direction:row!important;flex-wrap:wrap!important;align-items:center!important;gap:8px!important}
+html body #admin .smv-workflow-card .action-row>label{flex:1 1 200px!important;min-width:0!important;width:auto!important}
+html body #admin .smv-workflow-card button{flex:0 0 auto!important;height:auto!important;min-height:44px!important;max-height:none!important;min-width:0!important;width:auto!important;max-width:100%!important;padding:9px 12px!important;font-size:14px!important;line-height:1.5!important;white-space:normal!important;box-sizing:border-box!important;aspect-ratio:auto!important;margin:4px 0!important}
+@media(max-width:650px){html body #admin .smv-workflow-card .action-row{flex-direction:column!important;align-items:stretch!important}html body #admin .smv-workflow-card .action-row>label{flex:0 0 auto!important;width:100%!important}html body #admin .smv-workflow-card button{align-self:flex-start!important}html body #admin div.smv-admin-nav button.smv-admin-jump{min-height:44px!important;padding:8px 12px!important;font-size:14px!important}}
