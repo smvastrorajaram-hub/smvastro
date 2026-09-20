@@ -10055,3 +10055,79 @@ html body.smv-v12-theme :is(#tamilHoroscopeResult,#englishHoroscopeResult) .tran
     word-break:normal!important;
   }
 }
+
+/* V34 — ONLY current Dasa / Bhukthi / Antharam indication: Bright Sky Blue */
+html body.smv-v12-theme :is(#englishHoroscopeResult,#tamilHoroscopeResult) .dasha-node.smv-current-dasha > .dasha-head,
+html body.smv-v12-theme :is(#englishHoroscopeResult,#tamilHoroscopeResult) .dasha-node.smv-current-bhukthi > .dasha-head{
+  background:#00BFFF!important;
+  background-color:#00BFFF!important;
+  background-image:none!important;
+  border-color:#00BFFF!important;
+}
+html body.smv-v12-theme :is(#englishHoroscopeResult,#tamilHoroscopeResult) .dasha-subtable tbody tr.smv-current-antharam > td{
+  background:#00BFFF!important;
+  background-color:#00BFFF!important;
+}
+
+/* V34.1 — force ONLY the currently active Dasa and Bhukthi to Bright Sky Blue.
+   Extra ID specificity intentionally overrides the older red theme rules. */
+html body.smv-v12-theme #englishHoroscopeResult#englishHoroscopeResult#englishHoroscopeResult#englishHoroscopeResult .dasha-tree > .dasha-node.smv-current-dasha[data-level="1"] > .dasha-head,
+html body.smv-v12-theme #tamilHoroscopeResult#tamilHoroscopeResult#tamilHoroscopeResult#tamilHoroscopeResult .dasha-tree > .dasha-node.smv-current-dasha[data-level="1"] > .dasha-head{
+  background:#00BFFF!important;
+  background-color:#00BFFF!important;
+  background-image:none!important;
+  border-color:#00BFFF!important;
+}
+html body.smv-v12-theme #englishHoroscopeResult#englishHoroscopeResult#englishHoroscopeResult#englishHoroscopeResult .dasha-tree > .dasha-node[data-level="1"] > .dasha-body > .dasha-node.smv-current-bhukthi[data-level="2"] > .dasha-head,
+html body.smv-v12-theme #tamilHoroscopeResult#tamilHoroscopeResult#tamilHoroscopeResult#tamilHoroscopeResult .dasha-tree > .dasha-node[data-level="1"] > .dasha-body > .dasha-node.smv-current-bhukthi[data-level="2"] > .dasha-head{
+  background:#00BFFF!important;
+  background-color:#00BFFF!important;
+  background-image:none!important;
+  border-color:#00BFFF!important;
+}
+
+/* V34 LOCKED: Daily Hora current-time indication + Transit As parity only */
+.hora-vertical .hora-time.smv-current-hora-time{
+  background:#00bfff!important;
+  color:#fff!important;
+  -webkit-text-fill-color:#fff!important;
+  font-weight:900!important;
+}
+html body.smv-v12-theme :is(#tamilHoroscopeResult,#englishHoroscopeResult) .transit-card .transit-chart .lagna{
+  font-size:clamp(10px,1.9vw,13px)!important;
+  line-height:1.3!important;
+}
+.transit-before-vimsottari:empty{display:none!important}
+
+
+/* V34.2 — Hora TIME indication only (no hidden/blank current time) */
+.hora-vertical .hora-time.smv-current-hora-time{background:transparent!important;color:inherit!important;-webkit-text-fill-color:currentColor!important;}
+.hora-vertical .hora-time.smv-hora-current-green{background:transparent!important;color:#159447!important;-webkit-text-fill-color:#159447!important;font-weight:900!important;}
+.hora-vertical .hora-time.smv-hora-bright-green{background:transparent!important;color:#00c853!important;-webkit-text-fill-color:#00c853!important;font-weight:900!important;}
+.hora-vertical .hora-time.smv-hora-current-red{background:transparent!important;color:#c00000!important;-webkit-text-fill-color:#c00000!important;font-weight:900!important;}
+.hora-vertical .hora-time.smv-hora-bright-red{background:transparent!important;color:#ff0000!important;-webkit-text-fill-color:#ff0000!important;font-weight:900!important;}
+
+
+/* V34.3 — ONLY requested Hora indication + Birth Panchang date/time font parity */
+/* Hora: current Hora uses green/red by benefic nature; weekday-lord Hora uses brighter shade. */
+html body.smv-v12-theme :is(#tamilHoroscopeResult,#englishHoroscopeResult) .hora-vertical td.hora-time.smv-hora-current-green{
+  color:#159447!important;-webkit-text-fill-color:#159447!important;font-weight:900!important;
+}
+html body.smv-v12-theme :is(#tamilHoroscopeResult,#englishHoroscopeResult) .hora-vertical td.hora-time.smv-hora-bright-green{
+  color:#00c853!important;-webkit-text-fill-color:#00c853!important;font-weight:900!important;
+}
+html body.smv-v12-theme :is(#tamilHoroscopeResult,#englishHoroscopeResult) .hora-vertical td.hora-time.smv-hora-current-red{
+  color:#c00000!important;-webkit-text-fill-color:#c00000!important;font-weight:900!important;
+}
+html body.smv-v12-theme :is(#tamilHoroscopeResult,#englishHoroscopeResult) .hora-vertical td.hora-time.smv-hora-bright-red{
+  color:#ff0000!important;-webkit-text-fill-color:#ff0000!important;font-weight:900!important;
+}
+/* Birth Panchang date/time result typography = Daily Panchang date/time result typography. */
+html body.smv-v12-theme :is(#tamilHoroscopeResult,#englishHoroscopeResult) .birth-time-panchang :is(.panchang-date-result,.panchang-time-result,.panchang-event-range .event-date,.panchang-event-range .event-time){
+  font-size:12px!important;line-height:1.2!important;
+}
+@media(max-width:700px){
+  html body.smv-v12-theme :is(#tamilHoroscopeResult,#englishHoroscopeResult) .birth-time-panchang :is(.panchang-date-result,.panchang-time-result,.panchang-event-range .event-date,.panchang-event-range .event-time){
+    font-size:11px!important;line-height:1.2!important;
+  }
+}
