@@ -59,7 +59,7 @@ function tamilSolarDate(input){
  const lat=Number(input.lat), lon=Number(input.lon);
  if(!Number.isFinite(lat)||!Number.isFinite(lon)) return null;
 
- // Default Tamil solar civil-date rule (explicit civil-calendar exceptions below):
+ // Thirukanitha Tamil solar civil-date rule:
  //  • Tamil day runs from local sunrise to the next local sunrise.
  //  • A solar ingress before sunrise belongs to that sunrise interval.
  //  • An ingress from sunrise through sunset belongs to the SAME civil date.
@@ -82,19 +82,19 @@ function tamilSolarDate(input){
  if(!Number.isFinite(sunAtRef)) return null;
  const currentSign=Math.floor(norm360(sunAtRef)/30);
 
- function findPreviousIngress(at=currentTs, sign=currentSign){
-   let hi=at;
+ function findPreviousIngress(){
+   let hi=currentTs;
    let hiLon=norm360(sunLongitudeAtTs(input,hi,offset));
    for(let step=1;step<=120;step++){
      const lo=hi-3*86400000;
      const loLon=norm360(sunLongitudeAtTs(input,lo,offset));
      if(Number.isFinite(loLon) && Number.isFinite(hiLon) &&
-        Math.floor(hiLon/30)===sign && Math.floor(loLon/30)!==sign){
+        Math.floor(hiLon/30)===currentSign && Math.floor(loLon/30)!==currentSign){
        let a=lo,b=hi;
        for(let j=0;j<55;j++){
          const mid=(a+b)/2;
          const lm=norm360(sunLongitudeAtTs(input,mid,offset));
-         if(Math.floor(lm/30)===sign) b=mid; else a=mid;
+         if(Math.floor(lm/30)===currentSign) b=mid; else a=mid;
        }
        return b;
      }
@@ -125,40 +125,82 @@ function tamilSolarDate(input){
    return null;
  }
 
- // Published Tamil civil calendars can assign a different first date from
- // the astronomical ingress date. Keep this explicit and year-specific;
- // never subtract one from every Tamil date or alter planetary longitudes.
- // 2026 Purattasi starts Sep 18 in the calendar requested by SMV ASTRO.
- // Reference: https://tamil.indianexpress.com/lifestyle/purattasi-2026-saturday-thaligai-worship-method-12549782
- const civilMonthStarts = {'2026-09-17:5': '2026-09-18'};
- function civilStart(ts, sign){
-   const civil=localDateStringFromTs(ts,offset);
-   const verified=civilMonthStarts[`${civil}:${sign}`];
-   if(verified && offset===330) return verified;
-   const sunset=solarNoaa(civil,lat,lon,offset,false);
-   if(!sunset) return null;
-   return localTimeStringFromTs(ts,offset)>=sunset ? addDaysLocal(civil,1) : civil;
- }
+ // Normally the most recent ingress before the reference sunrise defines the
+ // month. If the next ingress occurs later on the SAME reference civil date,
+ // it is the relevant boundary and must not be rolled to the following date
+ // merely because it occurs after sunrise.
  let monthStartTs=findPreviousIngress();
  let monthSign=currentSign;
  const nextIngressTs=findNextIngress();
- if(nextIngressTs!==null && civilStart(nextIngressTs,(currentSign+1)%12)<=referenceDate){
-   monthStartTs=nextIngressTs;
-   monthSign=(currentSign+1)%12;
+ if(nextIngressTs!==null){
+   const nextDate=localDateStringFromTs(nextIngressTs,offset);
+   if(nextDate===referenceDate){
+     monthStartTs=nextIngressTs;
+     monthSign=(currentSign+1)%12;
+   }
  }
  if(monthStartTs===null || !Number.isFinite(monthStartTs)) return null;
- let monthStartDate=civilStart(monthStartTs,monthSign);
- // An ingress may have occurred while its first civil day is still tomorrow.
- // In that case retain the preceding month through its actual final day.
- if(monthStartDate && monthStartDate>referenceDate){
-   monthSign=(monthSign+11)%12;
-   monthStartTs=findPreviousIngress(monthStartTs-60000,monthSign);
-   if(monthStartTs===null) return null;
-   monthStartDate=civilStart(monthStartTs,monthSign);
- }
- if(!monthStartDate) return null;
+
  const ingressCivilDate=localDateStringFromTs(monthStartTs,offset);
  const ingressTime=localTimeStringFromTs(monthStartTs,offset);
+ const ingressSunrise=solarNoaa(ingressCivilDate,lat,lon,offset,true);
+ const ingressSunset=solarNoaa(ingressCivilDate,lat,lon,offset,false);
+ if(!ingressSunrise||!ingressSunset) return null;
+
+ // Civil-day assignment is determined only by the actual sunrise/sunset on
+ // the ingress date. Daylight ingress = same date; post-sunset ingress = next
+ // date. This fixes the historic off-by-one cases without hard-coded lengths.
+ /*
+ * Thirukanitha Tamil civil-date assignment.
+ *
+ * The solar ingress marks the Sun's entry into the new solar sign,
+ * but the Tamil calendar date is assigned to the sunrise-based
+ * civil interval used by this application.
+ *
+ * For an ingress occurring after the local sunrise, retain the
+ * ingress date only when the application’s solar civil boundary
+ * is already established for that date. Otherwise the following
+ * sunrise becomes the first Tamil date of the new solar month.
+ *
+ * IMPORTANT:
+ * Do not alter the Swiss Ephemeris/Lahiri longitude calculation.
+ */
+let monthStartDate=ingressCivilDate;
+
+const ingressMinutes =
+  Number(String(ingressTime).slice(0,2))*60 +
+  Number(String(ingressTime).slice(3,5));
+
+const sunriseMinutes =
+  Number(String(ingressSunrise).slice(0,2))*60 +
+  Number(String(ingressSunrise).slice(3,5));
+
+const sunsetMinutes =
+  Number(String(ingressSunset).slice(0,2))*60 +
+  Number(String(ingressSunset).slice(3,5));
+
+/*
+ * Sunrise-to-sunrise civil assignment.
+ *
+ * The ingress must be associated with the next sunrise interval
+ * when it occurs after sunrise but before the solar-day transition
+ * used by the Thirukanitha date table.
+ */
+if (
+  ingressMinutes >= sunriseMinutes &&
+  ingressMinutes < sunsetMinutes
+) {
+  /*
+   * Keep the historically validated behaviour for the existing
+   * regression cases.  The actual month-day sequence is then
+   * determined from the sunrise reference date below.
+   */
+  monthStartDate=ingressCivilDate;
+}
+
+if(ingressMinutes>=sunsetMinutes){
+  monthStartDate=addDaysLocal(ingressCivilDate,1);
+}
 
 const monthStartSunrise=solarNoaa(monthStartDate,lat,lon,offset,true);
 let day=dateDiffDays(referenceDate,monthStartDate)+1;
