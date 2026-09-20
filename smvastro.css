@@ -10131,3 +10131,10 @@ html body.smv-v12-theme :is(#tamilHoroscopeResult,#englishHoroscopeResult) .birt
     font-size:11px!important;line-height:1.2!important;
   }
 }
+
+/* V34 dashboard-only workspace: hide public header/footer while Customer/Admin/Astrologer dashboard is open. */
+html body[data-smv-workspace="open"] .smv-master-top,
+html body[data-smv-workspace="open"] #smvPremiumHeaderV9,
+html body[data-smv-workspace="open"] #smv24-footer,
+html body[data-smv-workspace="open"] footer{display:none!important;}
+html body[data-smv-workspace="open"] #smv-dashboard-page{padding-top:12px!important;}
