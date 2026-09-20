@@ -10138,3 +10138,11 @@ html body[data-smv-workspace="open"] #smvPremiumHeaderV9,
 html body[data-smv-workspace="open"] #smv24-footer,
 html body[data-smv-workspace="open"] footer{display:none!important;}
 html body[data-smv-workspace="open"] #smv-dashboard-page{padding-top:12px!important;}
+
+/* V34: dashboard refresh controls — explicitly hidden at user request */
+#smvRefreshDashboard,
+#smvRefreshAdmin,
+#astroRefreshApproval,
+.smv-refresh {
+  display: none !important;
+}
