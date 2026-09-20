@@ -111,6 +111,21 @@ document.addEventListener('DOMContentLoaded', function(){
 
 
 
+
+<style id="smv-panchang-date-time-colour-final">
+/* Birth + Daily Panchang: keep every table body label/result at the same size as the Date row. */
+.panchang-data-table tbody td,
+.panchang-data-table tbody td b,
+.panchang-data-table tbody td span,
+.panchang-data-table tbody td small,
+.panchang-data-table tbody td strong{font-size:inherit !important;}
+.panchang-data-table tbody td{font-size:1em !important;}
+/* Only Tithi / Nakshatra / Yoga / Karana ranges: date sky blue, time bright pink, connector black. */
+.panchang-data-table .panchang-event-range .event-date{color:#00BFFF !important;-webkit-text-fill-color:#00BFFF !important;}
+.panchang-data-table .panchang-event-range .event-time{color:#FF1493 !important;-webkit-text-fill-color:#FF1493 !important;}
+.panchang-data-table .panchang-event-range .event-to{color:#111 !important;-webkit-text-fill-color:#111 !important;}
+/* Standalone Panchang time styling is left unchanged. Birth Date is explicitly normal black in its row. */
+</style>
 </head>
 <body class="smv-v12-theme">
 <div class="smv-master-top"><div class="smv-master-topin"><span>Guided by Ancient Wisdom   |   Empowering Your Future</span></div></div>
@@ -971,6 +986,7 @@ document.addEventListener('DOMContentLoaded', function(){
       <p class="small"><b>சூரியன் முதல் சனி வரை 7 கிரகங்களுக்கு</b> Classical-style Shadbala கணக்கீடு. 1 Rupa = 60 Virupa. Rahu/Ketu இந்த classical Shadbala total-ல் சேர்க்கப்படவில்லை.</p>
       <div class="data-table-wrap"><table class="data-table phase3-shadbala-table"><thead><tr><th>கிரகம்</th><th>ஸ்தான பலம்</th><th>திக் பலம்</th><th>கால பலம்</th><th>சேஷ்டா பலம்</th><th>நைசர்கிக பலம்</th><th>த்ரிக் பலம்</th><th>மொத்தம் / தேவையானது</th></tr></thead><tbody>${(d.planets||[]).filter(p=>p.strength3?.available).map(p=>{const s=p.strength3||{},c=s.components||{},k=c.kala||{},st=c.sthana||{};const total=Number(s.totalVirupa||0),req=Number(s.requiredVirupa||0),ratio=Number(s.ratio||0);return `<tr><td><b>${esc(p.name)}</b></td><td>${Number(st.total||0).toFixed(1)}<br><span class="small">உச்ச ${Number(st.uccha||0).toFixed(1)} · வர்க ${Number(st.saptavargaja||0).toFixed(1)}</span></td><td>${Number(c.dig||0).toFixed(1)}</td><td>${Number(k.total||0).toFixed(1)}<br><span class="small">நாதோ ${Number(k.natonnatha||0).toFixed(1)} · பக்ஷ ${Number(k.paksha||0).toFixed(1)} · அயன ${Number(k.ayana||0).toFixed(1)}</span></td><td>${Number(c.cheshta||0).toFixed(1)}</td><td>${Number(c.naisargika||0).toFixed(1)}</td><td>${Number(c.drik||0).toFixed(1)}</td><td><b>${total.toFixed(1)}</b> / ${req.toFixed(0)}<br><span class="small">${ratio>=1?'வலிமை':'தேவையான அளவுக்கு குறைவு'} · ${ratio.toFixed(2)}×</span></td></tr>`}).join('')}</tbody></table></div>
       <p class="small"><b>குறிப்பு:</b> Phase 3-ல் Sthana (Uchcha + Saptavargaja + Ojayugma + Kendradi + Drekkana), Dig, Kala, Cheshta, Naisargika மற்றும் Drik ஆகிய ஆறு classical components தனித்தனியாகக் கணக்கிடப்படுகின்றன. Cheshta/காலக் கணக்கீட்டில் பயன்படுத்தப்படும் சில time/mean-motion conventions lineage-க்கு ஏற்ப மாறக்கூடும்; ஆகவே இதை reference-grade software parity என்று கூறவில்லை.</p>
+      <div class="transit-before-vimsottari"></div>
       <h3 style="margin-top:22px">📅 விம்சோத்தரி தசா</h3>
       <p class="small">மகாதசையை touch செய்தால் <b>புக்தி / அந்தர்தசை</b> திறக்கும். புக்தியை touch செய்தால் <b>அந்தரம் / பிரத்யந்தர்தசை</b> திறக்கும்.</p>
       <p class="small">பிறந்த நேர சந்திரனின் நட்சத்திரத்தை அடிப்படையாகக் கொண்ட ஆரம்ப மகாதசா balance: <b>${d.dashas.balanceYears} ஆண்டுகள்</b>.</p>
@@ -1107,14 +1123,24 @@ document.addEventListener('DOMContentLoaded', function(){
       const nextAnt=curBi?.pratyantars?.find(contains);
       const antIndex=curBi?.pratyantars?Math.max(0,curBi.pratyantars.indexOf(nextAnt)):-1;
       const nextAntNext=(curBi?.pratyantars?.[antIndex+1])||nextBi?.pratyantars?.[0]||null;
+      // V34: mark only the CURRENT Dasa / Bhukthi / Antharam for visual indication.
+      const mdNodes=[...dashaTree.querySelectorAll(':scope > .dasha-node[data-level="1"]')];
+      const currentMdNode=mdNodes[mdIndex]||null;
+      if(currentMdNode) currentMdNode.classList.add('smv-current-dasha');
+      const biNodes=currentMdNode?[...currentMdNode.querySelectorAll(':scope > .dasha-body > .dasha-node[data-level="2"]')]:[];
+      const currentBiNode=biIndex>=0?(biNodes[biIndex]||null):null;
+      if(currentBiNode) currentBiNode.classList.add('smv-current-bhukthi');
+      const antRows=currentBiNode?[...currentBiNode.querySelectorAll(':scope > .dasha-body .dasha-subtable tbody tr')]:[];
+      if(antIndex>=0 && antRows[antIndex]) antRows[antIndex].classList.add('smv-current-antharam');
+
       const summary=document.createElement('div'); summary.className='smv-dasha-next';
       const lord=(x)=>x?.lord||'—', dates=x=>x?`${x.start} → ${x.end}`:'—';
       summary.innerHTML=`<b>Current / Next Dasha</b><br>Mahadasha: <b>${esc(lord(curMd))}</b> (${esc(dates(curMd))})<br>Bhukti: <b>${esc(lord(curBi))}</b> (${esc(dates(curBi))}) → Next: <b>${esc(lord(nextBi))}</b> (${esc(dates(nextBi))})<br>Antara: <b>${esc(lord(nextAnt))}</b> (${esc(dates(nextAnt))}) → Next: <b>${esc(lord(nextAntNext))}</b> (${esc(dates(nextAntNext))})`;
       dashaTree.prepend(summary);
       // Open the current Mahadasha and current Bhukti so the next levels are visible without requiring multiple taps.
-      const mdNode=dashaTree.querySelector('.dasha-node[data-level="1"]');
+      const mdNode=dashaTree.querySelector('.dasha-node.smv-current-dasha')||dashaTree.querySelector('.dasha-node[data-level="1"]');
       if(mdNode){mdNode.classList.add('open');mdNode.querySelector(':scope > .dasha-head')?.setAttribute('aria-expanded','true');}
-      const firstOpen=mdNode?.querySelector('.dasha-node[data-level="2"]');
+      const firstOpen=mdNode?.querySelector('.dasha-node.smv-current-bhukthi')||mdNode?.querySelector('.dasha-node[data-level="2"]');
       if(firstOpen){firstOpen.classList.add('open');firstOpen.querySelector(':scope > .dasha-head')?.setAttribute('aria-expanded','true');}
     }
     result.classList.remove('hidden');
@@ -1229,11 +1255,11 @@ document.addEventListener('DOMContentLoaded', function(){
       btn.style.touchAction='manipulation';
       btn.tabIndex=0;
     });
-    const mdNode=root.querySelector('.dasha-node[data-level="1"]');
+    const mdNode=root.querySelector('.dasha-node.smv-current-dasha')||root.querySelector('.dasha-node[data-level="1"]');
     if(mdNode){
       mdNode.classList.add('open');
       mdNode.querySelector(':scope > .dasha-head')?.setAttribute('aria-expanded','true');
-      const bhuktiNode=mdNode.querySelector(':scope > .dasha-body .dasha-node[data-level="2"]');
+      const bhuktiNode=mdNode.querySelector(':scope > .dasha-body .dasha-node.smv-current-bhukthi')||mdNode.querySelector(':scope > .dasha-body .dasha-node[data-level="2"]');
       if(bhuktiNode){
         bhuktiNode.classList.add('open');
         bhuktiNode.querySelector(':scope > .dasha-head')?.setAttribute('aria-expanded','true');
@@ -2400,7 +2426,7 @@ function renderBirthTimePanchang(p,lang,fallbackDate='',fallbackTime=''){
       }):null;
     const horaHtml=`<span class="birth-hora-result">${e(horaNames[horaForBirth?.planetEn]||horaForBirth?.planetEn||'—')}</span>`;
     const splitDateTime=v=>{const m=String(v??'—').match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}:\d{2})/);return m?{date:`${m[3]}/${m[2]}/${m[1]}`,time:m[4]}:{date:String(v??'—'),time:''};};
-    const eventRangeHtml=o=>{const a=splitDateTime(o?.start),b=splitDateTime(o?.end);return `<small class="panchang-event-range"><span class="event-date">${e(a.date)}</span> <span class="event-time">${e(a.time)}</span> <strong class="event-to">to</strong> <span class="event-date">${e(b.date)}</span> <span class="event-time">${e(b.time)}</span></small>`;};
+    const eventRangeHtml=o=>{const a=splitDateTime(o?.start),b=splitDateTime(o?.end);return `<small class="panchang-event-range"><span class="event-date" style="color:#00BFFF!important;-webkit-text-fill-color:#00BFFF!important">${e(a.date)}</span> <span class="event-time" style="color:#FF1493!important;-webkit-text-fill-color:#FF1493!important">${e(a.time)}</span> <strong class="event-to">to</strong> <span class="event-date" style="color:#00BFFF!important;-webkit-text-fill-color:#00BFFF!important">${e(b.date)}</span> <span class="event-time" style="color:#FF1493!important;-webkit-text-fill-color:#FF1493!important">${e(b.time)}</span></small>`;};
 
     const ts=p?.tamilSolar||{};
     const tamilDate=(ts?.monthTa&&Number.isFinite(Number(ts?.day)))
@@ -2454,7 +2480,25 @@ function renderBirthTimePanchang(p,lang,fallbackDate='',fallbackTime=''){
       </div>
     </div>`;
 
-    return `${prelude}<div class="card birth-time-panchang" style="margin:0 0 18px"><h3>📅 ${ta?'பிறந்த பஞ்சாங்கம்':'Birth Panchang'}</h3><div class="small">${ta?'திருக்கணித பஞ்சாங்க கணிப்பு':'Thirukanitha Panchang calculation'}</div><div class="birth-panchang-grid"><div><b>${ta?'தமிழ் தேதி + ஆங்கில தேதி':'Tamil Date + Gregorian Date'}</b><span class="panchang-date-result">${e(text)}</span></div><div><b>${ta?'பிறந்த நேரம்':'Birth Time'}</b><span class="panchang-time-result">${e(tm)}</span></div><div><b>${ta?'வாரம்':'Vara'}</b><span>${f(p?.vara)}</span></div><div><b>${ta?'சூரிய ராசி':'Sun Sign'}</b><span>${f(p?.solarSign)}</span></div><div><b>${ta?'சந்திர ராசி':'Moon Sign'}</b><span>${f(p?.moonSign)}</span></div><div><b>${ta?'திதி':'Tithi'}</b><span>${f(p?.tithi?.name||p?.tithi?.group)} · ${f(p?.tithi?.half)}${eventRangeHtml(p?.tithi)}</span></div><div><b>${ta?'நட்சத்திரம்':'Nakshatra'}</b><span>${f(p?.nakshatra?.name)} · ${e(p?.nakshatra?.pada||'')}${eventRangeHtml(p?.nakshatra)}</span></div><div><b>${ta?'யோகம்':'Yoga'}</b><span>${f(p?.yoga?.name)}${eventRangeHtml(p?.yoga)}</span></div><div><b>${ta?'கரணம்':'Karana'}</b><span>${f(p?.karana?.name)}${eventRangeHtml(p?.karana)}</span></div><div><b>${ta?'சூரிய உதயம்':'Sunrise'}</b><span class="panchang-time-result">${e(p?.sunrise)}</span></div><div><b>${ta?'சூரிய அஸ்தமனம்':'Sunset'}</b><span class="panchang-time-result">${e(p?.sunset)}</span></div><div><b>${ta?'அயனாம்சம்':'Ayanamsa'}</b><span>${e(p?.ayanamsa)}</span></div><div><b>${ta?'ராகு காலம்':'Rahu Kalam'}</b><span class="panchang-time-result">${e(p?.rahuKalam)}</span></div><div><b>${ta?'எமகண்டம்':'Yamagandam'}</b><span class="panchang-time-result">${e(p?.yamagandam)}</span></div><div><b>${ta?'குளிகை':'Gulikai'}</b><span class="panchang-time-result">${e(p?.gulikai)}</span></div><div><b>${ta?'நல்ல நேரம்':'Nalla Neram'}</b><span class="nalla-neram-time">${Array.isArray(p?.nallaNeram)?p.nallaNeram.map(e).join(' · '):e(p?.nallaNeram)}</span></div></div><div class="hora-section birth-current-hora"><b>${ta?'ஹோரா :':'Hora :'}</b>${horaHtml}</div></div>`;
+    const birthRows=[
+      [ta?'தேதி':'Date',`<span class="panchang-date-result" style="color:#111!important;-webkit-text-fill-color:#111!important">${e(text)}</span>`],
+      [ta?'பிறந்த நேரம்':'Birth Time',`<span class="panchang-time-result" style="color:#00BFFF!important;-webkit-text-fill-color:#00BFFF!important">${e(tm)}</span>`],
+      [ta?'வாரம்':'Vara',f(p?.vara)], [ta?'சூரிய ராசி':'Sun Sign',f(p?.solarSign)],
+      [ta?'சந்திர ராசி':'Moon Sign',f(p?.moonSign)],
+      [ta?'திதி':'Tithi',`${f(p?.tithi?.name||p?.tithi?.group)} · ${f(p?.tithi?.half)}${eventRangeHtml(p?.tithi)}`],
+      [ta?'நட்சத்திரம்':'Nakshatra',`${f(p?.nakshatra?.name)} · ${e(p?.nakshatra?.pada||'')}${eventRangeHtml(p?.nakshatra)}`],
+      [ta?'யோகம்':'Yoga',`${f(p?.yoga?.name)}${eventRangeHtml(p?.yoga)}`],
+      [ta?'கரணம்':'Karana',`${f(p?.karana?.name)}${eventRangeHtml(p?.karana)}`],
+      [ta?'சூரிய உதயம்':'Sunrise',`<span class="panchang-time-result">${e(p?.sunrise)}</span>`],
+      [ta?'சூரிய அஸ்தமனம்':'Sunset',`<span class="panchang-time-result">${e(p?.sunset)}</span>`],
+      [ta?'அயனாம்சம்':'Ayanamsa',e(p?.ayanamsa)],
+      [ta?'ராகு காலம்':'Rahu Kalam',`<span class="panchang-time-result">${e(p?.rahuKalam)}</span>`],
+      [ta?'எமகண்டம்':'Yamagandam',`<span class="panchang-time-result">${e(p?.yamagandam)}</span>`],
+      [ta?'குளிகை':'Gulikai',`<span class="panchang-time-result">${e(p?.gulikai)}</span>`],
+      [ta?'நல்ல நேரம்':'Nalla Neram',`<span class="nalla-neram-time">${Array.isArray(p?.nallaNeram)?p.nallaNeram.map(e).join(' · '):e(p?.nallaNeram)}</span>`]
+    ];
+    const birthTable=`<div class="adv-table-wrap"><table class="data-table panchang-data-table"><thead><tr><th>${ta?'விவரம்':'Details'}</th><th>${ta?'முடிவு':'Result'}</th></tr></thead><tbody>${birthRows.map(r=>`<tr><td><b>${r[0]}</b></td><td>${r[1]}</td></tr>`).join('')}</tbody></table></div>`;
+    return `${prelude}<div class="card birth-time-panchang" style="margin:0 0 18px"><h3>📅 ${ta?'பிறந்த பஞ்சாங்கம்':'Birth Panchang'}</h3><div class="small">${ta?'திருக்கணித பஞ்சாங்க கணிப்பு':'Thirukanitha Panchang calculation'}</div>${birthTable}<div class="hora-section birth-current-hora"><b>${ta?'ஹோரா :':'Hora :'}</b>${horaHtml}</div></div>`;
   }
 
 function renderTransitPanchang(t,p,lang,rootId){
@@ -2467,26 +2511,42 @@ function renderTransitPanchang(t,p,lang,rootId){
     const karanamap={கிம்ஸ்துக்னம்:'Kimstughna',பவம்:'Bava',பாலவம்:'Balava',கௌலவம்:'Kaulava',தைத்திலம்:'Taitila',கரசை:'Garaja',வணிஜம்:'Vanija',விஷ்டி:'Vishti',சகுனி:'Shakuni',சதுஷ்பாதம்:'Chatushpada',நாகம்:'Naga'};
     const esc2=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const splitDateTime=v=>{const m=String(v??'—').match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}:\d{2})/);return m?{date:`${m[3]}/${m[2]}/${m[1]}`,time:m[4]}:{date:String(v??'—'),time:''};};
-    const eventRangeHtml=o=>{const a=splitDateTime(o?.start),b=splitDateTime(o?.end);return `<small class="panchang-event-range"><span class="event-date">${esc2(a.date)}</span> <span class="event-time">${esc2(a.time)}</span> <strong class="event-to">to</strong> <span class="event-date">${esc2(b.date)}</span> <span class="event-time">${esc2(b.time)}</span></small>`;};
+    const eventRangeHtml=o=>{const a=splitDateTime(o?.start),b=splitDateTime(o?.end);return `<small class="panchang-event-range"><span class="event-date" style="color:#00BFFF!important;-webkit-text-fill-color:#00BFFF!important">${esc2(a.date)}</span> <span class="event-time" style="color:#FF1493!important;-webkit-text-fill-color:#FF1493!important">${esc2(a.time)}</span> <strong class="event-to">to</strong> <span class="event-date" style="color:#00BFFF!important;-webkit-text-fill-color:#00BFFF!important">${esc2(b.date)}</span> <span class="event-time" style="color:#FF1493!important;-webkit-text-fill-color:#FF1493!important">${esc2(b.time)}</span></small>`;};
     const fmt=v=>{if(v&&typeof v==='object')v=v.name??v.label??v.value??v.rasi??v.planet??v.nakshatra??'';return ta?String(v??''):pmap[v]||rmap[v]||nmap[v]||varamap[v]||karanamap[v]||String(v??'')}; const horaNames=ta?{Sun:'சூரியன்',Moon:'சந்திரன்',Mars:'செவ்வாய்',Mercury:'புதன்',Jupiter:'குரு',Venus:'சுக்கிரன்',Saturn:'சனி'}:{Sun:'Sun',Moon:'Moon',Mars:'Mars',Mercury:'Mercury',Jupiter:'Jupiter',Venus:'Venus',Saturn:'Saturn'};
     const horaClass={Sun:'hora-sun',Moon:'hora-moon',Mars:'hora-mars',Mercury:'hora-mercury',Jupiter:'hora-jupiter',Venus:'hora-venus',Saturn:'hora-saturn'};
-    const horaBlock=(items,title)=>`<div class="hora-vertical-block"><div class="hora-band">${title}</div><div class="hora-table-wrap"><table class="data-table hora-table hora-vertical"><thead><tr><th>${ta?'எண்':'No.'}</th><th>${ta?'கிரகம்':'Planet'}</th><th>${ta?'நேரம்':'Time'}</th></tr></thead><tbody>${items.map(h=>`<tr><td>${esc2(h.number)}</td><td class="${horaClass[h.planetEn]||''}"><b>${esc2(horaNames[h.planetEn]||h.planetEn||'—')}</b></td><td class="hora-time">${esc2(h.range||'—')}</td></tr>`).join('')}</tbody></table></div></div>`;
+    const currentClock=String(t?.requested?.time||p?.requested?.time||'');
+    const clockMinutes=v=>{const m=String(v||'').match(/(\d{1,2}):(\d{2})/);return m?(Number(m[1])*60+Number(m[2])):null;};
+    // Current Hora must follow the visitor/device clock, not the horoscope/birth requested time.
+    const deviceNow=new Date();
+    const nowMinutes=(deviceNow.getHours()*60)+deviceNow.getMinutes();
+    const isCurrentHora=h=>{const parts=String(h?.range||'').split('-').map(x=>clockMinutes(x.trim()));if(parts.length!==2||parts.some(x=>x==null)||nowMinutes==null)return false;let [a,b]=parts,n=nowMinutes;if(b<=a)b+=1440;if(n<a)n+=1440;return n>=a&&n<b;};
+    // Hora indication: waxing Moon/Mercury/Jupiter/Venus = green; waning Moon/Sun/Mars/Saturn = red.
+    // The weekday's own Hora is shown brighter. Only the TIME result is coloured.
+    const phaseText=String(p?.tithi?.half||p?.tithi?.paksha||p?.tithi?.group||'').toLowerCase();
+    const waxingMoon=/shukla|waxing|வளர்பிறை|சுக்ல/.test(phaseText);
+    const waningMoon=/krishna|waning|தேய்பிறை|கிருஷ்ண/.test(phaseText);
+    const varaEn=varamap[p?.vara]||String(p?.vara||'');
+    const weekdayLord={Sunday:'Sun',Monday:'Moon',Tuesday:'Mars',Wednesday:'Mercury',Thursday:'Jupiter',Friday:'Venus',Saturday:'Saturn'}[varaEn]||'';
+    const horaNature=planet=>planet==='Moon'?(waxingMoon?'green':(waningMoon?'red':'')):(['Mercury','Jupiter','Venus'].includes(planet)?'green':(['Sun','Mars','Saturn'].includes(planet)?'red':''));
+    const horaTimeClass=h=>{const nature=horaNature(h?.planetEn);if(!nature)return '';const own=h?.planetEn===weekdayLord;const current=isCurrentHora(h);if(own)return nature==='green'?' smv-hora-bright-green':' smv-hora-bright-red';if(current)return nature==='green'?' smv-hora-current-green':' smv-hora-current-red';return '';};
+    const horaBlock=(items,title)=>`<div class="hora-vertical-block"><div class="hora-band">${title}</div><div class="hora-table-wrap"><table class="data-table hora-table hora-vertical"><thead><tr><th>${ta?'எண்':'No.'}</th><th>${ta?'கிரகம்':'Planet'}</th><th>${ta?'நேரம்':'Time'}</th></tr></thead><tbody>${items.map(h=>`<tr><td>${esc2(h.number)}</td><td class="${horaClass[h.planetEn]||''}"><b>${esc2(horaNames[h.planetEn]||h.planetEn||'—')}</b></td><td class="hora-time${horaTimeClass(h)}">${esc2(h.range||'—')}</td></tr>`).join('')}</tbody></table></div></div>`;
     const horaHtml=Array.isArray(p?.hora)&&p.hora.length?`${horaBlock(p.hora.slice(0,12),ta?'பகல் ஹோரா (1 - 12)':'Day Hora (1 - 12)')}${horaBlock(p.hora.slice(12,24),ta?'இரவு ஹோரா (13 - 24)':'Night Hora (13 - 24)')}`:'—';
     const planets=Array.isArray(t?.planets)?t.planets:[];
-    let h=`<div class="transit-panchang-grid"><div class="card panchang-card"><h3>📅 ${ta?'தினசரி பஞ்சாங்கம்':'Daily Panchang'}</h3><div class="small">${ta?'திருக்கணித பஞ்சாங்க கணிப்பு':'Thirukanitha Panchang calculation'}</div><div class="panchang-compact-grid">
-      <div><b>${ta?'தேதி':'Date'}</b><span>${esc2(p?.requested?.date||t?.requested?.date||'—')}</span></div>
-      <div><b>${ta?'தமிழ் மாதம் + ஆங்கில தேதி':'Tamil Month + English Date'}</b><span>${(()=>{const v=String(p?.requested?.date||t?.requested?.date||'');const m=v.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return '—';const y=+m[1],mi=+m[2]-1,d=+m[3];const en=['January','February','March','April','May','June','July','August','September','October','November','December'];const taM=['ஜனவரி','பிப்ரவரி','மார்ச்','ஏப்ரல்','மே','ஜூன்','ஜூலை','ஆகஸ்ட்','செப்டம்பர்','அக்டோபர்','நவம்பர்','டிசம்பர்'];const ts=p?.tamilSolar;if(ts?.monthTa&&Number.isFinite(Number(ts.day)))return ta?`${ts.monthTa} - ${ts.day}, ${taM[mi]} ${d}, ${y}`:`${ts.monthEn}-${ts.day}, ${en[mi]} ${d}, ${y}`;return `${ta?'தமிழ் தேதி':'Tamil date'}, ${ta?taM[mi]:en[mi]} ${d}, ${y}`;})()}</span></div>
-      <div><b>${ta?'சூரிய ராசி':'Sun Sign'}</b><span>${fmt(p?.solarSign)}</span></div>
-      <div><b>${ta?'சந்திர ராசி':'Moon Sign'}</b><span>${fmt(p?.moonSign)}</span></div>
-      <div><b>${ta?'வாரம்':'Vara'}</b><span>${fmt(p?.vara||'—')}</span></div>
-      <div><b>${ta?'திதி':'Tithi'}</b><span>${fmt(p?.tithi?.name||p?.tithi?.group||'')} · ${fmt(p?.tithi?.half||'')}${eventRangeHtml(p?.tithi)}</span></div>
-      <div><b>${ta?'நட்சத்திரம்':'Nakshatra'}</b><span>${fmt(p?.nakshatra?.name)} · ${esc2(p?.nakshatra?.pada||'')}${eventRangeHtml(p?.nakshatra)}</span></div>
-      <div><b>${ta?'யோகம்':'Yoga'}</b><span>${fmt(p?.yoga?.name||'—')}${eventRangeHtml(p?.yoga)}</span></div>
-      <div><b>${ta?'கரணம்':'Karana'}</b><span>${fmt(p?.karana?.name||'—')}${eventRangeHtml(p?.karana)}</span></div>
-      <div><b>${ta?'சூரிய உதயம்':'Sunrise'}</b><span class="panchang-time-result">${esc2(p?.sunrise||'—')}</span></div>
-      <div><b>${ta?'சூரிய அஸ்தமனம்':'Sunset'}</b><span class="panchang-time-result">${esc2(p?.sunset||'—')}</span></div>
-      <div><b>${ta?'அயனாம்சம்':'Ayanamsa'}</b><span>${esc2(p?.ayanamsa||'—')}</span></div><div><b>${ta?'ராகு காலம்':'Rahu Kalam'}</b><span class="panchang-time-result">${esc2(p?.rahuKalam||'—')}</span></div><div><b>${ta?'எமகண்டம்':'Yamagandam'}</b><span class="panchang-time-result">${esc2(p?.yamagandam||'—')}</span></div><div><b>${ta?'குளிகை':'Gulikai'}</b><span class="panchang-time-result">${esc2(p?.gulikai||'—')}</span></div><div><b>${ta?'நல்ல நேரம்':'Nalla Neram'}</b><span class="nalla-neram-time">${Array.isArray(p?.nallaNeram)?p.nallaNeram.map(esc2).join(' · '):esc2(p?.nallaNeram||'—')}</span></div></div></div></div>`;
-    h+=`<div class="card hora-card"><h3>🕐 ${ta?'ஹோரா':'Hora'}</h3><div class="hora-section">${horaHtml}</div></div>`;
+    const dailyTamilDate=(()=>{const v=String(p?.requested?.date||t?.requested?.date||'');const m=v.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return '—';const y=+m[1],mi=+m[2]-1,d=+m[3];const en=['January','February','March','April','May','June','July','August','September','October','November','December'];const taM=['ஜனவரி','பிப்ரவரி','மார்ச்','ஏப்ரல்','மே','ஜூன்','ஜூலை','ஆகஸ்ட்','செப்டம்பர்','அக்டோபர்','நவம்பர்','டிசம்பர்'];const ts=p?.tamilSolar;if(ts?.monthTa&&Number.isFinite(Number(ts.day)))return ta?`${ts.monthTa} - ${ts.day}, ${taM[mi]} ${d}, ${y}`:`${ts.monthEn}-${ts.day}, ${en[mi]} ${d}, ${y}`;return `${ta?'தமிழ் தேதி':'Tamil date'}, ${ta?taM[mi]:en[mi]} ${d}, ${y}`;})();
+    const dailyRows=[
+      [ta?'தேதி':'Date',dailyTamilDate],
+      [ta?'சூரிய ராசி':'Sun Sign',fmt(p?.solarSign)], [ta?'சந்திர ராசி':'Moon Sign',fmt(p?.moonSign)], [ta?'வாரம்':'Vara',fmt(p?.vara||'—')],
+      [ta?'திதி':'Tithi',`${fmt(p?.tithi?.name||p?.tithi?.group||'')} · ${fmt(p?.tithi?.half||'')}${eventRangeHtml(p?.tithi)}`],
+      [ta?'நட்சத்திரம்':'Nakshatra',`${fmt(p?.nakshatra?.name)} · ${esc2(p?.nakshatra?.pada||'')}${eventRangeHtml(p?.nakshatra)}`],
+      [ta?'யோகம்':'Yoga',`${fmt(p?.yoga?.name||'—')}${eventRangeHtml(p?.yoga)}`], [ta?'கரணம்':'Karana',`${fmt(p?.karana?.name||'—')}${eventRangeHtml(p?.karana)}`],
+      [ta?'சூரிய உதயம்':'Sunrise',`<span class="panchang-time-result">${esc2(p?.sunrise||'—')}</span>`], [ta?'சூரிய அஸ்தமனம்':'Sunset',`<span class="panchang-time-result">${esc2(p?.sunset||'—')}</span>`],
+      [ta?'அயனாம்சம்':'Ayanamsa',esc2(p?.ayanamsa||'—')], [ta?'ராகு காலம்':'Rahu Kalam',`<span class="panchang-time-result">${esc2(p?.rahuKalam||'—')}</span>`],
+      [ta?'எமகண்டம்':'Yamagandam',`<span class="panchang-time-result">${esc2(p?.yamagandam||'—')}</span>`], [ta?'குளிகை':'Gulikai',`<span class="panchang-time-result">${esc2(p?.gulikai||'—')}</span>`],
+      [ta?'நல்ல நேரம்':'Nalla Neram',`<span class="nalla-neram-time">${Array.isArray(p?.nallaNeram)?p.nallaNeram.map(esc2).join(' · '):esc2(p?.nallaNeram||'—')}</span>`]
+    ];
+    const dailyTable=`<div class="adv-table-wrap"><table class="data-table panchang-data-table"><thead><tr><th>${ta?'விவரம்':'Details'}</th><th>${ta?'முடிவு':'Result'}</th></tr></thead><tbody>${dailyRows.map(r=>`<tr><td><b>${r[0]}</b></td><td>${r[1]}</td></tr>`).join('')}</tbody></table></div>`;
+    let h=`<div class="transit-panchang-grid"><div class="card panchang-card"><h3>📅 ${ta?'தினசரி பஞ்சாங்கம்':'Daily Panchang'}</h3><div class="small">${ta?'திருக்கணித பஞ்சாங்க கணிப்பு':'Thirukanitha Panchang calculation'}</div>${dailyTable}</div></div>`;
+    h+=`<div class="card hora-card"><h3>🕐 ${ta?'தினசரி ஹோரா':'Daily Hora'}</h3><div class="hora-section">${horaHtml}</div></div>`;
     const signIndex=v=>{const en=['Aries','Taurus','Gemini','Cancer','Leo','Virgo','Libra','Scorpio','Sagittarius','Capricorn','Aquarius','Pisces'];const taR=['மேஷம்','ரிஷபம்','மிதுனம்','கடகம்','சிம்மம்','கன்னி','துலாம்','விருச்சிகம்','தனுசு','மகரம்','கும்பம்','மீனம்'];let i=en.indexOf(String(v));return i>=0?i:taR.indexOf(String(v));};
     const short={Sun:'Su',Moon:'Mo',Mars:'Ma',Mercury:'Me',Jupiter:'Ju',Venus:'Ve',Saturn:'Sa',Rahu:'Ra',Ketu:'Ke','சூரியன்':'சூ','சந்திரன்':'சந்','செவ்வாய்':'செ','புதன்':'பு','குரு':'கு','சுக்கிரன்':'சு','சனி':'ச','ராகு':'ரா','கேது':'கே'};
     const bySign=Array.from({length:12},()=>[]); planets.forEach(x=>{const i=signIndex(x.rasi);if(i>=0)bySign[i].push(x);});
@@ -2502,6 +2562,12 @@ function renderTransitPanchang(t,p,lang,rootId){
     // response can arrive before Transit; appending both versions created
     // duplicate Daily Panchang / Planetary Transit cards on mobile.
     box.innerHTML=h;
+    // Keep Daily Panchang + Daily Hora in their original slot, but place
+    // Transit Chart + Transit Planetary Positions immediately before Vimsottari Dasa.
+    const reportHost=box.closest('.horoscope-result')||box.parentElement;
+    const transitTarget=reportHost?.querySelector?.('.transit-before-vimsottari');
+    const transitCard=box.querySelector('.transit-card');
+    if(transitTarget&&transitCard) transitTarget.replaceChildren(transitCard);
   }
   // V2.1 FIX: expose advanced loader because the English horoscope module runs in a separate IIFE.
  /* ============================================================
