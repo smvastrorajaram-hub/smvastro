@@ -1761,6 +1761,7 @@ const userStatus=String(
     </div>`;
   }
 
+
   $('astroLogoutPending')?.addEventListener(
     'click',
     ()=>logoutToHome()
@@ -2411,6 +2412,7 @@ ${ad.status === 'rejected' && ad.rejectionReason
   dashboardReadyUid=loadUid; dashboardReadyAt=Date.now(); smvDashboardDirty=false;
   dashboardReadyRole=role; smvWatchQuestions(role);
   smvLiveStatus('Updated just now');
+  const refresh=$('smvRefreshDashboard');if(refresh)refresh.textContent='Refresh';
   touchSession();
   armIdleTimer();
  }catch(e){
@@ -3294,6 +3296,7 @@ $('adminReviews')
   });
   $('adminQuestions').innerHTML=questions.empty?'<div class="empty">No questions yet.</div>':questions.docs.slice(-50).reverse().map(d=>{const q=d.data();return `<div style="padding:10px;border-bottom:1px solid #eee"><b>${escapeHtml(q.question||'Question')}</b><div class="small">Status: ${escapeHtml(q.status||'')} · Customer: ${escapeHtml(q.customerId||'')} · Price paid: ₹${Number(q.amount||0).toFixed(2)} · Astrologer share: ₹${Number(q.astrologerCommissionAmount||0).toFixed(2)} · Admin share: ₹${Number(q.adminCommissionAmount||0).toFixed(2)} · ${escapeHtml(q.astrologerName||'Unclaimed')}</div><div class="small"><b>Date & Time:</b> ${escapeHtml(smvDateTime(q.updatedAt||q.answerApprovedAt||q.adminQuestionApprovedAt||q.createdAt))}</div></div>`}).join('');
   smvLiveStatus('Updated just now');
+  const refresh=$('smvRefreshAdmin');if(refresh)refresh.textContent='Refresh';
  }catch(e){
  const message='<div class="empty error">'+escapeHtml(e.message||String(e))+'</div>';
  if($('adminDataLoadMsg'))$('adminDataLoadMsg').innerHTML=message;
@@ -3346,7 +3349,12 @@ if(auth){ onAuthStateChanged(auth,async user=>{
        return;
      }
      if(adminUser){
-       hide('dashLink'); show('adminLink'); smvShowRoleNav(); smvInternalView="admin";
+       hide('dashLink'); show('adminLink');
+       hidePrimarySections('admin');
+       show('admin');
+       smvShowRoleNav();
+       smvEnterInternalView('admin',true);
+       go('admin');
        try{history.replaceState({smvView:"admin"},"","#admin");}catch(_e){}
        loadAdminPanel().catch(err=>console.warn('Admin restore failed:',err));
      }
