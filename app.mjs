@@ -1770,120 +1770,51 @@ const userStatus=String(
   const isRejected=['rejected','declined','admin_rejected'].includes(astroStatus);
 
   if(isRejected){
-    const rejectionReason=
-      ad.rejectionReason||
-      data.rejectionReason||
-      'Your astrologer application was rejected by Admin.';
-
+    const rejectionReason=ad.rejectionReason||data.rejectionReason||'Your astrologer application was rejected by Admin.';
     if(!active())return;
-   if(background&&smvEditing("dashboard")){smvLiveQueue?.request();return;}
-   box.innerHTML=`<div class="card" style="max-width:900px;margin:0 auto">
+    if(background&&smvEditing("dashboard")){smvLiveQueue?.request();return;}
+    box.innerHTML=`<div class="card" style="max-width:900px;margin:0 auto">
       <h2>Astrologer Dashboard</h2>
-
       <div class="card" style="border:2px solid #c62828;background:#fff5f5">
-        <h3 style="margin-top:0;color:#b71c1c">
-          ❌ Astrologer Application Rejected
-        </h3>
-
+        <h3 style="margin-top:0;color:#b71c1c">❌ Astrologer Application Rejected</h3>
         <p>Your astrologer application has been rejected by Admin.</p>
-
         ${astroId?`<p><b>Astrologer ID:</b> ${escapeHtml(astroId)}</p>`:''}
-
         <p><b>Application Status:</b> Rejected</p>
-
-        <p>
-          <b>Admin Reason:</b>
-          ${escapeHtml(rejectionReason)}
-        </p>
-
-        <p class="small">
-          Your astrologer dashboard features are unavailable while the application is rejected.
-        </p>
+        <p><b>Admin Reason:</b> ${escapeHtml(rejectionReason)}</p>
+        <p class="small">Your astrologer dashboard features are unavailable while the application is rejected.</p>
       </div>
-
-      <div id="astroQualificationTestBox"></div>
-      <div class="action-row">
-        <button class="btn gray" id="astroRefreshApproval">
-          REFRESH STATUS
-        </button>
-
-        <button class="btn" id="astroLogoutPending">
-          LOGOUT
-        </button>
-      </div>
+      <div class="action-row"><button class="btn gray" id="astroRefreshApproval">REFRESH STATUS</button><button class="btn" id="astroLogoutPending">LOGOUT</button></div>
     </div>`;
   }else{
+    // Resolve qualification mode BEFORE writing the pending dashboard DOM.
+    // This prevents Pending -> Test and Test -> Test repaint flashes.
+    let qc=null;
+    try{qc=await renderApi('/astrologer/qualification-config',{method:'GET'});}catch(e){console.warn('Astrologer qualification config unavailable:',e);}
     if(!active())return;
-   if(background&&smvEditing("dashboard")){smvLiveQueue?.request();return;}
-   box.innerHTML=`<div class="card" style="max-width:900px;margin:0 auto">
-      <h2>Astrologer Dashboard</h2>
+    if(background&&smvEditing("dashboard")){smvLiveQueue?.request();return;}
 
-      <div class="card" id="astroManualApprovalWaiting" style="border:2px solid var(--gold);background:#fffaf0">
-        <h3 style="margin-top:0">
-          ⏳ Waiting for Admin Approval
-        </h3>
-
-        <p>
-          Your astrologer account and professional profile have been registered successfully.
-        </p>
-
+    let pendingContent='';
+    if(qc?.enabled&&astroStatus==='pending'){
+      const maxScore=Number(qc.maxScore||25),hasAttempt=qc.quizScore!=null,score=hasAttempt?String(qc.quizScore)+' / '+maxScore:'Not attempted';
+      const failed=hasAttempt&&(String(qc.quizStatus||'').toLowerCase()==='failed'||Number(qc.quizScore)<Number(qc.passMark));
+      const title=failed?'Qualification Test — Not Passed':maxScore+'-Question Astrology Qualification Test';
+      const actionText=failed?'RETAKE TEST':'OPEN GOOGLE FORM TEST';
+      const result=failed?`<p class="error"><b>Test not passed.</b> Your score is ${escapeHtml(String(qc.quizScore))}/${escapeHtml(String(maxScore))}. Required pass mark: ${escapeHtml(String(qc.passMark))}/${escapeHtml(String(maxScore))}. You can retake the test.</p>`:'';
+      pendingContent=`<div class="card" style="margin-top:14px"><h3>${escapeHtml(title)}</h3><p><b>Current Score:</b> ${escapeHtml(score)} · <b>Pass Mark:</b> ${escapeHtml(String(qc.passMark))}/${escapeHtml(String(maxScore))}</p>${result}<p class="small">Use the same registered email address in the Google Form. A verified passing result will auto approve your account.</p>${qc.formUrl?`<a class="btn" href="${escapeHtml(qc.formUrl)}" target="_blank" rel="noopener noreferrer">${actionText}</a>`:'<div class="small">Google Form link is not configured yet.</div>'}</div>`;
+    }else{
+      pendingContent=`<div class="card" style="border:2px solid var(--gold);background:#fffaf0">
+        <h3 style="margin-top:0">⏳ Waiting for Admin Approval</h3>
+        <p>Your astrologer account and professional profile have been registered successfully.</p>
         ${astroId?`<p><b>Astrologer ID:</b> ${escapeHtml(astroId)}</p>`:''}
-
-        <p>
-          <b>Application Status:</b>
-          Pending Admin Approval
-        </p>
-
-        <p class="small">
-          You can login and view this status now.
-          Customer questions, answering, earnings and withdrawals
-          will become available after Admin approval.
-        </p>
-      </div>
-
-      <div id="astroQualificationTestBox"></div>
-
-      <div class="action-row">
-        <button class="btn gray" id="astroRefreshApproval">
-          REFRESH STATUS
-        </button>
-
-        <button class="btn" id="astroLogoutPending">
-          LOGOUT
-        </button>
-      </div>
-    </div>`;
+        <p><b>Application Status:</b> Pending Admin Approval</p>
+        <p class="small">You can login and view this status now. Customer questions, answering, earnings and withdrawals will become available after Admin approval.</p>
+      </div>`;
+    }
+    box.innerHTML=`<div class="card" style="max-width:900px;margin:0 auto"><h2>Astrologer Dashboard</h2>${pendingContent}<div class="action-row"><button class="btn gray" id="astroRefreshApproval">REFRESH STATUS</button><button class="btn" id="astroLogoutPending">LOGOUT</button></div></div>`;
   }
 
-  try{
-    const qc=await renderApi('/astrologer/qualification-config',{method:'GET'});
-    const qb=$('astroQualificationTestBox');
-    const manualWaiting=$('astroManualApprovalWaiting');
-    if(qc?.enabled&&astroStatus==='pending'){
-      if(manualWaiting)manualWaiting.style.display='none';
-      if(qb){
-        const maxScore=Number(qc.maxScore||25),hasAttempt=qc.quizScore!=null,score=hasAttempt?String(qc.quizScore)+' / '+maxScore:'Not attempted';
-        const failed=hasAttempt&&(String(qc.quizStatus||'').toLowerCase()==='failed'||Number(qc.quizScore)<Number(qc.passMark));
-        const title=failed?'Qualification Test — Not Passed':maxScore+'-Question Astrology Qualification Test';
-        const actionText=failed?'RETAKE TEST':'OPEN GOOGLE FORM TEST';
-        const result=failed?`<p class="error"><b>Test not passed.</b> Your score is ${escapeHtml(String(qc.quizScore))}/${escapeHtml(String(maxScore))}. Required pass mark: ${escapeHtml(String(qc.passMark))}/${escapeHtml(String(maxScore))}. You can retake the test.</p>`:'';
-        qb.innerHTML=`<div class="card" style="margin-top:14px"><h3>${escapeHtml(title)}</h3><p><b>Current Score:</b> ${escapeHtml(score)} · <b>Pass Mark:</b> ${escapeHtml(String(qc.passMark))}/${escapeHtml(String(maxScore))}</p>${result}<p class="small">Use the same registered email address in the Google Form. A verified passing result will auto approve your account.</p>${qc.formUrl?`<a class="btn" href="${escapeHtml(qc.formUrl)}" target="_blank" rel="noopener noreferrer">${actionText}</a>`:'<div class="small">Google Form link is not configured yet.</div>'}</div>`;
-      }
-    }else{
-      if(manualWaiting)manualWaiting.style.display='';
-      if(qb)qb.innerHTML='';
-    }
-  }catch(e){console.warn('Astrologer qualification config unavailable:',e);}
-  $('astroRefreshApproval')?.addEventListener(
-    'click',
-    ()=>loadDashboard()
-  );
-
-  $('astroLogoutPending')?.addEventListener(
-    'click',
-    ()=>logoutToHome()
-  );
-
+  $('astroRefreshApproval')?.addEventListener('click',()=>loadDashboard('astrologer',true));
+  $('astroLogoutPending')?.addEventListener('click',()=>logoutToHome());
   dashboardReadyUid=loadUid;dashboardReadyRole=role;dashboardReadyAt=Date.now();smvWatchQuestions(role);
   return;
 }

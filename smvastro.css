@@ -10273,3 +10273,77 @@ html body[data-smv-workspace="open"] #smv-dashboard-page{padding-top:12px!import
     margin:1px 0!important;
   }
 }
+
+
+/* CHECK STEP 6 — Private Consultation list.
+   Desktop keeps Step 6 sizing; mobile mirrors the approved compact Step-2 profile density. */
+#private-consultation .smv-private-consult-row{
+  display:block;
+  padding:12px 0;
+  border-bottom:1px solid #e5e5e5;
+}
+#private-consultation .smv-private-consult-head{
+  display:flex;
+  gap:10px;
+  align-items:center;
+}
+#private-consultation .smv-private-consult-photo{
+  width:54px;
+  height:54px;
+  border-radius:50%;
+  object-fit:cover;
+  flex:0 0 54px;
+}
+#private-consultation .smv-private-consult-meta h3{margin:0}
+#private-consultation .smv-private-consult-description{margin:7px 0}
+#private-consultation .smv-private-consult-select{margin-top:7px}
+
+@media (max-width:700px){
+  #private-consultation{padding-top:6px!important}
+  #private-consultation .wrap{padding-left:8px!important;padding-right:8px!important}
+  #private-consultation .section-title{margin-bottom:5px!important}
+  #private-consultation .section-title h2{
+    font-size:20px!important;
+    line-height:1.1!important;
+    margin:0 0 3px!important;
+  }
+  #private-consultation .section-title p{
+    font-size:11px!important;
+    line-height:1.25!important;
+    margin:0 0 6px!important;
+  }
+  #private-consultation .smv-private-consult-row{padding:7px 2px!important}
+  #private-consultation .smv-private-consult-head{gap:7px!important}
+  #private-consultation .smv-private-consult-photo{
+    width:44px!important;
+    height:44px!important;
+    flex:0 0 44px!important;
+  }
+  #private-consultation .smv-private-consult-meta h3{
+    font-size:15px!important;
+    line-height:1.05!important;
+    margin:0 0 2px!important;
+  }
+  #private-consultation .smv-private-consult-meta .small{
+    font-size:10px!important;
+    line-height:1.15!important;
+  }
+  #private-consultation .smv-private-consult-description{
+    font-size:11px!important;
+    line-height:1.3!important;
+    margin:4px 0!important;
+  }
+  #private-consultation .smv-private-consult-price{
+    font-size:12px!important;
+    line-height:1.2!important;
+  }
+  #private-consultation .smv-private-consult-select{
+    display:inline-block!important;
+    width:auto!important;
+    min-height:0!important;
+    margin:5px 0 0!important;
+    padding:4px 7px!important;
+    font-size:10px!important;
+    line-height:1.15!important;
+  }
+}

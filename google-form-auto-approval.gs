@@ -48,19 +48,14 @@ function onSmvQualificationSubmit(e){
   let score=0; items.forEach(r=>{const s=r.getScore();if(typeof s==='number')score+=s;});
   const all=response.getItemResponses();
   const email=String(all[0].getResponse()||'').trim().toLowerCase();
-  // Count only gradable quiz questions that actually have a score value.
-  // The Registered Email text item is not part of maxScore.
-  const maxScore=items.reduce((n,r)=>n+(typeof r.getScore()==='number'?1:0),0);
+  // Production: total only the actual gradable quiz item points.
+  // Registered Email is a non-gradable text item, so it is excluded automatically.
+  const maxScore=items.reduce((total,itemResponse)=>{
+    const item=itemResponse.getItem();
+    if(item.getType()!==FormApp.ItemType.MULTIPLE_CHOICE)return total;
+    return total+item.asMultipleChoiceItem().getPoints();
+  },0);
   const payload={email:email,score:score,maxScore:maxScore,responseId:response.getId(),submittedAt:new Date().toISOString()};
-  // Diagnostic log intentionally excludes WEBHOOK_SECRET.
-  console.log('SMV QUIZ PAYLOAD',JSON.stringify({
-    emailPresent:!!payload.email,
-    email:payload.email,
-    score:payload.score,
-    maxScore:payload.maxScore,
-    responseIdPresent:!!payload.responseId,
-    responseId:payload.responseId
-  }));
   const r=UrlFetchApp.fetch(BACKEND_WEBHOOK_URL,{method:'post',contentType:'application/json',headers:{'x-smv-quiz-secret':WEBHOOK_SECRET},payload:JSON.stringify(payload),muteHttpExceptions:true});
-  console.log('SMV QUIZ BACKEND RESPONSE',r.getResponseCode(),r.getContentText());
+  console.log(r.getResponseCode(),r.getContentText());
 }

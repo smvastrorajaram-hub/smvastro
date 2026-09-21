@@ -171,6 +171,34 @@ html.smv-desktop-site #dashboardContent .astro-dashboard-summary > .card:nth-chi
 }
 </style>
 
+
+<style id="smv-public-question-window-style">
+#smvPublicQuestionWindow{position:fixed;inset:0;z-index:2147483000;background:#fff;overflow-y:auto;overscroll-behavior:contain;padding:16px 12px 32px;box-sizing:border-box}
+#smvPublicQuestionWindow.hidden{display:none!important}
+#smvPublicQuestionWindow .smv-public-question-window-shell{width:min(920px,100%);margin:0 auto}
+#smvPublicQuestionWindow #ask-flow{display:block}
+@media(max-width:600px){#smvPublicQuestionWindow{padding:8px 8px 24px}#smvPublicQuestionWindow #ask-flow>.card{margin:0;padding:14px}}
+</style>
+<style id="smv-admin-dashboard-red-typography">
+/* Admin Dashboard visual parity — typography/accent only. No layout or functional selectors. */
+#admin > .card > h3,
+#admin > .card > h4,
+#admin > .card > div > h2,
+#admin > .card > div > h3,
+#admin > .card > div > h4,
+#admin #adminContentManager > h3,
+#admin #adminContentManager .card > h4,
+#admin #smvOpenWorkflowControl > h3,
+#admin #adminPrivateRefundMonitor > h3 {
+  color:#e60000 !important;
+  -webkit-text-fill-color:#e60000 !important;
+  font-weight:800 !important;
+  letter-spacing:.01em;
+}
+#admin > .card > div > h2 {
+  font-weight:900 !important;
+}
+</style>
 </head>
 <body class="smv-v12-theme">
 <div class="smv-master-top"><div class="smv-master-topin"><span>Guided by Ancient Wisdom   |   Empowering Your Future</span></div></div>
@@ -475,7 +503,8 @@ html.smv-desktop-site #dashboardContent .astro-dashboard-summary > .card:nth-chi
 </div>
 </section>
 <section class="hidden" id="astro-flow"></section>
-<section class="hidden" id="ask-flow" style="margin-top:30px">
+<div class="hidden" id="smvPublicQuestionWindow" role="dialog" aria-modal="true" aria-label="Ask Your Question"><div class="smv-public-question-window-shell">
+<section class="hidden" id="ask-flow" style="margin-top:0">
 <div class="card">
 <button class="btn gray" id="askNowBackBtn">← Back</button>
 <h2 id="askTitle" style="margin-top:18px">Ask Your Question</h2>
@@ -496,6 +525,7 @@ html.smv-desktop-site #dashboardContent .astro-dashboard-summary > .card:nth-chi
 <div class="card hidden" id="paymentSuccessPanel" style="margin-top:16px;border:2px solid #b8860b;background:#fffaf0"><h3 style="margin-top:0">Payment Successful ✓</h3><p>Your payment has been securely verified.</p><div class="small" id="paymentSuccessDetails" style="line-height:1.8"></div><button class="btn" id="continueAfterPayment" type="button">CONTINUE TO DASHBOARD</button></div>
 </div>
 </section>
+</div></div>
 <section class="card contact-section hidden" id="contact" style="max-width:900px;margin:30px auto;padding:28px 20px;">
 <h2>Contact Us</h2>
 <div class="smv-business-contact"><address><strong>SMV ASTRO SERVICES</strong><br/>1/54, Kamaraj Nagar,<br/>Chathiramanai, Perambalur - 621104, Tamil Nadu, India.</address><div class="smv26-channels"><a href="tel:+916381171084"><img alt="Phone" class="smv26-social-icon" height="28" src="assets/social/phone.svg" width="28"/><span>+91 6381171084</span></a><a href="https://wa.me/message/EPR2XEATFYREB1" rel="noopener noreferrer" target="_blank"><img alt="WhatsApp" class="smv26-social-icon" height="28" src="assets/social/whatsapp.svg" width="28"/><span>WhatsApp</span></a><a href="https://www.facebook.com/share/1ErDtsZR6i/" rel="noopener noreferrer" target="_blank"><img alt="Facebook" class="smv26-social-icon" height="28" src="assets/social/facebook.svg" width="28"/><span>Facebook</span></a><a href="https://youtube.com/@rajarammaduraiveeran?si=Yez_7W6c14hDl-d2" rel="noopener noreferrer" target="_blank"><img alt="YouTube" class="smv26-social-icon" height="28" src="assets/social/youtube.svg" width="28"/><span>YouTube</span></a><a href="https://www.instagram.com/smvastroproducts/" rel="noopener noreferrer" target="_blank"><img alt="Instagram" class="smv26-social-icon" height="28" src="assets/social/instagram.svg" width="28"/><span>Instagram</span></a></div></div>
