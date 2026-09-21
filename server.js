@@ -1647,13 +1647,14 @@ app.get("/admin-data", async (req, res) => {
   try {
     // Read each collection independently. One damaged/missing collection must
     // never prevent the Admin Dashboard itself from opening.
-    const [users, astrologers, questions, payments, privateConsultations, adminNotifications, commission, workflow, privateWorkflow] = await Promise.all([
+    const [users, astrologers, questions, payments, privateConsultations, adminNotifications, legacyNotifications, commission, workflow, privateWorkflow] = await Promise.all([
       readCollection("smv_users"),
       readCollection("smv_astrologers"),
       readCollection("smv_questions"),
       readCollection("smv_payments"),
       readCollection("smv_private_consultations"),
       readCollection("smv_admin_notifications"),
+      readCollection("smv_notifications"),
       db.collection("smv_settings").doc("commission").get().then(s=>s.exists?s.data():null).catch(()=>null),
       db.collection("smv_settings").doc("workflow").get().then(s=>s.exists?s.data():{allowWithoutAdminApproval:false}).catch(()=>({allowWithoutAdminApproval:false})),
       db.collection("smv_settings").doc("privateConsultationWorkflow").get().then(s=>s.exists?s.data():{allowWithoutAdminApproval:false,minimumAnswerWords:20}).catch(()=>({allowWithoutAdminApproval:false,minimumAnswerWords:20}))
@@ -1668,7 +1669,23 @@ app.get("/admin-data", async (req, res) => {
       astrologers: astrologers.items,
       questions: questions.items,
       privateConsultations: privateConsultations.items,
-      adminNotifications: adminNotifications.items,
+      adminNotifications: [
+        ...adminNotifications.items,
+        ...legacyNotifications.items.filter(n=>String(n.userId||"")===String(ADMIN_UID||"")),
+        ...privateConsultations.items.flatMap(c=>{
+          const id=String(c.consultationId||c.id||"");
+          const base={consultationId:id,source:"private_consultation_history",customerId:c.customerId||null,astrologerId:c.astrologerId||null};
+          const events=[];
+          if(c.paymentStatus==="paid")events.push({...base,id:"history-payment-"+id,type:"private_payment_received",title:"Private Consultation Payment Received",message:`${c.customerName||"Customer"} paid ₹${Number(c.chatPrice||c.amount||0).toFixed(2)} for ${c.astrologerName||"the selected astrologer"}.`,createdAt:c.paidAt||c.updatedAt||c.createdAt});
+          if(c.questionApprovedAt||c.questionApprovalBypassed===true)events.push({...base,id:"history-question-approved-"+id,type:"private_question_approved",title:c.questionApprovalBypassed===true?"Private Question Auto Allowed":"Private Question Approved",message:`Private consultation question is visible to ${c.astrologerName||"the selected astrologer"}.`,createdAt:c.questionApprovedAt||c.paidAt||c.updatedAt});
+          if(c.answerSubmittedAt)events.push({...base,id:"history-answer-submitted-"+id,type:"private_answer_submitted",title:"Private Answer Submitted",message:`${c.astrologerName||"Selected astrologer"} submitted an answer for ${c.customerName||"Customer"}.`,createdAt:c.answerSubmittedAt});
+          if(c.answerRejectedAt)events.push({...base,id:"history-answer-rejected-"+id,type:"private_answer_rejected",title:"Private Answer Rejected — Revision Required",message:`Admin rejected the private answer.${c.answerRejectionReason?" Reason: "+c.answerRejectionReason:""}`,createdAt:c.answerRejectedAt});
+          if(c.answerApprovedAt)events.push({...base,id:"history-answer-approved-"+id,type:"private_answer_approved",title:"Private Answer Approved",message:`Private answer for ${c.customerName||"Customer"} was approved and released to the customer.`,createdAt:c.answerApprovedAt});
+          if(c.customerViewedAt)events.push({...base,id:"history-answer-viewed-"+id,type:"private_answer_viewed",title:"Private Answer Viewed by Customer",message:`${c.customerName||"Customer"} viewed the private consultation answer.`,createdAt:c.customerViewedAt});
+          if(c.refundId||c.status==="question_rejected")events.push({...base,id:"history-refund-"+id,type:"private_question_refund",title:"Private Question Rejected / Refund",message:`Private consultation was rejected. Refund status: ${c.refundStatus||"pending"}.`,createdAt:c.refundProcessedAt||c.refundCreatedAt||c.adminQuestionRejectedAt||c.updatedAt});
+          return events;
+        })
+      ],
       payments: payments.items,
       errors: { users: users.error || null, astrologers: astrologers.error || null, questions: questions.error || null, payments: payments.error || null }
     });
@@ -1718,6 +1735,8 @@ app.post("/admin/private-consultation/approve-question",express.json({limit:"10k
   if(c.status!=="pending_admin_approval")return res.status(409).json({error:"This private consultation is not waiting for question approval."});
   await ref.update({status:"approved_for_astrologer",allocationStatus:"selected_astrologer",questionApprovedAt:FieldValue.serverTimestamp(),questionApprovedBy:user.uid,commissionStatus:"pending_answer",updatedAt:FieldValue.serverTimestamp()});
   await db.collection("smv_notifications").add({userId:c.astrologerId,type:"private_question_assigned",title:"New Private Consultation",message:"Admin approved a paid private consultation selected for you.",consultationId:id,createdAt:FieldValue.serverTimestamp(),read:false});
+  await db.collection("smv_notifications").add({userId:c.customerId,type:"private_question_approved",title:"Private consultation question approved",message:`Your private consultation question has been approved and sent to ${c.astrologerName||"the selected astrologer"}.`,consultationId:id,createdAt:FieldValue.serverTimestamp(),read:false});
+  await addAdminPrivateNotification("private_question_approved","Private Question Approved",`Question from ${c.customerName||"Customer"} was approved for ${c.astrologerName||"the selected astrologer"}.`,id,{customerId:c.customerId,astrologerId:c.astrologerId});
   return res.json({success:true,consultationId:id});
 });
 async function privateConsultRefund(id,reason,user){
@@ -1737,6 +1756,8 @@ async function privateConsultRefund(id,reason,user){
   const rr=await response.json();if(!response.ok)throw Object.assign(new Error(rr?.error?.description||"Razorpay refund failed."),{httpStatus:502});
   const refs=bankReferences(rr,c);
   await ref.set({status:"question_rejected",allocationStatus:"rejected_by_admin",refundReason:reason,refundId:rr.id,refundStatus:String(rr.status||"pending"),refundAmount:Number(rr.amount||amount)/100,...refs,refundCreatedAt:FieldValue.serverTimestamp(),commissionStatus:"refund_pending",adminQuestionRejectedAt:FieldValue.serverTimestamp(),adminQuestionRejectedBy:user.uid,updatedAt:FieldValue.serverTimestamp()},{merge:true});
+  await db.collection("smv_notifications").add({userId:c.customerId,type:"private_question_rejected",title:"Private consultation question rejected",message:`Your private consultation question was rejected by Admin. Refund ₹${(Number(rr.amount||amount)/100).toFixed(2)} has been initiated. Reason: ${reason}`,consultationId:id,refundId:rr.id,createdAt:FieldValue.serverTimestamp(),read:false});
+  await addAdminPrivateNotification("private_question_rejected","Private Question Rejected / Refund",`Private question from ${c.customerName||"Customer"} was rejected. Refund ₹${(Number(rr.amount||amount)/100).toFixed(2)} initiated.`,id,{customerId:c.customerId,astrologerId:c.astrologerId,refundId:rr.id});
   return {success:true,consultationId:id,refundId:rr.id,refundStatus:rr.status,...refs};
 }
 app.post("/admin/private-consultation/reject-question",express.json({limit:"10kb"}),async(req,res)=>{
@@ -1764,6 +1785,8 @@ app.post("/astrologer/private-consultation/submit-answer",express.json({limit:"3
   const direct=wf.allowWithoutAdminApproval===true;
   await ref.update({answer,status:direct?"answered":"answer_pending_admin_approval",answerStatus:direct?"approved":"pending_admin_approval",answerSubmittedAt:FieldValue.serverTimestamp(),answerLastEditedAt:FieldValue.serverTimestamp(),commissionStatus:"pending_customer_view",updatedAt:FieldValue.serverTimestamp()});
   if(!direct)await addAdminPrivateNotification("private_answer_waiting","Private Answer Waiting for Approval",`${c.astrologerName||"Selected astrologer"} submitted an answer for ${c.customerName||"Customer"}.`,id,{customerId:c.customerId,astrologerId:c.astrologerId});
+  else await addAdminPrivateNotification("private_answer_auto_allowed","Private Answer Auto Allowed",`${c.astrologerName||"Selected astrologer"} submitted an answer for ${c.customerName||"Customer"}; Auto Allow released it directly.`,id,{customerId:c.customerId,astrologerId:c.astrologerId});
+  await db.collection("smv_notifications").add({userId:c.customerId,type:direct?"private_answer_ready":"private_answer_submitted",title:direct?"Private consultation answer ready":"Astrologer answer submitted",message:direct?`${c.astrologerName||"Your astrologer"} submitted your private consultation answer. It is ready to view.`:`${c.astrologerName||"Your astrologer"} submitted an answer. It is waiting for Admin approval.`,consultationId:id,createdAt:FieldValue.serverTimestamp(),read:false});
   return res.json({success:true,consultationId:id,status:direct?"answered":"answer_pending_admin_approval",minimumAnswerWords:minimumWords,wordCount});
 });
 app.post("/admin/private-consultation/approve-answer",express.json({limit:"10kb"}),async(req,res)=>{
@@ -1772,6 +1795,9 @@ app.post("/admin/private-consultation/approve-answer",express.json({limit:"10kb"
   const c=s.data()||{};if(!String(c.answer||"").trim())return res.status(409).json({error:"No answer is waiting."});
   if(c.status!=="answer_pending_admin_approval")return res.status(409).json({error:"This answer is not waiting for Admin approval."});
   await ref.update({status:"answered",answerStatus:"approved",answerApprovedAt:FieldValue.serverTimestamp(),answerApprovedBy:user.uid,commissionStatus:"pending_customer_view",updatedAt:FieldValue.serverTimestamp()});
+  await db.collection("smv_notifications").add({userId:c.customerId,type:"private_answer_ready",title:"Private consultation answer ready",message:`Admin approved the answer from ${c.astrologerName||"your selected astrologer"}. Your answer is ready to view.`,consultationId:id,createdAt:FieldValue.serverTimestamp(),read:false});
+  await db.collection("smv_notifications").add({userId:c.astrologerId,type:"private_answer_approved",title:"Private consultation answer approved",message:"Admin approved your private consultation answer. Earnings remain pending until the customer views the answer.",consultationId:id,createdAt:FieldValue.serverTimestamp(),read:false});
+  await addAdminPrivateNotification("private_answer_approved","Private Answer Approved",`Answer from ${c.astrologerName||"Selected astrologer"} for ${c.customerName||"Customer"} was approved.`,id,{customerId:c.customerId,astrologerId:c.astrologerId});
   return res.json({success:true,consultationId:id});
 });
 app.post("/admin/private-consultation/reject-answer",express.json({limit:"10kb"}),async(req,res)=>{
@@ -1781,6 +1807,8 @@ app.post("/admin/private-consultation/reject-answer",express.json({limit:"10kb"}
   const c=s.data()||{};if(!String(c.answer||"").trim())return res.status(409).json({error:"No answer is waiting."});
   await ref.update({status:"revision_required",answerStatus:"rejected",answerRejectionReason:reason,answerRejectedAt:FieldValue.serverTimestamp(),answerRejectedBy:user.uid,commissionStatus:"answer_rejected_no_credit",commissionCreditedAt:FieldValue.delete(),adminCommissionCreditedAt:FieldValue.delete(),updatedAt:FieldValue.serverTimestamp()});
   await db.collection("smv_notifications").add({userId:c.astrologerId,type:"private_answer_rejected",title:"Private consultation answer revision required",message:"Admin rejected your answer. No earning has been credited. Reason: "+reason,consultationId:id,createdAt:FieldValue.serverTimestamp(),read:false});
+  await db.collection("smv_notifications").add({userId:c.customerId,type:"private_answer_revision",title:"Private answer revision in progress",message:`Admin requested a revision from ${c.astrologerName||"your selected astrologer"}. The revised answer will be shown after approval.`,consultationId:id,createdAt:FieldValue.serverTimestamp(),read:false});
+  await addAdminPrivateNotification("private_answer_rejected","Private Answer Rejected — Revision Required",`Answer from ${c.astrologerName||"Selected astrologer"} was rejected for revision. Reason: ${reason}`,id,{customerId:c.customerId,astrologerId:c.astrologerId});
   return res.json({success:true,consultationId:id,status:"revision_required"});
 });
 
@@ -2314,6 +2342,7 @@ app.post("/customer/private-consultation/mark-viewed",express.json({limit:"10kb"
   if(!c.customerViewedAt){
     await ref.update({customerViewedAt:FieldValue.serverTimestamp(),customerViewStatus:"viewed",updatedAt:FieldValue.serverTimestamp()});
     await db.collection("smv_notifications").add({userId:c.astrologerId,type:"private_answer_viewed",title:"Private Answer Viewed",message:`${c.customerName||"Customer"} viewed your private consultation answer.`,consultationId:id,createdAt:FieldValue.serverTimestamp(),read:false});
+    await addAdminPrivateNotification("private_answer_viewed","Private Answer Viewed by Customer",`${c.customerName||"Customer"} viewed the answer from ${c.astrologerName||"the selected astrologer"}.`,id,{customerId:c.customerId,astrologerId:c.astrologerId});
   }
   return res.json({success:true,consultationId:id,viewed:true});
 });

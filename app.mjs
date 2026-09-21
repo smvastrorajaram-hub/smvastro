@@ -1297,6 +1297,13 @@ async function renderNotifications(targetId){
        shows the current approval state even when the old notification
        document is immutable or was created without questionId.
        ================================================================ */
+    let privateNotificationItems=[];
+    try{
+      const pr=await renderApi('/customer/private-consultations?_fresh='+Date.now(),{method:'GET'});
+      if(pr?.success&&Array.isArray(pr.consultations))privateNotificationItems=pr.consultations;
+    }catch(privateNoteErr){console.warn('Private notification reconciliation skipped:',privateNoteErr);}
+    const privateById=new Map(privateNotificationItems.map(c=>[String(c.id||c.consultationId||''),c]));
+
     let questionDocs=[];
     try{
       const qs=await withTimeout(getDocs(query(collection(db,'smv_questions'),where('customerId','==',currentUser.uid))),15000);
@@ -1324,6 +1331,38 @@ async function renderNotifications(targetId){
         const text=String(n.message||'');
         const match=text.match(/SMV-PAY-[A-Z0-9-]+/i);
         if(match) related=questionByPayment.get(match[0].trim())||null;
+      }
+
+      const privateId=String(n.consultationId||'').trim();
+      const pc=privateId?privateById.get(privateId):null;
+      if(pc){
+        const astro=pc.astrologerName||'the selected astrologer';
+        const st=String(pc.status||'');
+        if(st==='question_rejected'){
+          n.title='Private consultation question rejected';
+          n.message=`Your private consultation question was rejected by Admin. Refund status: ${pc.refundStatus||'pending'}.`;
+          n.type='private_question_rejected'; n.__displayTime=pc.refundProcessedAt||pc.refundCreatedAt||pc.updatedAt||n.createdAt;
+        }else if(st==='revision_required'){
+          n.title='Private answer revision in progress';
+          n.message=`Admin requested a revision from ${astro}. The revised answer will be shown after approval.`;
+          n.type='private_answer_revision'; n.__displayTime=pc.answerRejectedAt||pc.updatedAt||n.createdAt;
+        }else if(st==='answered'){
+          n.title='Private consultation answer ready';
+          n.message=pc.customerViewedAt?`You viewed the approved private consultation answer from ${astro}.`:`The approved private consultation answer from ${astro} is ready to view.`;
+          n.type='private_answer_ready'; n.__displayTime=pc.customerViewedAt||pc.answerApprovedAt||pc.answerSubmittedAt||pc.updatedAt||n.createdAt;
+        }else if(st==='answer_pending_admin_approval'){
+          n.title='Astrologer answer submitted';
+          n.message=`${astro} submitted your private consultation answer. It is waiting for Admin approval.`;
+          n.type='private_answer_submitted'; n.__displayTime=pc.answerSubmittedAt||pc.updatedAt||n.createdAt;
+        }else if(st==='approved_for_astrologer'){
+          n.title=pc.questionApprovalBypassed===true?'Private question auto allowed':'Private consultation question approved';
+          n.message=`Your private consultation question is now visible to ${astro}.`;
+          n.type='private_question_approved'; n.__displayTime=pc.questionApprovedAt||pc.paidAt||pc.updatedAt||n.createdAt;
+        }else if(st==='pending_admin_approval'){
+          n.title='Private consultation payment successful';
+          n.message=`Your private consultation with ${astro} is waiting for Admin approval.`;
+          n.type='private_consultation_payment'; n.__displayTime=pc.paidAt||pc.updatedAt||n.createdAt;
+        }
       }
 
       if(related){
@@ -2776,7 +2815,7 @@ function smvRenderPrivateConsultAdmin(data){
  const items=Array.isArray(data?.privateConsultations)?data.privateConsultations:[];
  const adminNotes=Array.isArray(data?.adminNotifications)?data.adminNotifications.slice():[];
  const adminNoteBox=$('adminPrivateNotifications');
- if(adminNoteBox){adminNotes.sort((a,b)=>{const ta=a.createdAt?.seconds||0,tb=b.createdAt?.seconds||0;return tb-ta;});adminNoteBox.innerHTML=adminNotes.length?adminNotes.slice(0,50).map(n=>`<div style="padding:10px 0;border-bottom:1px solid #eee"><b>${escapeHtml(n.title||'Private Consultation')}</b><div>${escapeHtml(n.message||'')}</div><div class="small">${escapeHtml(smvDateTime(n.createdAt))}</div></div>`).join(''):'<div class="empty">No Admin notifications.</div>';}
+ if(adminNoteBox){const seen=new Set(),unique=adminNotes.filter(n=>{const k=[n.type||'',n.consultationId||n.questionId||n.astrologerId||'',n.title||''].join('|');if(seen.has(k))return false;seen.add(k);return true;});const nt=n=>{const t=n?.createdAt;if(t?.seconds)return Number(t.seconds)*1000;if(typeof t==='string')return Date.parse(t)||0;if(t instanceof Date)return t.getTime();return 0;};unique.sort((a,b)=>nt(b)-nt(a));adminNoteBox.innerHTML=unique.length?unique.slice(0,100).map(n=>`<div style="padding:10px 0;border-bottom:1px solid #eee"><b>${escapeHtml(n.title||'Admin Event')}</b><div>${escapeHtml(n.message||'')}</div><div class="small">${escapeHtml(smvDateTime(n.createdAt))}</div></div>`).join(''):'<div class="empty">No Admin notifications.</div>';}
  const auto=data?.settings?.privateWorkflow?.allowWithoutAdminApproval===true;
  const privateMinWords=Math.max(1,Number(data?.settings?.privateWorkflow?.minimumAnswerWords||20));
  const wcInput=$('privateMinimumAnswerWords'),wcBtn=$('savePrivateMinimumAnswerWords'),wcMsg=$('privateMinimumAnswerWordsMsg');
