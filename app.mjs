@@ -359,6 +359,7 @@ async function openQuestionService(options={}){
     hideHomeSurface();
     ["dashboard","dashboardContent","admin","register-flow","astro-register-form","astro-flow","appointment","contact"].forEach(hide);
     show("ask-flow");
+    smvOpenPublicQuestionWindow();
     show("dashLink");
     hide("adminLink");
 
@@ -387,6 +388,17 @@ async function openQuestionService(options={}){
     // callbacks that fire later will see smvInternalView === "ask-flow" too.
     askNowTransitionLock=false;
   }
+}
+
+function smvOpenPublicQuestionWindow(){
+  const w=$("smvPublicQuestionWindow");
+  if(w){w.classList.remove("hidden");document.documentElement.style.overflow="hidden";document.body.style.overflow="hidden";w.scrollTop=0;}
+}
+function smvClosePublicQuestionWindow(){
+  const w=$("smvPublicQuestionWindow");
+  if(w)w.classList.add("hidden");
+  document.documentElement.style.overflow="";document.body.style.overflow="";
+  hide("ask-flow");
 }
 window.__smvOpenQuestionService=openQuestionService;
 function smvDateTime(value){ try { if(value==null || value==='') return '—'; let d=null; if(value instanceof Date) d=value; else if(typeof value?.toDate==='function') d=value.toDate(); else if(typeof value==='object' && value){ const sec=value.seconds ?? value._seconds; const ns=value.nanoseconds ?? value._nanoseconds ?? 0; if(sec!=null) d=new Date(Number(sec)*1000+Math.floor(Number(ns)/1e6)); else if(value.timestamp) return smvDateTime(value.timestamp); else if(value.date) return smvDateTime(value.date); else if(value.value) return smvDateTime(value.value); } if(!d) d=new Date(value); if(Number.isNaN(d.getTime())) return '—'; return d.toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'}); } catch(e){ return '—'; } }
@@ -538,7 +550,7 @@ $("askNowBackBtn")?.addEventListener("click",e=>{
   askNowTransitionLock=false;
   window.__SMV_ASK_NOW_INTENT=false;
   pendingAfterLogin=null;
-  hide("ask-flow");
+  smvClosePublicQuestionWindow();
   // Return through the existing role-aware Dashboard router.
   // It resolves Admin / Astrologer / Customer from the signed-in account
   // instead of forcing every ASK NOW Back action into Customer Dashboard.
@@ -1158,10 +1170,15 @@ $("submitQuestionBtn")?.addEventListener("click",async()=>{
       // the customer to press a second "Creating Payment" / Continue button.
       // Close the question window immediately after verification, then open the
       // existing Customer Dashboard and show its existing payment-success state.
-      try{ if(askFlow.parentElement!==$("dashboardContent")) $("dashboardContent")?.prepend(askFlow); }catch(_e){}
       try{ hide("paymentSuccessPanel"); }catch(_e){}
-      try{ window.__SMV_ASK_NOW_INTENT=false; show("dashboard"); show("dashboardContent"); await loadDashboard('customer',true); await showDashboardPaymentSuccess(); window.scrollTo(0,0); }
-      catch(dashErr){ console.error("Automatic customer dashboard transition failed:",dashErr); }
+      try{
+        window.__SMV_ASK_NOW_INTENT=false;
+        pendingAfterLogin=null;
+        smvClosePublicQuestionWindow();
+        await loadDashboard('customer',true);
+        await showDashboardPaymentSuccess();
+        window.scrollTo(0,0);
+      }catch(dashErr){ console.error("Automatic customer dashboard transition failed:",dashErr); }
       btn.disabled=false; btn.textContent="PAYMENT DONE ✓";
       return;
 
@@ -1271,7 +1288,7 @@ async function logoutToHome(reason=''){
   setTimeout(()=>{if(!auth?.currentUser && $('authBtn')) $('authBtn').textContent='Login';},1200);
   hide('dashboard'); hide('admin'); hide('dashLink'); hide('adminLink');
   setHeaderRoleLabel('');
-  hide('ask-flow'); hide('register-flow'); hide('astro-register-form'); hide('astro-flow'); hide('appointment'); hide('contact');
+  smvClosePublicQuestionWindow(); hide('register-flow'); hide('astro-register-form'); hide('astro-flow'); hide('appointment'); hide('contact');
   showHomeSurface();
   show('smv-content-hub');
   show('english-horoscope'); window.__smvContentVisible=false;
@@ -1784,6 +1801,7 @@ const userStatus=String(
         </p>
       </div>
 
+      <div id="astroQualificationTestBox"></div>
       <div class="action-row">
         <button class="btn gray" id="astroRefreshApproval">
           REFRESH STATUS
@@ -1800,7 +1818,7 @@ const userStatus=String(
    box.innerHTML=`<div class="card" style="max-width:900px;margin:0 auto">
       <h2>Astrologer Dashboard</h2>
 
-      <div class="card" style="border:2px solid var(--gold);background:#fffaf0">
+      <div class="card" id="astroManualApprovalWaiting" style="border:2px solid var(--gold);background:#fffaf0">
         <h3 style="margin-top:0">
           ⏳ Waiting for Admin Approval
         </h3>
@@ -1823,6 +1841,8 @@ const userStatus=String(
         </p>
       </div>
 
+      <div id="astroQualificationTestBox"></div>
+
       <div class="action-row">
         <button class="btn gray" id="astroRefreshApproval">
           REFRESH STATUS
@@ -1835,6 +1855,25 @@ const userStatus=String(
     </div>`;
   }
 
+  try{
+    const qc=await renderApi('/astrologer/qualification-config',{method:'GET'});
+    const qb=$('astroQualificationTestBox');
+    const manualWaiting=$('astroManualApprovalWaiting');
+    if(qc?.enabled&&astroStatus==='pending'){
+      if(manualWaiting)manualWaiting.style.display='none';
+      if(qb){
+        const maxScore=Number(qc.maxScore||25),hasAttempt=qc.quizScore!=null,score=hasAttempt?String(qc.quizScore)+' / '+maxScore:'Not attempted';
+        const failed=hasAttempt&&(String(qc.quizStatus||'').toLowerCase()==='failed'||Number(qc.quizScore)<Number(qc.passMark));
+        const title=failed?'Qualification Test — Not Passed':maxScore+'-Question Astrology Qualification Test';
+        const actionText=failed?'RETAKE TEST':'OPEN GOOGLE FORM TEST';
+        const result=failed?`<p class="error"><b>Test not passed.</b> Your score is ${escapeHtml(String(qc.quizScore))}/${escapeHtml(String(maxScore))}. Required pass mark: ${escapeHtml(String(qc.passMark))}/${escapeHtml(String(maxScore))}. You can retake the test.</p>`:'';
+        qb.innerHTML=`<div class="card" style="margin-top:14px"><h3>${escapeHtml(title)}</h3><p><b>Current Score:</b> ${escapeHtml(score)} · <b>Pass Mark:</b> ${escapeHtml(String(qc.passMark))}/${escapeHtml(String(maxScore))}</p>${result}<p class="small">Use the same registered email address in the Google Form. A verified passing result will auto approve your account.</p>${qc.formUrl?`<a class="btn" href="${escapeHtml(qc.formUrl)}" target="_blank" rel="noopener noreferrer">${actionText}</a>`:'<div class="small">Google Form link is not configured yet.</div>'}</div>`;
+      }
+    }else{
+      if(manualWaiting)manualWaiting.style.display='';
+      if(qb)qb.innerHTML='';
+    }
+  }catch(e){console.warn('Astrologer qualification config unavailable:',e);}
   $('astroRefreshApproval')?.addEventListener(
     'click',
     ()=>loadDashboard()
@@ -2919,6 +2958,35 @@ async function loadAdminPanelData(background=false){
   const customers=(adminData.customers||[]).length, pendingDocs=astros.docs.filter(d=>d.data().status==='pending');
   const userMap=new Map(users.docs.map(d=>[d.id,d.data()]));
   $('adminSummary').innerHTML=`<div class="stat">Customers <b>${customers}</b></div><div class="stat">Astrologers <b>${astros.size}</b></div><div class="stat">Pending <b>${pendingDocs.length}</b></div><div class="stat">Questions <b>${questions.size}</b></div>`;
+  let aqCard=$('astrologerAutoApprovalCard');
+  if(!aqCard){aqCard=document.createElement('div');aqCard.id='astrologerAutoApprovalCard';aqCard.className='card';$('adminSummary')?.insertAdjacentElement('afterend',aqCard);}
+  const aq=adminData.settings?.astrologerAutoApproval||{enabled:false,formUrl:'',passMark:20,defaultChatPrice:25,webhookSecret:''};
+  aqCard.innerHTML=`<h3>Astrologer Auto Approval — Google Form Qualification</h3><div class="grid"><label><b>Auto Approval</b><select id="astroAutoApprovalEnabled"><option value="false">OFF — Manual Admin Approval</option><option value="true">ON — Auto Approve Passed Test</option></select></label><label><b>Pass Mark / 25</b><input id="astroAutoPassMark" type="number" min="1" max="25" step="1"></label><label><b>Default Private Chat Price ₹</b><input id="astroAutoChatPrice" type="number" min="1" step="0.01"></label><label><b>Published Google Form URL</b><input id="astroAutoFormUrl" type="url" placeholder="https://docs.google.com/forms/..."></label></div><p class="small">When enabled: registered pending Astrologer → 25-question Google Form quiz → verified score reaches this backend → pass mark reached → account auto approved. When OFF, existing Admin manual approval continues unchanged.</p><div class="small"><b>Webhook Secret:</b> <code id="astroQuizWebhookSecret">${escapeHtml(aq.webhookSecret||'Not generated yet')}</code></div><div class="action-row"><button class="btn" id="saveAstroAutoApproval">SAVE AUTO APPROVAL</button><button class="btn gray" id="rotateAstroQuizSecret">ROTATE WEBHOOK SECRET</button></div><div class="small" id="astroAutoApprovalMsg"></div>`;
+  $('astroAutoApprovalEnabled').value=String(aq.enabled===true);$('astroAutoPassMark').value=Number(aq.passMark||20);$('astroAutoChatPrice').value=Number(aq.defaultChatPrice||25);$('astroAutoFormUrl').value=aq.formUrl||'';
+  const saveAQ=async rotate=>{const b=rotate?$('rotateAstroQuizSecret'):$('saveAstroAutoApproval');b.disabled=true;try{const r=await renderApi('/admin/astrologer-auto-approval/settings',{method:'POST',body:JSON.stringify({enabled:$('astroAutoApprovalEnabled').value==='true',passMark:Number($('astroAutoPassMark').value),defaultChatPrice:Number($('astroAutoChatPrice').value),formUrl:$('astroAutoFormUrl').value.trim(),rotateSecret:rotate})});$('astroQuizWebhookSecret').textContent=r.webhookSecret;$('astroAutoApprovalMsg').innerHTML='<span class="success">Astrologer Auto Approval settings saved.</span>';}catch(e){$('astroAutoApprovalMsg').innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';}finally{b.disabled=false;}};
+  $('saveAstroAutoApproval').onclick=()=>saveAQ(false);$('rotateAstroQuizSecret').onclick=()=>saveAQ(true);
+  let qm=$('astrologerQuizQuestionManager');
+  if(!qm){qm=document.createElement('div');qm.id='astrologerQuizQuestionManager';qm.className='card';aqCard.insertAdjacentElement('afterend',qm);}
+  const renderQuizManager=async()=>{
+    try{
+      const r=await renderApi('/admin/astrologer-quiz/questions',{method:'GET'}),qs=r.questions||[];
+      qm.innerHTML=`<h3>Astrologer Qualification Test — Question Manager</h3><p class="small">Edit Tamil + English question, four choices, correct answer, order and Enable/Disable. Only enabled questions are sent to Google Form. Pass Mark is controlled above.</p><div class="action-row"><button class="btn" id="quizLoadDefaults">LOAD DEFAULT 25 QUESTIONS</button><button class="btn" id="quizAddQuestion">ADD QUESTION</button><button class="btn gray" id="quizSyncHelp">GOOGLE FORM SYNC INFO</button></div><div id="quizManagerMsg" class="small"></div><div id="quizQuestionList"></div>`;
+      const list=$('quizQuestionList');
+      const editor=q=>`<div class="card" data-qcard="${escapeHtml(q.id||'new')}" style="margin:10px 0"><div class="grid"><label><b>Order</b><input data-f="order" type="number" min="1" value="${escapeHtml(String(q.order||qs.length+1))}"></label><label><b>Status</b><select data-f="enabled"><option value="true">Enabled</option><option value="false">Disabled</option></select></label></div><label><b>Tamil Question</b><textarea data-f="questionTa">${escapeHtml(q.questionTa||'')}</textarea></label><label><b>English Question</b><textarea data-f="questionEn">${escapeHtml(q.questionEn||'')}</textarea></label>${[0,1,2,3].map(i=>`<div class="grid"><label><b>Choice ${i+1} — Tamil</b><input data-ta="${i}" value="${escapeHtml(q.choicesTa?.[i]||'')}"></label><label><b>Choice ${i+1} — English</b><input data-en="${i}" value="${escapeHtml(q.choicesEn?.[i]||'')}"></label></div>`).join('')}<label><b>Correct Answer</b><select data-f="correctIndex">${[0,1,2,3].map(i=>`<option value="${i}">Choice ${i+1}</option>`).join('')}</select></label><div class="action-row"><button class="btn" data-qsave="${escapeHtml(q.id||'')}">SAVE</button>${q.id?`<button class="btn gray" data-qdelete="${escapeHtml(q.id)}">DELETE</button>`:''}</div></div>`;
+      list.innerHTML=qs.length?qs.map(editor).join(''):'<div class="empty">No saved questions yet. Use ADD QUESTION to create the Question Bank.</div>';
+      qs.forEach((q,i)=>{const c=list.children[i];c.querySelector('[data-f="enabled"]').value=String(q.enabled!==false);c.querySelector('[data-f="correctIndex"]').value=String(Number(q.correctIndex||0));});
+      const bind=()=>{
+        list.querySelectorAll('[data-qsave]').forEach(b=>b.onclick=async()=>{const c=b.closest('[data-qcard]'),payload={id:b.dataset.qsave||undefined,order:Number(c.querySelector('[data-f="order"]').value),enabled:c.querySelector('[data-f="enabled"]').value==='true',questionTa:c.querySelector('[data-f="questionTa"]').value.trim(),questionEn:c.querySelector('[data-f="questionEn"]').value.trim(),choicesTa:[...c.querySelectorAll('[data-ta]')].map(x=>x.value.trim()),choicesEn:[...c.querySelectorAll('[data-en]')].map(x=>x.value.trim()),correctIndex:Number(c.querySelector('[data-f="correctIndex"]').value)};b.disabled=true;try{await renderApi('/admin/astrologer-quiz/questions',{method:'POST',body:JSON.stringify(payload)});await renderQuizManager();}catch(e){$('quizManagerMsg').innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';b.disabled=false;}});
+        list.querySelectorAll('[data-qdelete]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this qualification question?'))return;await renderApi('/admin/astrologer-quiz/questions/delete',{method:'POST',body:JSON.stringify({id:b.dataset.qdelete})});await renderQuizManager();});
+      };bind();
+      $('quizLoadDefaults').onclick=async()=>{const b=$('quizLoadDefaults');b.disabled=true;try{const r=await renderApi('/admin/astrologer-quiz/load-defaults',{method:'POST',body:JSON.stringify({fillMissing:false})});$('quizManagerMsg').innerHTML='<span class="success">Default professional Vedic Astrology questions loaded: '+escapeHtml(String(r.created))+'/25.</span>';await renderQuizManager();}catch(e){$('quizManagerMsg').innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';b.disabled=false;}};
+      $('quizAddQuestion').onclick=()=>{list.insertAdjacentHTML('afterbegin',editor({id:'',order:qs.length+1,enabled:true,choicesTa:['','','',''],choicesEn:['','','',''],correctIndex:0}));const c=list.firstElementChild;c.querySelector('[data-f="enabled"]').value='true';c.querySelector('[data-f="correctIndex"]').value='0';bind();};
+      $('quizSyncHelp').onclick=()=>{$('quizManagerMsg').innerHTML='<span class="success">After editing questions, run syncSmvAstrologerQualificationForm() in the supplied Google Apps Script. It rebuilds the Form from the current enabled Question Bank.</span>';};
+    }catch(e){qm.innerHTML='<h3>Astrologer Qualification Test — Question Manager</h3><div class="error">'+escapeHtml(e.message||String(e))+'</div>';}
+  };
+  renderQuizManager();
+
+
   let settings={astroPercent:20,adminPercent:80}; try{const ss=adminRead(1);if(ss.exists())settings=ss.data();}catch(e){}
   let questionSettings={price:5}; try{const qps=adminRead(2);if(qps.exists())questionSettings=qps.data();}catch(e){}
   $('questionPrice').value=Number(questionSettings.price||5);

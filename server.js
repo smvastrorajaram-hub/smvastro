@@ -1714,7 +1714,35 @@ app.post("/webhooks/google-form/astrologer-qualification",express.json({limit:"2
     if(!cfg.webhookSecret||!secret||!signatureEqual(cfg.webhookSecret,secret))return res.status(401).json({error:"Invalid quiz webhook secret."});
     const email=String(req.body?.email||"").trim().toLowerCase(),score=Number(req.body?.score),maxScore=Math.round(Number(req.body?.maxScore||0)),responseId=String(req.body?.responseId||"").trim();
     const activeSnap=await db.collection("smv_astrologer_quiz_questions").where("enabled","==",true).get(),expectedMax=activeSnap.size;
-    if(!email||!Number.isFinite(score)||maxScore<1||maxScore!==expectedMax||score<0||score>maxScore||!responseId)return res.status(400).json({error:"Invalid Google Form result payload or stale form version."});
+    const validationIssues=[];
+    if(!email)validationIssues.push("email_missing");
+    if(!Number.isFinite(score))validationIssues.push("score_invalid");
+    if(maxScore<1)validationIssues.push("max_score_invalid");
+    if(maxScore!==expectedMax)validationIssues.push("max_score_mismatch");
+    if(Number.isFinite(score)&&score<0)validationIssues.push("score_below_zero");
+    if(Number.isFinite(score)&&maxScore>=1&&score>maxScore)validationIssues.push("score_above_max");
+    if(!responseId)validationIssues.push("response_id_missing");
+    if(validationIssues.length){
+      console.warn("SMV astrologer quiz payload rejected",{
+        issues:validationIssues,
+        emailPresent:!!email,
+        score:Number.isFinite(score)?score:null,
+        receivedMaxScore:maxScore,
+        expectedMaxScore:expectedMax,
+        responseIdPresent:!!responseId
+      });
+      return res.status(400).json({
+        error:"Invalid Google Form result payload or stale form version.",
+        diagnostic:{
+          issues:validationIssues,
+          emailPresent:!!email,
+          receivedScore:Number.isFinite(score)?score:null,
+          receivedMaxScore:maxScore,
+          expectedMaxScore:expectedMax,
+          responseIdPresent:!!responseId
+        }
+      });
+    }
     const resultRef=db.collection("smv_astrologer_quiz_results").doc(responseId.replace(/[^A-Za-z0-9_-]/g,"_").slice(0,180)),seen=await resultRef.get();
     if(seen.exists)return res.json({success:true,duplicate:true});
     const q=await db.collection("smv_users").where("email","==",email).limit(1).get();
