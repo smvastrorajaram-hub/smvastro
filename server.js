@@ -1655,7 +1655,7 @@ app.get("/admin-data", async (req, res) => {
       readCollection("smv_private_consultations"),
       db.collection("smv_settings").doc("commission").get().then(s=>s.exists?s.data():null).catch(()=>null),
       db.collection("smv_settings").doc("workflow").get().then(s=>s.exists?s.data():{allowWithoutAdminApproval:false}).catch(()=>({allowWithoutAdminApproval:false})),
-      db.collection("smv_settings").doc("privateConsultationWorkflow").get().then(s=>s.exists?s.data():{allowWithoutAdminApproval:false}).catch(()=>({allowWithoutAdminApproval:false}))
+      db.collection("smv_settings").doc("privateConsultationWorkflow").get().then(s=>s.exists?s.data():{allowWithoutAdminApproval:false,minimumAnswerWords:20}).catch(()=>({allowWithoutAdminApproval:false,minimumAnswerWords:20}))
     ]);
 
     const customers = users.items.filter(x => String(x.role || "").toLowerCase() === "customer");
@@ -1680,9 +1680,18 @@ app.get("/admin-data", async (req, res) => {
 async function getPrivateConsultWorkflow(){
   try{
     const s=await db.collection("smv_settings").doc("privateConsultationWorkflow").get();
-    return {allowWithoutAdminApproval:s.exists&&s.data()?.allowWithoutAdminApproval===true};
-  }catch(_e){return {allowWithoutAdminApproval:false};}
+    const d=s.exists?s.data()||{}:{};
+    return {allowWithoutAdminApproval:d.allowWithoutAdminApproval===true,minimumAnswerWords:Math.max(1,Math.min(10000,Number(d.minimumAnswerWords||20)))};
+  }catch(_e){return {allowWithoutAdminApproval:false,minimumAnswerWords:20};}
 }
+app.post("/admin/private-consultation/set-word-count",express.json({limit:"5kb"}),async(req,res)=>{
+  const user=await requireUser(req,res);if(!user)return;
+  if(!(await isAdminUser(user)))return res.status(403).json({error:"Admin access denied."});
+  const n=Math.round(Number(req.body?.minimumAnswerWords));
+  if(!Number.isFinite(n)||n<1||n>10000)return res.status(400).json({error:"Minimum answer words must be between 1 and 10000."});
+  await db.collection("smv_settings").doc("privateConsultationWorkflow").set({minimumAnswerWords:n,updatedAt:FieldValue.serverTimestamp(),updatedBy:user.uid},{merge:true});
+  return res.json({success:true,minimumAnswerWords:n});
+});
 app.post("/admin/private-consultation/set-workflow",express.json({limit:"5kb"}),async(req,res)=>{
   const user=await requireUser(req,res);if(!user)return;
   if(!(await isAdminUser(user)))return res.status(403).json({error:"Admin access denied."});
@@ -1730,23 +1739,27 @@ app.get("/astrologer/private-consultations",async(req,res)=>{
   const a=await db.collection("smv_astrologers").doc(user.uid).get();if(!a.exists||!["approved","active"].includes(String(a.data()?.status||"").toLowerCase()))return res.status(403).json({error:"Approved astrologer access required."});
   const snap=await db.collection("smv_private_consultations").where("astrologerId","==",user.uid).get();
   const items=snap.docs.map(d=>({id:d.id,...d.data()})).filter(c=>c.paymentStatus==="paid"&&!["pending_admin_approval","question_rejected"].includes(String(c.status||"")));
-  return res.json({success:true,consultations:items});
+  const privateWorkflow=await getPrivateConsultWorkflow();
+  return res.json({success:true,consultations:items,settings:{minimumAnswerWords:privateWorkflow.minimumAnswerWords,allowWithoutAdminApproval:privateWorkflow.allowWithoutAdminApproval}});
 });
 app.post("/astrologer/private-consultation/submit-answer",express.json({limit:"30kb"}),async(req,res)=>{
   const user=await requireUser(req,res);if(!user)return;
   const id=String(req.body?.consultationId||"").trim(),answer=String(req.body?.answer||"").trim();
-  if(!id||answer.split(/\s+/).filter(Boolean).length<20)return res.status(400).json({error:"Enter an answer of at least 20 words."});
   const ref=db.collection("smv_private_consultations").doc(id),s=await ref.get();if(!s.exists)return res.status(404).json({error:"Private consultation not found."});
   const c=s.data()||{};if(c.astrologerId!==user.uid)return res.status(403).json({error:"This private consultation is assigned to another astrologer."});
-  if(!["approved_for_astrologer","revision_required"].includes(String(c.status||"")))return res.status(409).json({error:"This consultation is not available for answering."});
-  const wf=await getPrivateConsultWorkflow(),direct=wf.allowWithoutAdminApproval===true;
-  await ref.update({answer,status:direct?"answered":"answer_pending_admin_approval",answerStatus:direct?"approved":"pending_admin_approval",answerSubmittedAt:FieldValue.serverTimestamp(),commissionStatus:"pending_customer_view",updatedAt:FieldValue.serverTimestamp()});
-  return res.json({success:true,consultationId:id,status:direct?"answered":"answer_pending_admin_approval"});
+  if(c.customerViewedAt)return res.status(409).json({error:"Customer has already viewed this answer. Editing is closed."});
+  if(!["approved_for_astrologer","revision_required","answer_pending_admin_approval","answered"].includes(String(c.status||"")))return res.status(409).json({error:"This consultation is not available for answering or editing."});
+  const wf=await getPrivateConsultWorkflow(),minimumWords=wf.minimumAnswerWords||20,wordCount=answer.split(/\s+/).filter(Boolean).length;
+  if(!id||wordCount<minimumWords)return res.status(400).json({error:`Enter an answer of at least ${minimumWords} words.`,minimumAnswerWords:minimumWords,wordCount});
+  const direct=wf.allowWithoutAdminApproval===true;
+  await ref.update({answer,status:direct?"answered":"answer_pending_admin_approval",answerStatus:direct?"approved":"pending_admin_approval",answerSubmittedAt:FieldValue.serverTimestamp(),answerLastEditedAt:FieldValue.serverTimestamp(),commissionStatus:"pending_customer_view",updatedAt:FieldValue.serverTimestamp()});
+  return res.json({success:true,consultationId:id,status:direct?"answered":"answer_pending_admin_approval",minimumAnswerWords:minimumWords,wordCount});
 });
 app.post("/admin/private-consultation/approve-answer",express.json({limit:"10kb"}),async(req,res)=>{
   const user=await requireUser(req,res);if(!user)return;if(!(await isAdminUser(user)))return res.status(403).json({error:"Admin access denied."});
   const id=String(req.body?.consultationId||"").trim(),ref=db.collection("smv_private_consultations").doc(id),s=await ref.get();if(!s.exists)return res.status(404).json({error:"Private consultation not found."});
   const c=s.data()||{};if(!String(c.answer||"").trim())return res.status(409).json({error:"No answer is waiting."});
+  if(c.status!=="answer_pending_admin_approval")return res.status(409).json({error:"This answer is not waiting for Admin approval."});
   await ref.update({status:"answered",answerStatus:"approved",answerApprovedAt:FieldValue.serverTimestamp(),answerApprovedBy:user.uid,commissionStatus:"pending_customer_view",updatedAt:FieldValue.serverTimestamp()});
   return res.json({success:true,consultationId:id});
 });

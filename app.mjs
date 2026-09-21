@@ -2228,11 +2228,28 @@ ${ad.status === 'rejected' && ad.rejectionReason
   try{
     const pr=await renderApi('/astrologer/private-consultations',{method:'GET'});
     const pcs=Array.isArray(pr?.consultations)?pr.consultations:[];
+    const privateMinWords=Math.max(1,Number(pr?.settings?.minimumAnswerWords||20));
+    const privateAuto=pr?.settings?.allowWithoutAdminApproval===true;
     let pcBox=$('astroPrivateConsultations');
     if(!pcBox){pcBox=document.createElement('div');pcBox.id='astroPrivateConsultations';pcBox.className='card';pcBox.style.marginTop='16px';box.appendChild(pcBox);}
     const actionable=pcs.filter(c=>['approved_for_astrologer','revision_required','answer_pending_admin_approval','answered'].includes(String(c.status||'')));
-    pcBox.innerHTML=`<h3>Private Consultations</h3><p class="small">Only customers who selected you are shown here.</p>${actionable.length?actionable.map(c=>`<div class="card" style="margin:10px 0"><div class="badge">${escapeHtml(String(c.status||'').replaceAll('_',' ').toUpperCase())}</div><p><b>Question:</b> ${escapeHtml(c.question||'')}</p><div class="small"><b>Customer:</b> ${escapeHtml(c.customerName||'')} · <b>Birth:</b> ${escapeHtml(c.birthDetails?.birthDate||'')} ${escapeHtml(c.birthDetails?.birthTime||'')} · ${escapeHtml(c.birthDetails?.birthPlace||'')}</div>${['approved_for_astrologer','revision_required'].includes(String(c.status||''))?`<textarea id="pcans_${c.id}" rows="5" placeholder="Write at least 20 words...">${escapeHtml(c.answer||'')}</textarea><button class="btn" data-pc-answer="${c.id}">${c.status==='revision_required'?'EDIT & RESUBMIT':'SUBMIT ANSWER'}</button>${c.answerRejectionReason?`<div class="error">Admin reason: ${escapeHtml(c.answerRejectionReason)}</div>`:''}`:`<p><b>Answer:</b> ${escapeHtml(c.answer||'')}</p>`}</div>`).join(''):'<div class="empty">No private consultations assigned to you.</div>'}`;
-    pcBox.querySelectorAll('[data-pc-answer]').forEach(b=>b.onclick=async()=>{const id=b.dataset.pcAnswer,answer=$('pcans_'+id)?.value.trim()||'';b.disabled=true;try{await renderApi('/astrologer/private-consultation/submit-answer',{method:'POST',body:JSON.stringify({consultationId:id,answer})});await loadDashboard('astrologer',true);}catch(e){alert(e.message||String(e));b.disabled=false;}});
+    const pcStatus=c=>{
+      if(c.customerViewedAt)return 'SUBMITTED / CUSTOMER VIEWED';
+      if(c.status==='revision_required')return 'REVISION REQUIRED';
+      if(c.status==='answer_pending_admin_approval')return 'WAITING FOR ADMIN APPROVAL';
+      if(c.status==='answered'&&String(c.answer||'').trim())return privateAuto?'ANSWER SUBMITTED — CUSTOMER NOT VIEWED':'ANSWER APPROVED — CUSTOMER NOT VIEWED';
+      return 'READY TO ANSWER';
+    };
+    pcBox.innerHTML=`<h3>Private Consultations</h3><p class="small">Only customers who selected you are shown here. Minimum answer: <b>${privateMinWords} words</b>.</p>${actionable.length?actionable.map(c=>{
+      const hasAnswer=!!String(c.answer||'').trim(),locked=!!c.customerViewedAt,editing=!hasAnswer||c.status==='revision_required';
+      return `<div class="card" style="margin:10px 0"><div class="badge">${escapeHtml(pcStatus(c))}</div><p><b>Question:</b> ${escapeHtml(c.question||'')}</p><div class="small"><b>Customer:</b> ${escapeHtml(c.customerName||'')} · <b>Birth:</b> ${escapeHtml(c.birthDetails?.birthDate||'')} ${escapeHtml(c.birthDetails?.birthTime||'')} · ${escapeHtml(c.birthDetails?.birthPlace||'')}</div>
+      <div id="pcview_${c.id}" ${editing&&!locked?'class="hidden"':''}>${hasAnswer?`<p><b>Answer:</b> ${escapeHtml(c.answer||'')}</p>`:''}</div>
+      <div id="pcedit_${c.id}" ${editing&&!locked?'':'class="hidden"'}><textarea id="pcans_${c.id}" rows="5" placeholder="Write at least ${privateMinWords} words...">${escapeHtml(c.answer||'')}</textarea><div class="small" id="pcwc_${c.id}">Minimum ${privateMinWords} words</div><button class="btn" data-pc-answer="${c.id}">${hasAnswer?'RESUBMIT ANSWER':'SUBMIT ANSWER'}</button></div>
+      ${hasAnswer&&!locked&&!editing?`<button class="btn gray" data-pc-edit="${c.id}">EDIT ANSWER</button>`:''}
+      ${c.answerRejectionReason&&c.status==='revision_required'?`<div class="error">Admin reason: ${escapeHtml(c.answerRejectionReason)}</div>`:''}</div>`;
+    }).join(''):'<div class="empty">No private consultations assigned to you.</div>'}`;
+    pcBox.querySelectorAll('[data-pc-edit]').forEach(b=>b.onclick=()=>{const id=b.dataset.pcEdit;$('pcview_'+id)?.classList.add('hidden');$('pcedit_'+id)?.classList.remove('hidden');b.classList.add('hidden');});
+    pcBox.querySelectorAll('[data-pc-answer]').forEach(b=>b.onclick=async()=>{const id=b.dataset.pcAnswer,answer=$('pcans_'+id)?.value.trim()||'',count=answer.split(/\s+/).filter(Boolean).length;if(count<privateMinWords){$('pcwc_'+id).innerHTML='<span class="error">Need at least '+privateMinWords+' words. Current: '+count+'</span>';return;}b.disabled=true;try{await renderApi('/astrologer/private-consultation/submit-answer',{method:'POST',body:JSON.stringify({consultationId:id,answer})});await loadDashboard('astrologer',true);}catch(e){alert(e.message||String(e));b.disabled=false;}});
   }catch(e){console.warn('Private consultation load skipped:',e);}
 
   if($('withdrawBtn')) $('withdrawBtn').onclick = async () => {
@@ -2747,6 +2764,10 @@ function smvRenderPrivateConsultAdmin(data){
  if(!host||!answers||!control)return;
  const items=Array.isArray(data?.privateConsultations)?data.privateConsultations:[];
  const auto=data?.settings?.privateWorkflow?.allowWithoutAdminApproval===true;
+ const privateMinWords=Math.max(1,Number(data?.settings?.privateWorkflow?.minimumAnswerWords||20));
+ const wcInput=$('privateMinimumAnswerWords'),wcBtn=$('savePrivateMinimumAnswerWords'),wcMsg=$('privateMinimumAnswerWordsMsg');
+ if(wcInput)wcInput.value=privateMinWords;
+ if(wcBtn)wcBtn.onclick=async()=>{const n=Math.round(Number(wcInput?.value));wcBtn.disabled=true;try{const r=await renderApi('/admin/private-consultation/set-word-count',{method:'POST',body:JSON.stringify({minimumAnswerWords:n})});if(wcMsg)wcMsg.innerHTML='<span class="success">Private Consultation minimum answer words saved: '+escapeHtml(String(r.minimumAnswerWords))+'</span>';await loadAdminPanel(true);}catch(e){if(wcMsg)wcMsg.innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';}finally{wcBtn.disabled=false;}};
  control.innerHTML=`<div class="action-row"><button class="btn ${auto?'':'gray'}" id="privateWorkflowToggle">${auto?'AUTO ALLOW ON':'ADMIN ALLOW ON'}</button><span class="small">${auto?'Paid questions go directly to the selected astrologer; submitted answers go directly to the customer.':'Admin must approve private questions and answers.'}</span></div><div id="privateWorkflowMsg" class="small"></div>`;
  $('privateWorkflowToggle').onclick=async()=>{const b=$('privateWorkflowToggle');b.disabled=true;try{await renderApi('/admin/private-consultation/set-workflow',{method:'POST',body:JSON.stringify({allowWithoutAdminApproval:!auto})});await loadAdminPanel();}catch(e){$('privateWorkflowMsg').innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';b.disabled=false;}};
  const pending=items.filter(c=>c.paymentStatus==='paid'&&c.status==='pending_admin_approval');
@@ -2796,6 +2817,7 @@ async function loadAdminPanelData(background=false){
   if(!currentUser || currentUser.uid!==adminLoadUid || currentUser.uid!==auth?.currentUser?.uid) return;
   renderAdminWorkflows({data:adminData,api:renderApi,refresh:smvRefreshWorkflowCards,lang:"en",escape:escapeHtml,date:smvDateTime});
   smvRenderOpenWorkflowControl(adminData);
+  smvRenderPrivateConsultAdmin(adminData);
   smvWatchAdminQuestions();
   const adminReadErrors=adminData.errors||{};
   const readErrorText=Object.entries(adminReadErrors).filter(([,v])=>v).map(([k,v])=>k+': '+v).join(' | ');
