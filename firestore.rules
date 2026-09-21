@@ -34,7 +34,7 @@ service cloud.firestore {
     match /smv_astrologers/{uid} {
       allow read: if resource.data.status == "approved" || (signedIn() && request.auth.uid == uid) || isAdmin();
       allow create: if signedIn() && request.auth.uid == uid && request.resource.data.status == "pending";
-      allow update: if isAdmin() || (signedIn() && request.auth.uid == uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["name","specialization","expertise","experience","about","bio","photoData"]));
+      allow update: if isAdmin() || (signedIn() && request.auth.uid == uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["name","specialization","expertise","experience","about","bio","photoData","profileDescriptionPending","profileDescriptionStatus","profileDescriptionSubmittedAt"]));
     }
     match /smv_payouts/{uid} {
       allow read: if isAdmin();

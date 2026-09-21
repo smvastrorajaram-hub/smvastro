@@ -10146,3 +10146,130 @@ html body[data-smv-workspace="open"] #smv-dashboard-page{padding-top:12px!import
 .smv-refresh {
   display: none !important;
 }
+
+/* STEP 2 — informational approved-astrologer directory only */
+#astrologer-directory{max-width:980px;margin:0 auto;padding:22px 0 36px}
+#astrologer-directory>h2{text-align:center;margin:14px 0 6px}
+.smv-astrologer-directory-intro{text-align:center;margin:0 auto 18px;max-width:720px}
+#astrologer-directory #astroCards{display:block!important;width:100%!important}
+#astrologer-directory .smv-astro-directory-row{display:block;width:100%;box-sizing:border-box;padding:18px 0;border:0;border-bottom:1px solid #e7dfd8;background:#fff}
+.smv-astro-directory-head{display:flex;align-items:center;gap:14px}
+.smv-astro-directory-head img{width:72px;height:72px;border-radius:50%;object-fit:cover;flex:0 0 72px}
+.smv-astro-directory-head h3{margin:0 0 5px;font-size:20px}
+.smv-astro-directory-head p{margin:3px 0}
+.smv-astro-description{margin:13px 0;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
+.smv-review-toggle{width:auto!important;margin:3px 0 0!important}
+.smv-inline-reviews{margin-top:12px}
+.smv-directory-review{padding:12px 0;border-top:1px solid #eee}
+.smv-directory-review p{margin:6px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:600px){
+ #astrologer-directory{padding:14px 4px 28px}
+ #astrologer-directory .smv-astro-directory-row{padding:16px 4px}
+ .smv-astro-directory-head img{width:60px;height:60px;flex-basis:60px}
+ .smv-astro-directory-head h3{font-size:18px}
+ .smv-astro-description{font-size:14px;line-height:1.6}
+ .smv-review-toggle{width:100%!important}
+}
+
+/* CHECK STEP 2 — actual rendered classes, mobile only */
+@media (max-width:700px){
+  #astrologer-directory{
+    padding:5px 8px 14px!important;
+  }
+  #astrologer-directory .home-rule{
+    margin:0 auto 2px!important;
+    transform:scale(.72)!important;
+    transform-origin:center top!important;
+  }
+  #astrologer-directory>h2{
+    font-size:20px!important;
+    line-height:1.1!important;
+    margin:-5px 0 3px!important;
+  }
+  #astrologer-directory .smv-astrologer-directory-intro{
+    font-size:11px!important;
+    line-height:1.25!important;
+    margin:0 auto 6px!important;
+  }
+  #astrologer-directory #astroCards .smv-astro-directory-row{
+    padding:7px 2px!important;
+  }
+  #astrologer-directory #astroCards .smv-astro-directory-head{
+    gap:7px!important;
+  }
+  #astrologer-directory #astroCards .smv-astro-directory-head img{
+    width:44px!important;
+    height:44px!important;
+    flex:0 0 44px!important;
+  }
+  #astrologer-directory #astroCards .smv-astro-directory-head h3{
+    font-size:15px!important;
+    line-height:1.1!important;
+    margin:0 0 1px!important;
+  }
+  #astrologer-directory #astroCards .smv-astro-directory-head p,
+  #astrologer-directory #astroCards .smv-astro-speciality,
+  #astrologer-directory #astroCards .small{
+    font-size:11px!important;
+    line-height:1.2!important;
+    margin:1px 0!important;
+  }
+  #astrologer-directory #astroCards .smv-astro-description{
+    font-size:11px!important;
+    line-height:1.3!important;
+    margin:5px 0!important;
+  }
+  #astrologer-directory #astroCards button.smv-review-toggle{
+    display:inline-block!important;
+    width:auto!important;
+    min-width:0!important;
+    min-height:0!important;
+    height:auto!important;
+    padding:0!important;
+    margin:2px 0 1px!important;
+    border:0!important;
+    outline:0!important;
+    border-radius:0!important;
+    background:transparent!important;
+    box-shadow:none!important;
+    color:#333!important;
+    font-size:11px!important;
+    line-height:1.25!important;
+    font-weight:800!important;
+    text-decoration:underline!important;
+  }
+  #astrologer-directory #astroCards .smv-inline-reviews{
+    margin-top:4px!important;
+    padding:0!important;
+    font-size:11px!important;
+    line-height:1.3!important;
+  }
+}
+
+/* CHECK STEP 2 — compact expanded Reviews & Ratings content on mobile */
+@media (max-width:700px){
+  #astrologer-directory #astroCards .smv-inline-reviews,
+  #astrologer-directory #astroCards .smv-inline-reviews *{
+    font-size:11px!important;
+    line-height:1.3!important;
+  }
+  #astrologer-directory #astroCards .smv-inline-reviews{
+    margin:4px 0 2px!important;
+    padding:0!important;
+  }
+  #astrologer-directory #astroCards .smv-inline-reviews .review-item,
+  #astrologer-directory #astroCards .smv-inline-reviews > div{
+    margin:0!important;
+    padding:5px 0!important;
+    min-height:0!important;
+  }
+  #astrologer-directory #astroCards .smv-inline-reviews p{
+    margin:2px 0!important;
+  }
+  #astrologer-directory #astroCards .smv-inline-reviews .stars,
+  #astrologer-directory #astroCards .smv-inline-reviews [class*="star"]{
+    font-size:14px!important;
+    line-height:1!important;
+    margin:1px 0!important;
+  }
+}

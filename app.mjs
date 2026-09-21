@@ -940,7 +940,7 @@ function loadAstroCards(){
  smvAstroListRequest=smvLoadAstroCards().finally(()=>smvAstroListRequest=null);return smvAstroListRequest;
 }
 async function smvLoadAstroCards(){
- const box=$("astroCards");if(!box)return;box.innerHTML='<div class="empty">Loading astrologers...</div>';
+ const box=$("astroCards");if(!box)return;box.innerHTML='<div class="empty">Loading approved astrologers...</div>';
  try{
   let items=[];
   try {
@@ -954,22 +954,39 @@ async function smvLoadAstroCards(){
     items=snap.docs.map(d=>({id:d.id,...(d.data()||{})}));
   }
   if(!items.length){box.innerHTML='<div class="empty">No approved astrologers available yet.</div>';return;}
-  box.innerHTML="";items.forEach(a=>{const card=document.createElement("div");card.className="card astro-public-card";card.style.marginTop="12px";card.innerHTML=`${a.photoData?`<img src="${escapeHtml(a.photoData)}" alt="Astrologer photo" style="width:72px;height:72px;border-radius:50%;object-fit:cover">`:''}<h3>${escapeHtml(a.name||"Astrologer")}</h3><p><b>${escapeHtml(a.expertise||a.specialization||"Astrology")}</b></p><p>⭐ ${escapeHtml(a.experience||"Experienced")} years experience</p><div class="action-row"><button class="btn gray" data-profile>PROFILE & REVIEWS</button></div>`;card.querySelector("[data-profile]").onclick=async()=>{
-  const btn=card.querySelector("[data-profile]");
-  if(btn) { btn.disabled=true; btn.textContent='PROFILE LOADING...'; }
-  try{
-    let fn=window.__smvOpenPublicAstrologerProfile;
-    for(let i=0;!fn&&i<25;i++){ await new Promise(r=>setTimeout(r,120)); fn=window.__smvOpenPublicAstrologerProfile; }
-    if(typeof fn!=='function') throw new Error('Profile service failed to initialize.');
-    await fn(a);
-  }catch(err){
-    console.error('Public astrologer profile open failed:',err);
-    const m=document.getElementById('modal'),c=document.getElementById('modalContent');
-    if(m&&c){c.innerHTML='<h2>SMV ASTRO</h2><p class="error">Unable to load this astrologer profile. Please try again.</p><button class="btn gray" id="profileRetryBtn">TRY AGAIN</button><button class="btn gray" id="profileCloseBtn">CLOSE</button>';m.classList.remove('hidden');document.getElementById('profileRetryBtn')?.addEventListener('click',()=>{m.classList.add('hidden');card.querySelector("[data-profile]")?.click();},{once:true});document.getElementById('profileCloseBtn')?.addEventListener('click',()=>m.classList.add('hidden'),{once:true});}
-  }finally{
-    if(btn){btn.disabled=false;btn.textContent='PROFILE & REVIEWS';}
-  }
-};box.appendChild(card);});
+  box.innerHTML="";
+  items.forEach(a=>{
+    const row=document.createElement("article");
+    row.className="smv-astro-directory-row";
+    const photo=a.photoData||a.photoURL||a.photoUrl||"";
+    const description=a.profileDescription||a.bio||a.about||"Professional astrologer";
+    row.innerHTML=`<div class="smv-astro-directory-head">${photo?`<img src="${escapeHtml(photo)}" alt="${escapeHtml(a.name||'Astrologer')} photo">`:''}<div><h3>${escapeHtml(a.name||"Astrologer")}</h3><p class="smv-astro-speciality"><b>${escapeHtml(a.expertise||a.specialization||"Astrology")}</b></p><p class="small">⭐ ${escapeHtml(a.experience||"Experienced")} years experience</p></div></div><p class="smv-astro-description">${escapeHtml(description)}</p><button class="btn gray smv-review-toggle" type="button" aria-expanded="false">REVIEWS &amp; RATINGS</button><div class="smv-inline-reviews hidden"><div class="empty">Reviews will load when opened.</div></div>`;
+    const btn=row.querySelector('.smv-review-toggle'),reviewBox=row.querySelector('.smv-inline-reviews');
+    let loaded=false;
+    btn.onclick=async()=>{
+      const opening=reviewBox.classList.contains('hidden');
+      reviewBox.classList.toggle('hidden',!opening);btn.setAttribute('aria-expanded',String(opening));
+      btn.textContent=opening?'HIDE REVIEWS & RATINGS':'REVIEWS & RATINGS';
+      if(!opening||loaded)return;
+      reviewBox.innerHTML='<div class="empty">Loading reviews...</div>';
+      try{
+        let reviews=[];
+        try{
+          const rr=await withTimeout(fetch(RAZORPAY_BACKEND_URL+"/public/astrologers/"+encodeURIComponent(a.id)+"/reviews",{cache:"no-store"}),10000);
+          const rd=await rr.json().catch(()=>({}));if(!rr.ok)throw new Error(rd.error||`Review service returned HTTP ${rr.status}.`);
+          reviews=Array.isArray(rd.reviews)?rd.reviews:[];
+        }catch(apiErr){
+          console.warn('Public review API unavailable; using Firestore fallback:',apiErr);
+          const snap=await withTimeout(getDocs(query(collection(db,'smv_reviews'),where('astrologerId','==',a.id),where('approved','==',true))),10000);
+          reviews=snap.docs.map(d=>({id:d.id,...(d.data()||{})}));
+        }
+        const stars=n=>'★'.repeat(Math.max(0,Math.min(5,Number(n||0))))+'☆'.repeat(5-Math.max(0,Math.min(5,Number(n||0))));
+        reviewBox.innerHTML=reviews.length?reviews.map(r=>`<div class="smv-directory-review"><div class="stars">${stars(r.rating)}</div><p>${escapeHtml(r.review||'Verified customer review')}</p><span class="small">Verified customer</span></div>`).join(''):'<div class="empty">No approved reviews for this astrologer yet.</div>';
+        loaded=true;
+      }catch(err){console.error('Directory review load failed:',err);reviewBox.innerHTML='<div class="empty error">Reviews are temporarily unavailable.</div>';}
+    };
+    box.appendChild(row);
+  });
  }catch(e){console.error("Approved astrologers load failed:",e);box.innerHTML='<div class="empty error">Approved astrologers are temporarily unavailable.</div>';}
 }
 window.__smvReloadAstrologers=loadAstroCards;
@@ -1888,6 +1905,18 @@ ${ad.status === 'rejected' && ad.rejectionReason
   : ''}</div>
     <div class="card"><h3>Total Earnings</h3><p style="font-size:28px"><b class="smv-earnings-total ${Number(ep.totalEarnings||0)>=300?'is-green':''}">₹${Number(ep.totalEarnings||0).toFixed(2)}</b></p><p>Total Withdrawal: <b>₹${Number(ep.totalWithdrawals||0).toFixed(2)}</b></p><p>Available to Withdraw: <b class="smv-earnings-available ${Number(ep.availableToWithdraw||0)>=300?'is-green':'is-red'}">₹${Number(ep.availableToWithdraw||0).toFixed(2)}</b></p><p class="small">Minimum withdrawal: ₹${Number(ep.minimumWithdrawal||300).toFixed(2)}</p>${ep.withdrawalCooldownActive ? `<p class="smv-withdraw-locked"><b>🔒 Withdrawal locked for 7 days after the last withdrawal request.</b><br><span class="small">Available again: ${escapeHtml(smvDateTime(new Date(ep.withdrawalCooldownEndsAt)))}</span></p><button class="btn smv-withdraw-btn is-red" id="withdrawBtn" disabled>WITHDRAW</button>` : ep.withdrawalEligible ? '<p class="smv-withdraw-ready"><b>✓ You can withdraw</b></p><button class="btn smv-withdraw-btn is-green" id="withdrawBtn">WITHDRAW</button>' : '<p class="smv-withdraw-locked"><b>Reach ₹300 to request a withdrawal.</b></p><button class="btn smv-withdraw-btn is-red" id="withdrawBtn" disabled>WITHDRAW</button>'}</div>
    </div>
+   <div class="card" id="astroProfileDescriptionCard" style="margin-top:16px">
+     <h3>Profile Description</h3>
+     <p class="small">Your current public description remains unchanged until Admin approves a submitted update.</p>
+     <div style="margin:8px 0"><b>Current Public Description</b><p>${escapeHtml(ad.profileDescription||ad.bio||ad.about||'No public description yet.')}</p></div>
+     ${ad.profileDescriptionPending?`<div style="margin:8px 0"><b>Pending Description</b><p>${escapeHtml(ad.profileDescriptionPending)}</p><p class="small"><b>Status:</b> Pending Admin Approval</p></div>`:''}
+     ${ad.profileEditAllowed===true
+       ? `<label for="astroProfileDescriptionInput"><b>Edit Profile Description</b></label>
+          <textarea id="astroProfileDescriptionInput" rows="5" maxlength="2000" placeholder="Write your public astrologer profile description...">${escapeHtml(ad.profileDescriptionPending||ad.profileDescription||ad.bio||ad.about||'')}</textarea>
+          <div class="action-row"><button class="btn" id="astroSubmitProfileDescription">SUBMIT FOR ADMIN APPROVAL</button></div>
+          <div id="astroProfileDescriptionMsg" class="small"></div>`
+       : `<div class="empty">Profile description editing is currently disabled by Admin.</div>`}
+   </div>
    <div class="card" style="margin-top:16px"><h3>Open Questions</h3><p class="small">Paid questions available for you to claim are shown here. When Admin Allow is ON, the same open questions are visible to all approved astrologers until one astrologer claims them.</p>${!approved?'<div class="empty">Your astrologer profile must be approved by Admin before you can claim questions.</div>':availableQuestions.length?availableQuestions.slice(0,50).map(q=>`<div class="card" style="margin:10px 0"><b>${escapeHtml(q.question||'Question')}</b><div class="small"><b>Birth Details:</b> ${escapeHtml(q.birthName||q.birthDetails?.name||'')} · ${escapeHtml(q.birthDate||q.birthDetails?.birthDate||'')} · ${escapeHtml(q.birthTime||q.birthDetails?.birthTime||'')} · ${escapeHtml(q.birthPlace||q.birthDetails?.birthPlace||'')} · ${escapeHtml(q.birthGender||q.birthDetails?.birthGender||'')}</div><div class="small"><b>Question ID: ${escapeHtml(q.id||'')}</b> · <b>Date & Time:</b> ${escapeHtml(smvDateTime(q.createdAt||q.paymentRecordedAt||q.updatedAt))}</div><div class="small"><b>Question Price: ₹${Number(q.astrologerCommissionAmount||0).toFixed(2)}</b></div><button class="btn" data-claim-question="${q.id}">CLAIM & ANSWER</button></div>`).join(''):'<div class="empty">No paid public questions are available right now.</div>'}</div>
 <div class="card" id="astroQuestionQueue" style="margin-top:16px">
   <h3>Questions — Unanswered Queue</h3>
@@ -1901,6 +1930,29 @@ ${ad.status === 'rejected' && ad.rejectionReason
 </div>
 <div class="card" style="margin-top:16px"><h3>Earnings History</h3>${ep.ledger?.length?ep.ledger.slice(0,50).map(x=>`<div class="smv-history-row" style="padding:10px 0;border-bottom:1px solid #eee"><div class="smv-history-amount"><b>₹${Number(x.commission||0).toFixed(2)}</b> · <span class="success">Earning Credited</span></div><div class="smv-history-content">${escapeHtml(x.question||'Consultation')}</div><div class="smv-history-detail"><b>Date & Time:</b> ${escapeHtml(smvDateTime(x.date))}</div><div class="smv-history-detail"><b>Question ID:</b> ${escapeHtml(x.id||'')}</div></div>`).join(''):'<div class="empty">No credited earnings yet.</div>'}<div class="withdrawal-history-section" style="margin-top:14px;padding-top:10px;border-top:1px solid #eee"><div class="withdrawal-history-title">Withdrawal History</div>${withdrawalSnap?.docs?.length?withdrawalSnap.docs.slice().sort((a,b)=>Number(b.data().createdAt?.seconds||0)-Number(a.data().createdAt?.seconds||0)).slice(0,20).map(d=>{const w=d.data()||{};const st=String(w.status||'pending').toLowerCase();const cls=st==='paid'?'success':st==='rejected'?'error':st==='processing'?'small':'small';const label=st==='paid'?'Paid':st==='processing'?'Processing':st==='rejected'?'Rejected':'Pending';return `<div class="smv-history-row smv-withdrawal-row" style="padding:10px 0;border-bottom:1px solid #eee"><div class="smv-history-amount"><b>₹${Number(w.amount||0).toFixed(2)}</b> · <span class="${cls}">${label}</span></div><div class="smv-history-detail"><b>Withdrawal ID:</b> ${escapeHtml(w.withdrawalId||'—')}</div>${st==='paid' && /^SMV-PMT-/.test(String(w.adminPaymentId||'')) ? '<div class="small"><b>Admin Payment ID:</b> '+escapeHtml(w.adminPaymentId)+'</div>' : ''}<div class="small"><b>Requested:</b> ${escapeHtml(smvDateTime(w.createdAt||w.requestedAt))}${st==='paid' && w.paidAt ? '<br><b>Paid Date & Time:</b> '+escapeHtml(smvDateTime(w.paidAt)) : ''}</div></div>`}).join(''):'<div class="small">No withdrawal requests yet.</div>'}</div></div>
 <div class="card" style="margin-top:16px"><h3>Payment Method</h3><p class="small">Your bank/UPI details are private. Full details are not displayed again.</p><button class="btn gray" id="changePayoutBtn2">Change Payment Method</button></div>`;
+  const profileDescriptionSubmit=$('astroSubmitProfileDescription');
+  if(profileDescriptionSubmit){
+    profileDescriptionSubmit.onclick=async()=>{
+      const input=$('astroProfileDescriptionInput'),msg=$('astroProfileDescriptionMsg');
+      const description=String(input?.value||'').trim();
+      if(description.length<20){if(msg)msg.innerHTML='<span class="error">Please enter at least 20 characters.</span>';return;}
+      if(description.length>2000){if(msg)msg.innerHTML='<span class="error">Profile description must be 2000 characters or less.</span>';return;}
+      profileDescriptionSubmit.disabled=true;profileDescriptionSubmit.textContent='SUBMITTING...';
+      try{
+        const latestProfile=await withTimeout(getDoc(doc(db,'smv_astrologers',loadUid)),10000);
+        const latestData=latestProfile.exists()?(latestProfile.data()||{}):{};
+        if(latestData.profileEditAllowed!==true)throw new Error('Profile editing is currently disabled by Admin.');
+        await updateDoc(doc(db,'smv_astrologers',loadUid),{
+          profileDescriptionPending:description,
+          profileDescriptionStatus:'pending',
+          profileDescriptionSubmittedAt:serverTimestamp()
+        });
+        if(msg)msg.innerHTML='<span class="success">Submitted. Your current public description will stay unchanged until Admin approval.</span>';
+        setTimeout(()=>loadDashboard('astrologer',true),700);
+      }catch(e){if(msg)msg.innerHTML='<span class="error">'+escapeHtml(e?.message||String(e))+'</span>';}
+      finally{profileDescriptionSubmit.disabled=false;profileDescriptionSubmit.textContent='SUBMIT FOR ADMIN APPROVAL';}
+    };
+  }
   document.querySelectorAll('[data-claim-question]').forEach(b=>b.onclick=async()=>{
   const questionId=b.dataset.claimQuestion;
 
@@ -2738,6 +2790,86 @@ async function loadAdminPanelData(background=false){
   for(const d of pendingDocs){try{const ps=await getDoc(doc(db,'smv_payouts',d.id));if(ps.exists()){const p=ps.data();$('payout_'+d.id).innerHTML=`<b>PRIVATE BANK/UPI:</b> Bank: ${escapeHtml(p.bankName||'')} · Holder: ${escapeHtml(p.accountName||'')} · Account: ${escapeHtml(p.accountNumber||'')} · IFSC: ${escapeHtml(p.ifsc||'')} · UPI: ${escapeHtml(p.upi||'')} · Status: ${escapeHtml(p.status||'')}`;}}catch(e){$('payout_'+d.id).textContent='Payout details unavailable.';}}
   box.querySelectorAll('[data-approve]').forEach(b=>b.onclick=async()=>{const id=b.dataset.approve,price=Number($('price_'+id).value);if(!price||price<1){alert('Admin must set the consultation amount before approval. This amount is not shown publicly.');return;}await updateDoc(doc(db,'smv_astrologers',id),{status:'approved',pricePerQuestion:price,approvedAt:serverTimestamp(),approvedBy:currentUser.uid});await updateDoc(doc(db,'smv_users',id),{status:'active'});await setDoc(doc(db,'smv_notifications',id+'_approval_'+Date.now()),{userId:id,type:'approval',title:'Astrologer application approved',message:'Your profile has been approved by Admin.',createdAt:serverTimestamp(),read:false});loadAdminPanel();});
   box.querySelectorAll('[data-reject]').forEach(b=>b.onclick=async()=>{const id=b.dataset.reject,reason=$('reject_'+id).value.trim();if(!reason){alert('Enter rejection reason.');return;}await updateDoc(doc(db,'smv_astrologers',id),{status:'rejected',rejectionReason:reason,rejectedAt:serverTimestamp(),rejectedBy:currentUser.uid});await updateDoc(doc(db,'smv_users',id),{status:'rejected'});await setDoc(doc(db,'smv_notifications',id+'_reject_'+Date.now()),{userId:id,type:'rejection',title:'Astrologer application requires changes',message:reason,createdAt:serverTimestamp(),read:false});loadAdminPanel();});
+
+  // STEP 4 — Approved astrologer profile-description administration.
+  const profileBox=$('adminAstrologerProfiles');
+  if(profileBox){
+    const approvedAstros=astros.docs.filter(d=>['approved','active'].includes(String(d.data().status||'').toLowerCase()));
+    profileBox.innerHTML=approvedAstros.length?approvedAstros.map(d=>{
+      const a=d.data()||{};
+      const current=a.profileDescription||a.bio||a.about||'';
+      const pending=String(a.profileDescriptionPending||'').trim();
+      const allowed=a.profileEditAllowed===true;
+      return `<div class="card" style="margin:10px 0">
+        <h3>${escapeHtml(a.name||'Astrologer')}</h3>
+        <div class="small"><b>Astrologer ID:</b> ${escapeHtml(d.id)} · <b>Profile Edit:</b> ${allowed?'Allowed':'Blocked'}</div>
+        <p><b>Current Public Description</b></p>
+        <textarea id="adminProfile_${d.id}" rows="5" maxlength="2000">${escapeHtml(current)}</textarea>
+        <div class="action-row">
+          <button class="btn gray" data-profile-permission="${d.id}" data-next="${allowed?'block':'allow'}">${allowed?'BLOCK PROFILE EDIT':'ALLOW PROFILE EDIT'}</button>
+          <button class="btn" data-profile-save="${d.id}">SAVE PUBLIC DESCRIPTION</button>
+        </div>
+        ${pending?`<div class="card" style="margin-top:10px"><p><b>Pending Description — Awaiting Admin Approval</b></p><p>${escapeHtml(pending)}</p><div class="action-row"><button class="btn" data-profile-approve="${d.id}">APPROVE DESCRIPTION</button><button class="btn gray" data-profile-reject="${d.id}">REJECT DESCRIPTION</button></div></div>`:'<div class="small" style="margin-top:8px">No pending profile-description update.</div>'}
+        <div class="small" id="adminProfileMsg_${d.id}"></div>
+      </div>`;
+    }).join(''):'<div class="empty">No approved astrologers available.</div>';
+
+    profileBox.querySelectorAll('[data-profile-permission]').forEach(b=>b.onclick=async()=>{
+      const id=b.dataset.profilePermission,allow=b.dataset.next==='allow';
+      b.disabled=true;
+      try{
+        await updateDoc(doc(db,'smv_astrologers',id),{profileEditAllowed:allow,profileEditPermissionUpdatedAt:serverTimestamp(),profileEditPermissionUpdatedBy:currentUser.uid});
+        await loadAdminPanel();
+      }catch(e){alert(e.message||String(e));b.disabled=false;}
+    });
+
+    profileBox.querySelectorAll('[data-profile-save]').forEach(b=>b.onclick=async()=>{
+      const id=b.dataset.profileSave,input=$('adminProfile_'+id),msg=$('adminProfileMsg_'+id);
+      const description=String(input?.value||'').trim();
+      if(description.length<20){if(msg)msg.innerHTML='<span class="error">Enter at least 20 characters.</span>';return;}
+      if(description.length>2000){if(msg)msg.innerHTML='<span class="error">Description must be 2000 characters or less.</span>';return;}
+      b.disabled=true;b.textContent='SAVING...';
+      try{
+        await updateDoc(doc(db,'smv_astrologers',id),{profileDescription:description,profileDescriptionStatus:'approved',profileDescriptionApprovedAt:serverTimestamp(),profileDescriptionApprovedBy:currentUser.uid});
+        if(msg)msg.innerHTML='<span class="success">Public description updated by Admin.</span>';
+        loadAstroCards().catch(()=>{});
+      }catch(e){if(msg)msg.innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';}
+      finally{b.disabled=false;b.textContent='SAVE PUBLIC DESCRIPTION';}
+    });
+
+    profileBox.querySelectorAll('[data-profile-approve]').forEach(b=>b.onclick=async()=>{
+      const id=b.dataset.profileApprove;
+      b.disabled=true;
+      try{
+        const snap=await getDoc(doc(db,'smv_astrologers',id)),a=snap.exists()?(snap.data()||{}):{};
+        const pending=String(a.profileDescriptionPending||'').trim();
+        if(!pending)throw new Error('No pending description to approve.');
+        await updateDoc(doc(db,'smv_astrologers',id),{
+          profileDescription:pending,
+          profileDescriptionPending:'',
+          profileDescriptionStatus:'approved',
+          profileDescriptionApprovedAt:serverTimestamp(),
+          profileDescriptionApprovedBy:currentUser.uid
+        });
+        await setDoc(doc(db,'smv_notifications',id+'_profile_approved_'+Date.now()),{userId:id,type:'profile_description',title:'Profile description approved',message:'Your updated profile description has been approved by Admin.',createdAt:serverTimestamp(),read:false});
+        await loadAdminPanel();
+        loadAstroCards().catch(()=>{});
+      }catch(e){alert(e.message||String(e));b.disabled=false;}
+    });
+
+    profileBox.querySelectorAll('[data-profile-reject]').forEach(b=>b.onclick=async()=>{
+      const id=b.dataset.profileReject;
+      const ok=await smvConfirm('Reject Profile Description','Reject this pending profile-description update?','REJECT','CANCEL',true);
+      if(!ok)return;
+      b.disabled=true;
+      try{
+        await updateDoc(doc(db,'smv_astrologers',id),{profileDescriptionPending:'',profileDescriptionStatus:'rejected',profileDescriptionRejectedAt:serverTimestamp(),profileDescriptionRejectedBy:currentUser.uid});
+        await setDoc(doc(db,'smv_notifications',id+'_profile_rejected_'+Date.now()),{userId:id,type:'profile_description',title:'Profile description not approved',message:'Your submitted profile description was not approved by Admin. Your existing public description remains unchanged.',createdAt:serverTimestamp(),read:false});
+        await loadAdminPanel();
+      }catch(e){alert(e.message||String(e));b.disabled=false;}
+    });
+  }
+
   // Approved Astrologer payment-method changes awaiting Admin review.
   const payoutBox=$('adminPayoutChanges');
   try{

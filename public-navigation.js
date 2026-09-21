@@ -1,6 +1,6 @@
 (function(){
  'use strict';
- const targets=new Set(['home','english-horoscope','approved-astrologers','smv-content-hub','publicBlogs','publicMedia','about','contact','askNowSection','faq']);
+ const targets=new Set(['home','english-horoscope','astrologer-directory','smv-content-hub','publicBlogs','publicMedia','about','contact','askNowSection','faq']);
  let revision=0;
  function selection(id){
   const mapped={publicBlogs:'publicBlogs',publicMedia:'publicMedia',askNowSection:'home','smv-content-hub':'publicBlogs'};
@@ -13,13 +13,26 @@
  }
  function navigate(id,{historyMode='push'}={}){
   if(!targets.has(id))return false;
+  if(id==='astrologer-directory' && window.__SMV_PUBLIC_ROUTE==='astrologer-directory'){
+   id='home';
+   historyMode='push';
+  }
   const target=document.getElementById(id);if(!target)return false;
   const ticket=++revision;
   window.__SMV_PUBLIC_ROUTE=id;
   window.__smvPreparePublicNavigation?.();
   ['dashboard','admin','smv-dashboard-page','ask-flow','register-flow','astro-register-form','astro-flow','contact'].forEach(key=>document.getElementById(key)?.classList.add('hidden'));
   document.body.dataset.smvWorkspace='closed';document.body.classList.remove('smv-horoscope-active');
-  ['smv-public-page','home','askNowSection','approved-astrologers','faq','smv-content-hub','english-horoscope','about'].forEach(key=>document.getElementById(key)?.classList.remove('hidden'));
+  document.getElementById('smv-public-page')?.classList.remove('hidden');
+  const publicSections=['home','askNowSection','faq','smv-content-hub','english-horoscope','about'];
+  if(id==='astrologer-directory'){
+   publicSections.forEach(key=>document.getElementById(key)?.classList.add('hidden'));
+   document.getElementById('astrologer-directory')?.classList.remove('hidden');
+   window.__smvReloadAstrologers?.();
+  }else{
+   document.getElementById('astrologer-directory')?.classList.add('hidden');
+   publicSections.forEach(key=>document.getElementById(key)?.classList.remove('hidden'));
+  }
   if(id==='contact')target.classList.remove('hidden');
   if(['publicBlogs','publicMedia','smv-content-hub'].includes(id))window.__smvContentVisible=true;
   if(id==='english-horoscope')window.__smvPublicHoroscopeVisible=true;

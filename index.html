@@ -126,6 +126,51 @@ document.addEventListener('DOMContentLoaded', function(){
 .panchang-data-table .panchang-event-range .event-to{color:#111 !important;-webkit-text-fill-color:#111 !important;}
 /* Standalone Panchang time styling is left unchanged. Birth Date is explicitly normal black in its row. */
 </style>
+
+<style id="smv-astro-withdraw-desktop-compact-fix">
+html.smv-desktop-site #dashboardContent .astro-dashboard-summary > .card:nth-child(3){
+  height:250px!important;
+  min-height:250px!important;
+  max-height:250px!important;
+  overflow:hidden!important;
+  padding:12px!important;
+}
+html.smv-desktop-site #dashboardContent .astro-dashboard-summary > .card:nth-child(3) > h3{
+  margin:0 0 5px!important;
+  line-height:1.15!important;
+}
+html.smv-desktop-site #dashboardContent .astro-dashboard-summary > .card:nth-child(3) > p{
+  margin:3px 0!important;
+  line-height:1.22!important;
+}
+html.smv-desktop-site #dashboardContent .astro-dashboard-summary > .card:nth-child(3) > p[style*="font-size:28px"]{
+  font-size:22px!important;
+  line-height:1.1!important;
+}
+html.smv-desktop-site #dashboardContent .astro-dashboard-summary > .card:nth-child(3) .small{
+  margin:3px 0!important;
+  line-height:1.15!important;
+}
+html.smv-desktop-site #dashboardContent .astro-dashboard-summary > .card:nth-child(3) .smv-withdraw-locked,
+html.smv-desktop-site #dashboardContent .astro-dashboard-summary > .card:nth-child(3) .smv-withdraw-ready{
+  margin:4px 0!important;
+  line-height:1.15!important;
+}
+html.smv-desktop-site #dashboardContent .astro-dashboard-summary > .card:nth-child(3) #withdrawBtn{
+  display:block!important;
+  position:static!important;
+  width:100%!important;
+  min-height:30px!important;
+  height:30px!important;
+  max-height:30px!important;
+  margin:5px 0 0!important;
+  padding:4px 8px!important;
+  line-height:1!important;
+  box-sizing:border-box!important;
+  transform:none!important;
+}
+</style>
+
 </head>
 <body class="smv-v12-theme">
 <div class="smv-master-top"><div class="smv-master-topin"><span>Guided by Ancient Wisdom   |   Empowering Your Future</span></div></div>
@@ -138,7 +183,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <nav aria-label="Main navigation" class="smv9-menu">
 <a class="active" href="#home">Home</a>
 <a href="#english-horoscope" id="horoscopeNav">Horoscope</a>
-<a href="#approved-astrologers">Astrologers</a>
+<a href="#astrologer-directory" id="astrologersNav">Astrologers</a>
 <button data-smv-route="publicBlogs" id="contentNav" type="button">Blog</button>
 <a href="#publicMedia">Media</a>
 <a href="#about">About</a>
@@ -151,6 +196,12 @@ document.addEventListener('DOMContentLoaded', function(){
 </div>
 </div>
 <main class="container" id="smv-public-page">
+<section class="feature-section hidden smv-astrologer-directory" id="astrologer-directory" aria-labelledby="astrologerDirectoryTitle">
+  <div class="home-rule"><span><img alt="" aria-hidden="true" class="smv-brand-symbol" height="20" src="./assets/smv-brand-logo-v17.png" width="20"/></span><span>APPROVED ASTROLOGERS</span><span><img alt="" aria-hidden="true" class="smv-brand-symbol" height="20" src="./assets/smv-brand-logo-v17.png" width="20"/></span></div>
+  <h2 id="astrologerDirectoryTitle">Approved Astrologers</h2>
+  <p class="small smv-astrologer-directory-intro">View approved astrologer profiles. Reviews &amp; Ratings open only when you choose to view them.</p>
+  <div id="astroCards"><div class="empty">Loading approved astrologers...</div></div>
+</section>
 <div id="home" class="smv33-hero"><div class="smv33-scene"><img class="smv33-photo" src="assets/smv-veerayah-family-mobile-v14.webp" width="1681" height="936" alt="Sri Madurai Veerayah with his consorts" fetchpriority="high"/><div class="smv33-copy"><div class="smv33-mobile-head">
 <div class="smv33-kicker">Sri Madurai Veerayah Astro Services</div>
 <h1>Traditional Wisdom.<br/><span>Personal Guidance.</span></h1>
@@ -187,12 +238,7 @@ document.addEventListener('DOMContentLoaded', function(){
 </div>
 </div>
 <div aria-label="Consultation topics" class="smv-master-cats"><div class="smv-master-cat"><span aria-hidden="true" class="smv24-icon"><img alt="" loading="lazy" src="assets/topics-v27.png" style="width:421.9780%;left:-6.3187%;top:-16.2088%"/></span><span>Career</span></div><div class="smv-master-cat"><span aria-hidden="true" class="smv24-icon"><img alt="" loading="lazy" src="assets/topics-v27.png" style="width:421.9780%;left:-108.7912%;top:-16.2088%"/></span><span>Marriage</span></div><div class="smv-master-cat"><span aria-hidden="true" class="smv24-icon"><img alt="" loading="lazy" src="assets/topics-v27.png" style="width:421.9780%;left:-212.9121%;top:-16.2088%"/></span><span>Health</span></div><div class="smv-master-cat"><span aria-hidden="true" class="smv24-icon"><img alt="" loading="lazy" src="assets/topics-v27.png" style="width:421.9780%;left:-316.7582%;top:-16.2088%"/></span><span>Finance</span></div><div class="smv-master-cat"><span aria-hidden="true" class="smv24-icon"><img alt="" loading="lazy" src="assets/topics-v27.png" style="width:421.9780%;left:-6.3187%;top:-137.3626%"/></span><span>Property</span></div><div class="smv-master-cat"><span aria-hidden="true" class="smv24-icon"><img alt="" loading="lazy" src="assets/topics-v27.png" style="width:421.9780%;left:-108.7912%;top:-137.3626%"/></span><span>Education</span></div><div class="smv-master-cat"><span aria-hidden="true" class="smv24-icon"><img alt="" loading="lazy" src="assets/topics-v27.png" style="width:421.9780%;left:-212.9121%;top:-137.3626%"/></span><span>Spirituality</span></div><div class="smv-master-cat"><span aria-hidden="true" class="smv24-icon"><img alt="" loading="lazy" src="assets/topics-v27.png" style="width:421.9780%;left:-316.7582%;top:-137.3626%"/></span><span>Marriage Matching</span></div></div></section>
-<section class="feature-section" id="approved-astrologers">
-<div class="home-rule"><span><img alt="" aria-hidden="true" class="smv-brand-symbol" height="20" src="./assets/smv-brand-logo-v17.png" width="20"/></span><span>APPROVED ASTROLOGERS</span><span><img alt="" aria-hidden="true" class="smv-brand-symbol" height="20" src="./assets/smv-brand-logo-v17.png" width="20"/></span></div>
-<h2>Our Approved Astrologers</h2>
-<p class="small">Choose an approved astrologer to view their profile and verified reviews.</p>
-<div class="grid" id="astroCards"><div class="empty">Loading approved astrologers...</div></div>
-</section><div class="smv-master-proof"><div><strong>Approved Astrologers</strong><span>Reviewed profiles</span></div><div><strong>Private Consultations</strong><span>Question-focused workflow</span></div><div><strong>Vedic Horoscope</strong><span>Detailed calculations</span></div><div><strong>Secure Payments</strong><span>Integrated payment flow</span></div></div>
+<div class="smv-master-proof"><div><strong>Approved Astrologers</strong><span>Reviewed profiles</span></div><div><strong>Private Consultations</strong><span>Question-focused workflow</span></div><div><strong>Vedic Horoscope</strong><span>Detailed calculations</span></div><div><strong>Secure Payments</strong><span>Integrated payment flow</span></div></div>
 <section class="feature-section" id="smv-content-hub">
 <div class="home-rule"><span><img alt="" aria-hidden="true" class="smv-brand-symbol" height="20" src="./assets/smv-brand-logo-v17.png" width="20"/></span><span>SMV ASTRO CONTENT</span><span><img alt="" aria-hidden="true" class="smv-brand-symbol" height="20" src="./assets/smv-brand-logo-v17.png" width="20"/></span></div>
 <div class="feature-shell card">
@@ -315,6 +361,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div><h2 style="margin:0">Admin Dashboard</h2><p class="small" style="margin:6px 0 0">SMV ASTRO administration and approval center</p></div></div><div id="adminDataLoadMsg" style="margin-top:12px"></div><div class="stats-grid admin-summary-grid" id="adminSummary" style="margin-top:16px"></div></div>
 <div class="card" style="margin-top:16px"><h3>Public Question Approval</h3><div id="adminPendingQuestions"><div class="empty">Loading questions...</div></div></div>
 <div class="card" style="margin-top:16px"><h3>Astrologer Applications</h3><div id="pendingAstros"><div class="empty">Loading applications...</div></div></div>
+<div class="card" style="margin-top:16px"><h3>Astrologer Profile Management</h3><p class="small">Allow or block profile-description editing, review submitted descriptions, or update an approved public description directly.</p><div id="adminAstrologerProfiles"><div class="empty">Loading approved astrologer profiles...</div></div></div>
 <div class="card" style="margin-top:16px"><h3>Payment Method Changes — Admin Approval</h3><div id="adminPayoutChanges"><div class="empty">Loading payment method changes...</div></div></div>
 <div class="card" style="margin-top:16px"><h3>Answers Awaiting Approval</h3><div id="adminAnswers"><div class="empty">Loading answers...</div></div></div>
 <div class="card" style="margin-top:16px"><h3>Recent Questions</h3><div id="adminQuestions"><div class="empty">Loading questions...</div></div></div>
@@ -442,7 +489,7 @@ document.addEventListener('DOMContentLoaded', function(){
 </form>
 </section>
 <!-- SMV ASTRO Install App option: placed immediately before the final footer -->
-<div id="smv24-footer" role="contentinfo"><div class="smv24-footer-top"><div class="smv24-brand"><h2><span aria-hidden="true">☀</span> SMV ASTRO</h2><p>Sri Madurai Veerayah Astro Services</p><small>GUIDING YOUR COSMIC JOURNEY</small><em>Astrology for a Better Tomorrow</em></div><div class="smv24-columns"><div aria-label="Footer Quick Links" class="smv26-links" role="navigation"><h3>Quick Links</h3><a href="#home">Home</a><a href="#english-horoscope">Horoscope</a><a href="#approved-astrologers">Astrologers</a><a href="#publicBlogs">Blog</a><a href="#publicMedia">Media</a><a href="#about">About Us</a><a href="#contact">Contact Us</a></div><div aria-label="Footer Our Services" class="smv26-links" role="navigation"><h3>Our Services</h3><a href="#english-horoscope">Birth Chart Analysis</a><a href="#askNowSection">Career Guidance</a><a href="#askNowSection">Marriage Matching</a><a href="#askNowSection">Health &amp; Wellness</a><a href="#askNowSection">Remedies &amp; Solutions</a><a href="#askNowSection">Personal Consultation</a></div><div aria-label="Footer Support" class="smv26-links" role="navigation"><h3>Support</h3><a href="privacy.html">Privacy Policy</a><a href="terms.html">Terms &amp; Conditions</a><a href="#faq">FAQ</a><a href="sitemap.html">Sitemap</a><a href="https://wa.me/message/EPR2XEATFYREB1">Help &amp; Support</a></div></div><div class="smv24-contact"><a href="tel:+916381171084"><img alt="" class="smv26-social-icon" height="26" src="assets/social/phone.svg" width="26"/> +91 6381171084</a><a href="mailto:smvastroservices@gmail.com">✉ smvastroservices@gmail.com</a><span>⌖ Perambalur, Tamil Nadu, India</span></div><div class="smv24-social"><a aria-label="Facebook" href="https://www.facebook.com/share/1ErDtsZR6i/" rel="noopener noreferrer" target="_blank"><img alt="" class="smv26-social-icon" height="32" src="assets/social/facebook.svg" width="32"/><span>Facebook</span></a><a aria-label="Instagram" href="https://www.instagram.com/smvastroproducts/" rel="noopener noreferrer" target="_blank"><img alt="" class="smv26-social-icon" height="32" src="assets/social/instagram.svg" width="32"/><span>Instagram</span></a><a aria-label="YouTube" href="https://youtube.com/@rajarammaduraiveeran?si=Yez_7W6c14hDl-d2" rel="noopener noreferrer" target="_blank"><img alt="" class="smv26-social-icon" height="32" src="assets/social/youtube.svg" width="32"/><span>YouTube</span></a><a aria-label="WhatsApp" href="https://wa.me/message/EPR2XEATFYREB1" rel="noopener noreferrer" target="_blank"><img alt="" class="smv26-social-icon" height="32" src="assets/social/whatsapp.svg" width="32"/><span>WhatsApp</span></a></div></div><div class="smv24-scenery"><p>Let the Stars Guide You Towards<br/>a Brighter Tomorrow</p></div><div class="smv24-copyright">© 2026 SMV ASTRO SERVICES. All Rights Reserved.<small>TRADITIONAL WISDOM　|　MODERN GUIDANCE</small></div></div>
+<div id="smv24-footer" role="contentinfo"><div class="smv24-footer-top"><div class="smv24-brand"><h2><span aria-hidden="true">☀</span> SMV ASTRO</h2><p>Sri Madurai Veerayah Astro Services</p><small>GUIDING YOUR COSMIC JOURNEY</small><em>Astrology for a Better Tomorrow</em></div><div class="smv24-columns"><div aria-label="Footer Quick Links" class="smv26-links" role="navigation"><h3>Quick Links</h3><a href="#home">Home</a><a href="#english-horoscope">Horoscope</a><a href="#astrologer-directory">Astrologers</a><a href="#publicBlogs">Blog</a><a href="#publicMedia">Media</a><a href="#about">About Us</a><a href="#contact">Contact Us</a></div><div aria-label="Footer Our Services" class="smv26-links" role="navigation"><h3>Our Services</h3><a href="#english-horoscope">Birth Chart Analysis</a><a href="#askNowSection">Career Guidance</a><a href="#askNowSection">Marriage Matching</a><a href="#askNowSection">Health &amp; Wellness</a><a href="#askNowSection">Remedies &amp; Solutions</a><a href="#askNowSection">Personal Consultation</a></div><div aria-label="Footer Support" class="smv26-links" role="navigation"><h3>Support</h3><a href="privacy.html">Privacy Policy</a><a href="terms.html">Terms &amp; Conditions</a><a href="#faq">FAQ</a><a href="sitemap.html">Sitemap</a><a href="https://wa.me/message/EPR2XEATFYREB1">Help &amp; Support</a></div></div><div class="smv24-contact"><a href="tel:+916381171084"><img alt="" class="smv26-social-icon" height="26" src="assets/social/phone.svg" width="26"/> +91 6381171084</a><a href="mailto:smvastroservices@gmail.com">✉ smvastroservices@gmail.com</a><span>⌖ Perambalur, Tamil Nadu, India</span></div><div class="smv24-social"><a aria-label="Facebook" href="https://www.facebook.com/share/1ErDtsZR6i/" rel="noopener noreferrer" target="_blank"><img alt="" class="smv26-social-icon" height="32" src="assets/social/facebook.svg" width="32"/><span>Facebook</span></a><a aria-label="Instagram" href="https://www.instagram.com/smvastroproducts/" rel="noopener noreferrer" target="_blank"><img alt="" class="smv26-social-icon" height="32" src="assets/social/instagram.svg" width="32"/><span>Instagram</span></a><a aria-label="YouTube" href="https://youtube.com/@rajarammaduraiveeran?si=Yez_7W6c14hDl-d2" rel="noopener noreferrer" target="_blank"><img alt="" class="smv26-social-icon" height="32" src="assets/social/youtube.svg" width="32"/><span>YouTube</span></a><a aria-label="WhatsApp" href="https://wa.me/message/EPR2XEATFYREB1" rel="noopener noreferrer" target="_blank"><img alt="" class="smv26-social-icon" height="32" src="assets/social/whatsapp.svg" width="32"/><span>WhatsApp</span></a></div></div><div class="smv24-scenery"><p>Let the Stars Guide You Towards<br/>a Brighter Tomorrow</p></div><div class="smv24-copyright">© 2026 SMV ASTRO SERVICES. All Rights Reserved.<small>TRADITIONAL WISDOM　|　MODERN GUIDANCE</small></div></div>
 <div class="modal hidden" id="modal">
 <div class="modalbox" style="position:relative">
 <button aria-label="Close" onclick="closeModal()" style="position:absolute;top:10px;right:10px;border:0;background:transparent;font-size:28px;line-height:1;cursor:pointer;padding:4px 8px;color:inherit" title="Close" type="button">×</button>
