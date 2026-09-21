@@ -972,6 +972,7 @@ app.get("/public/astrologers", async (req, res) => {
         photoData: x.photoData || x.photoURL || x.photoUrl || "",
         rating: x.rating || x.averageRating || "New",
         publicId: x.publicId || "",
+        chatPrice: Number(x.pricePerQuestion || 0),
         status: x.status || ""
       });
     }

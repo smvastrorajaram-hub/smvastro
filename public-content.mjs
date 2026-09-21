@@ -166,7 +166,46 @@
       finally{bookingSubmitting=false;btn.disabled=false;btn.textContent='REQUEST APPOINTMENT';}
     });
   }
+  async function openPrivateConsultation(){
+    const section=$('private-consultation'),box=$('privateConsultationAstrologers');
+    if(!section||!box)return;
+    document.querySelectorAll('main section, body > section').forEach(s=>{if(s.id&&s.id!=='private-consultation')s.classList.add('hidden');});
+    section.classList.remove('hidden');
+    box.innerHTML='<div class="empty">Loading approved astrologers...</div>';
+    section.scrollIntoView({behavior:'smooth',block:'start'});
+    try{
+      const r=await withTimeout(fetch(BACKEND+'/public/astrologers',{cache:'no-store'}),12000);
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok)throw new Error(d.error||`Astrologer service returned HTTP ${r.status}.`);
+      const items=Array.isArray(d.astrologers)?d.astrologers:[];
+      if(!items.length){box.innerHTML='<div class="empty">No approved astrologers available for private consultation.</div>';return;}
+      box.innerHTML=items.map(a=>{
+        const price=Number(a.chatPrice||0);
+        return `<div style="padding:12px 0;border-bottom:1px solid #e5e5e5">
+          <div style="display:flex;gap:10px;align-items:center">
+            ${a.photoData?`<img src="${esc(a.photoData)}" alt="${esc(a.name||'Astrologer')}" style="width:54px;height:54px;border-radius:50%;object-fit:cover">`:''}
+            <div><h3 style="margin:0">${esc(a.name||'Astrologer')}</h3><div class="small"><b>${esc(a.expertise||a.specialization||'Astrology')}</b> · ${esc(a.experience||'Experienced')} years experience</div></div>
+          </div>
+          <p style="margin:7px 0">${esc(a.profileDescription||a.bio||a.about||'Professional astrologer')}</p>
+          <div><b>Chat Price: ${price>=1?'₹'+price.toFixed(2):'Not available'}</b></div>
+          <button type="button" class="btn" data-private-consult-astro="${esc(a.id)}" ${price>=1?'':'disabled'} style="margin-top:7px">SELECT ASTROLOGER</button>
+        </div>`;
+      }).join('');
+      box.querySelectorAll('[data-private-consult-astro]').forEach(b=>b.onclick=()=>{
+        const astro=items.find(a=>String(a.id)===String(b.dataset.privateConsultAstro));
+        if(!astro)return;
+        window.__smvSelectedPrivateConsultAstrologer={id:astro.id,name:astro.name||'Astrologer',chatPrice:Number(astro.chatPrice||0)};
+        box.querySelectorAll('[data-private-consult-astro]').forEach(x=>{x.textContent=x===b?'SELECTED':'SELECT ASTROLOGER';});
+      });
+    }catch(e){
+      console.error('Private consultation astrologers load failed:',e);
+      box.innerHTML='<div class="empty error">'+esc(e.message||String(e))+'</div>';
+    }
+  }
+
   function setupAsk(){
+  const privateConsultLink=$('privateConsultationHomeLink');
+  if(privateConsultLink)privateConsultLink.onclick=e=>{e.preventDefault();openPrivateConsultation();};
   // IMPORTANT: this script is a separate ES module from the main app module.
   // openQuestionService() is therefore not in this module's lexical scope.
   // Always cross the module boundary through the explicit window bridge.
@@ -193,7 +232,7 @@
     window.__SMV_ADMIN_HOOKED=true;
     window.__smvRefreshAdminSections=refreshAdminSections;
   }
-  setupBooking();setupAsk();loadQuestionPrice().catch(()=>{});if(window.__smvReloadAstrologers)window.__smvReloadAstrologers().catch(()=>{});else window.addEventListener('smv:app-ready',()=>window.__smvReloadAstrologers?.().catch(()=>{}),{once:true});hookAdmin();loadReviews().catch(()=>{});
+  setupBooking();setupAsk();if(location.hash==='#private-consultation')openPrivateConsultation();loadQuestionPrice().catch(()=>{});if(window.__smvReloadAstrologers)window.__smvReloadAstrologers().catch(()=>{});else window.addEventListener('smv:app-ready',()=>window.__smvReloadAstrologers?.().catch(()=>{}),{once:true});hookAdmin();loadReviews().catch(()=>{});
   // Admin data loaders are triggered explicitly after Admin authentication.
 })();
   document.getElementById("contactNav")?.addEventListener("click",e=>{e.preventDefault();document.getElementById("contact")?.classList.remove("hidden");document.getElementById("contact")?.scrollIntoView({behavior:"smooth",block:"start"});});
