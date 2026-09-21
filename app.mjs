@@ -323,13 +323,28 @@ async function openQuestionService(options={}){
       return;
     }
 
+    // ASK NOW must use the same authoritative Admin resolver as Dashboard.
+    // Do not infer "customer" from a missing/temporary profile read.
+    currentUser=verifiedUser;
+    const questionAdmin=await isCurrentAdmin();
     let questionProfile=suppliedProfile;
     if(!questionProfile){
       questionProfile=await getUserProfile(verifiedUser.uid);
     }
-    const questionRole=String(questionProfile?.role||"customer").toLowerCase();
+    const questionRole=questionAdmin?"admin":String(questionProfile?.role||"customer").toLowerCase();
+    if(questionAdmin){
+      askNowTransitionLock=false;
+      window.__SMV_ASK_NOW_INTENT=false;
+      pendingAfterLogin=null;
+      hide("ask-flow");
+      smvNotice("Customer Login Required","Please login with a Customer account to ask an astrology question.","!");
+      return;
+    }
     if(questionRole!=="customer"){
       askNowTransitionLock=false;
+      window.__SMV_ASK_NOW_INTENT=false;
+      pendingAfterLogin=null;
+      hide("ask-flow");
       smvNotice("Customer Login Required","Please login with a Customer account to ask an astrology question.","!");
       return;
     }
@@ -520,25 +535,14 @@ $("askNowBackBtn")?.addEventListener("click",e=>{
   e.preventDefault();
   e.stopPropagation();
   if(!currentUser) return smvReturnHome(true);
-  ++smvNavigationEpoch;
   askNowTransitionLock=false;
   window.__SMV_ASK_NOW_INTENT=false;
   pendingAfterLogin=null;
   hide("ask-flow");
-  show("dashboard");
-  show("dashboardContent");
-  show("dashLink");
-  hide("admin");
-  hide("adminLink");
-  hideDashboardPublicSections();
-  smvShowRoleNav();
-  smvEnterInternalView("dashboard",true);
-  go("dashboard");
-  // If the Customer Dashboard was already rendered before ASK NOW, simply
-  // reveal it. Only the first-ever return needs one hydration call.
-  if(dashboardReadyUid!==currentUser.uid){
-    loadDashboard('customer').catch(err=>console.warn("Dashboard refresh skipped:",err));
-  }
+  // Return through the existing role-aware Dashboard router.
+  // It resolves Admin / Astrologer / Customer from the signed-in account
+  // instead of forcing every ASK NOW Back action into Customer Dashboard.
+  $("dashLink")?.click();
 });
 
 // Admin no longer has a separate header button.
@@ -819,12 +823,13 @@ async function submitAuth(mode){
       pendingAfterLogin=null;
       if(adminUser){
         hidePrimarySections("admin");
+        show("admin");
         show("adminLink");
-        await loadAdminPanel();
-        setTimeout(()=>window.__smvRefreshAdminSections?.(),0);
         smvShowRoleNav();
         smvEnterInternalView("admin",true);
         go("admin");
+        await loadAdminPanel();
+        setTimeout(()=>window.__smvRefreshAdminSections?.(),0);
       }else{
         openModal('<h2>Admin Access</h2><div class="error">This account is not an Admin account.</div><p class="small">Please use your Admin login.</p>');
       }
@@ -1719,6 +1724,10 @@ const userStatus=String(
       </div>
 
       <div class="action-row">
+        <button class="btn gray" id="astroRefreshApproval">
+          REFRESH STATUS
+        </button>
+
         <button class="btn" id="astroLogoutPending">
           LOGOUT
         </button>
@@ -1754,6 +1763,10 @@ const userStatus=String(
       </div>
 
       <div class="action-row">
+        <button class="btn gray" id="astroRefreshApproval">
+          REFRESH STATUS
+        </button>
+
         <button class="btn" id="astroLogoutPending">
           LOGOUT
         </button>
@@ -1761,6 +1774,10 @@ const userStatus=String(
     </div>`;
   }
 
+  $('astroRefreshApproval')?.addEventListener(
+    'click',
+    ()=>loadDashboard()
+  );
 
   $('astroLogoutPending')?.addEventListener(
     'click',
@@ -2679,7 +2696,7 @@ async function loadAdminPanel(background=false){
 async function loadAdminPanelData(background=false){
  if(!currentUser || !(await isCurrentAdmin())){hide('admin');hide('adminLink');return;}
   if(!background)loadAdminContent().catch(e=>console.warn('Admin content unavailable:',e));
- if(!background){hidePrimarySections('admin');show('admin');}
+ if(!background){hidePrimarySections('admin');show('smv-dashboard-page');show('admin');}
  setTimeout(()=>window.__smvRefreshAdminSections?.(),0);
  try{
   const adminLoadUid=currentUser.uid;
@@ -3349,13 +3366,13 @@ if(auth){ onAuthStateChanged(auth,async user=>{
        return;
      }
      if(adminUser){
-       hide('dashLink'); show('adminLink');
        hidePrimarySections('admin');
        show('admin');
+       hide('dashLink'); show('adminLink');
        smvShowRoleNav();
-       smvEnterInternalView('admin',true);
-       go('admin');
+       smvEnterInternalView('admin',false);
        try{history.replaceState({smvView:"admin"},"","#admin");}catch(_e){}
+       go('admin');
        loadAdminPanel().catch(err=>console.warn('Admin restore failed:',err));
      }
      else {

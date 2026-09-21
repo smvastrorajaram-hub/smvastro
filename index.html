@@ -449,7 +449,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <div id="modalContent"></div>
 </div>
 </div>
-<script src="./app.mjs?v=20260921-v34-admin-first-login-fix" type="module"></script>
+<script src="./app.mjs?v=20260918-v17" type="module"></script>
 <script>
 /* Tamil Horoscope Generator - V121: server-side astronomical calculation engine. */
 (function(){
@@ -3771,114 +3771,6 @@ document.addEventListener('DOMContentLoaded', function(){
 <!-- SMV V10.2.2 MOBILE HEADER + HERO TARGETED FIX -->
 
 <!-- SMV V10.3 APPROVED REFERENCE HERO VISUAL FIX -->
-
-
-
-
-
-
-<script id="smv-v34-central-dashboard-router">
-(function(){
-  'use strict';
-  if(window.__SMV_V34_CENTRAL_DASHBOARD_ROUTER__) return;
-  window.__SMV_V34_CENTRAL_DASHBOARD_ROUTER__=true;
-
-  const ROLE_KEY='smv_v34_session_role_guard';
-  const validRole=r=>/^(admin|customer|astrologer)$/.test(r||'');
-  const visible=el=>!!el && !el.classList.contains('hidden') && getComputedStyle(el).display!=='none';
-
-  function saveRole(r){
-    if(!validRole(r)) return '';
-    window.__smvLockedSessionRole=r;
-    try{ sessionStorage.setItem(ROLE_KEY,r); }catch(_){ }
-    return r;
-  }
-  function storedRole(){
-    let r=window.__smvLockedSessionRole||'';
-    if(!r){ try{r=sessionStorage.getItem(ROLE_KEY)||'';}catch(_){ } }
-    return validRole(r)?r:'';
-  }
-  /* Read only stable application state.  No polling, MutationObserver or
-     synthetic link clicks are used here. */
-  function roleFromUI(){
-    const adminLink=document.getElementById('adminLink');
-    if(visible(adminLink) && (adminLink.textContent||'').trim().toLowerCase()==='admin') return 'admin';
-    const title=(document.getElementById('dashboardTitle')?.textContent||'').toLowerCase();
-    const body=(document.getElementById('dashboardContent')?.textContent||'').slice(0,1800).toLowerCase();
-    if(/astrologer dashboard/.test(title+' '+body)||/astrologer profile|open questions|total earnings/.test(body)) return 'astrologer';
-    if(/customer dashboard/.test(title)||/my questions|my consultations/.test(body)) return 'customer';
-    return '';
-  }
-  function currentRole(){ return saveRole(roleFromUI()) || storedRole(); }
-
-  function showWorkspace(role){
-    if(!validRole(role)) return false;
-    const page=document.getElementById('smv-dashboard-page');
-    const admin=document.getElementById('admin');
-    const dash=document.getElementById('dashboard');
-    if(page) page.classList.remove('hidden');
-    if(role==='admin'){
-      if(dash) dash.classList.add('hidden');
-      if(admin) admin.classList.remove('hidden');
-      if(location.hash!=='#admin') history.replaceState(null,'','#admin');
-    }else{
-      if(admin) admin.classList.add('hidden');
-      if(dash) dash.classList.remove('hidden');
-      if(location.hash!=='#dashboard') history.replaceState(null,'','#dashboard');
-    }
-    document.body.classList.add('smv-dashboard-mode');
-    return true;
-  }
-
-  function routeKnownRole(){
-    const r=currentRole();
-    if(r) showWorkspace(r);
-  }
-
-  /* The existing Firebase/Firestore application remains the single owner of
-     authentication and data loading.  This router only chooses the matching
-     workspace after that application exposes the authenticated role. */
-  document.addEventListener('click',function(e){
-    const admin=e.target?.closest?.('#adminLink');
-    const dash=e.target?.closest?.('#dashLink');
-    if(admin) saveRole('admin');
-    if(dash){
-      const r=roleFromUI();
-      if(r==='customer'||r==='astrologer') saveRole(r);
-    }
-  },true);
-
-  document.addEventListener('smv:dashboard-opened',function(){
-    const r=roleFromUI(); if(r) saveRole(r); routeKnownRole();
-  });
-  window.addEventListener('pageshow',routeKnownRole);
-  window.addEventListener('hashchange',function(){
-    if(location.hash==='#dashboard'||location.hash==='#admin') routeKnownRole();
-  });
-
-  /* Customer-only Ask Now guard.  It never rewrites a role. */
-  document.addEventListener('click',function(e){
-    const target=e.target?.closest?.('#askNowButton,a[href="#askNowSection"],.smv-master-service[href="#askNowSection"]');
-    if(!target) return;
-    const r=currentRole();
-    if(r==='admin'||r==='astrologer'){
-      e.preventDefault(); e.stopImmediatePropagation();
-      window.__SMV_ASK_NOW_INTENT=false;
-      alert('Customer Login Required');
-      return;
-    }
-    if(target.id!=='askNowButton') return;
-    e.preventDefault(); e.stopImmediatePropagation();
-    window.__SMV_ASK_NOW_INTENT=true;
-    const fn=window.__smvOpenQuestionService;
-    if(typeof fn==='function') Promise.resolve(fn()).catch(err=>console.error('ASK NOW failed:',err));
-  },true);
-
-  window.addEventListener('pageshow',function(){ routeKnownRole(); });
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',routeKnownRole,{once:true});
-  else routeKnownRole();
-})();
-</script>
 </body>
 <script id="smv-v172-ui-symbol-collapse-script">
 /* V172: robust UI-only symbol collapse. No data/Firebase/API/payment logic is changed. */
