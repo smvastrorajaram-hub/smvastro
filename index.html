@@ -230,6 +230,21 @@ html.smv-desktop-site #dashboardContent .astro-dashboard-summary > .card:nth-chi
 <div class="wrap">
 <div class="section-title"><h2>Private Consultation</h2><p>Choose an approved astrologer for a private consultation. The Chat Price shown below is set by Admin.</p></div>
 <div id="privateConsultationAstrologers"><div class="empty">Loading approved astrologers...</div></div>
+<div class="card hidden" id="privateConsultationQuestionCard">
+  <h3>Private Consultation Question</h3>
+  <div id="privateConsultationSelected" class="small"></div>
+  <form id="privateConsultationQuestionForm">
+    <label>Your Name<input id="privateConsultName" maxlength="120" required></label>
+    <label>Birth Date<input id="privateConsultBirthDate" type="date" required></label>
+    <label>Birth Time<input id="privateConsultBirthTime" type="time" required></label>
+    <label>Birth Place<input id="privateConsultBirthPlace" maxlength="200" required></label>
+    <label>Gender<select id="privateConsultGender"><option value="">Select</option><option>Male</option><option>Female</option><option>Other</option></select></label>
+    <label>Your Question<textarea id="privateConsultQuestion" rows="4" maxlength="10000" required></textarea></label>
+    <div id="privateConsultPaymentSummary"></div>
+    <button class="btn" id="privateConsultPayBtn" type="submit">PAY &amp; SUBMIT</button>
+    <div id="privateConsultMsg" class="small"></div>
+  </form>
+</div>
 </div>
 </section>
 <section aria-label="Install SMV ASTRO App" class="smv-install-app-section" id="smvInstallAppSection"><div class="smv-install-app-card"><div class="smv-install-app-icon-wrap"><img alt="SMV ASTRO" class="smv-install-app-icon" height="64" src="./assets/icon-192.png" width="64"/></div><div class="smv-install-app-copy"><h3>📱 Install SMV ASTRO App</h3><p>Install SMV ASTRO on your phone and use it like an app from your Home Screen.</p><div aria-live="polite" class="smv-install-app-help" id="smvInstallAppHelp"></div></div><button class="smv-install-app-btn" id="smvInstallAppBtn" type="button">INSTALL APP</button></div></section>

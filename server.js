@@ -1673,6 +1673,80 @@ app.get("/admin-data", async (req, res) => {
   }
 });
 
+app.post("/private-consultation/create-order", express.json({limit:"30kb"}), async (req,res)=>{
+  const user=await requireUser(req,res);if(!user)return;
+  try{
+    const astrologerId=String(req.body?.astrologerId||"").trim();
+    const customerName=String(req.body?.customerName||req.body?.birthDetails?.name||"").trim();
+    const question=String(req.body?.question||"").trim();
+    const birth=req.body?.birthDetails||{};
+    if(!astrologerId||!customerName||!question||!birth.birthDate||!birth.birthTime||!String(birth.birthPlace||"").trim())
+      return res.status(400).json({error:"Complete astrologer, birth details and question are required."});
+    const aSnap=await db.collection("smv_astrologers").doc(astrologerId).get();
+    if(!aSnap.exists)return res.status(404).json({error:"Selected astrologer was not found."});
+    const a=aSnap.data()||{};
+    if(!["approved","active"].includes(String(a.status||"").toLowerCase()))
+      return res.status(409).json({error:"Selected astrologer is not currently approved."});
+    const chatPrice=Number(a.pricePerQuestion||0);
+    if(!Number.isFinite(chatPrice)||chatPrice<1)return res.status(409).json({error:"This astrologer's Chat Price is not available."});
+    const adminCommissionRate=Math.max(0,Math.min(100,Number(a.adminCommissionRate??a.commissionRate??a.commissionPercent??20)));
+    const adminAmount=Math.round(chatPrice*adminCommissionRate)/100;
+    const astrologerAmount=Math.round((chatPrice-adminAmount)*100)/100;
+    const ref=db.collection("smv_private_consultations").doc();
+    const consultationId=ref.id;
+    const order=await razorpay.orders.create({
+      amount:Math.round(chatPrice*100),currency:"INR",
+      receipt:`SMV_PC_${consultationId.slice(0,20)}_${Date.now()}`,
+      notes:{consultationId,customerId:user.uid,astrologerId}
+    });
+    await ref.set({
+      consultationId,customerId:user.uid,customerEmail:user.email||null,customerName,question,
+      astrologerId,astrologerName:String(a.name||"Astrologer"),
+      chatPrice,adminCommissionRate,adminAmount,astrologerAmount,
+      amount:chatPrice,status:"awaiting_payment",paymentStatus:"order_created",allocationStatus:"selected_astrologer",
+      birthDetails:{name:customerName,birthDate:String(birth.birthDate),birthTime:String(birth.birthTime),birthPlace:String(birth.birthPlace).trim(),birthGender:String(birth.birthGender||""),timezone:"Asia/Kolkata",utcOffsetMinutes:330},
+      razorpayOrderId:order.id,paymentCurrency:"INR",createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()
+    });
+    await db.collection("razorpay_orders").doc(order.id).set({
+      razorpayOrderId:order.id,consultationId,amount:order.amount,currency:order.currency,
+      firebaseUid:user.uid,customerEmail:user.email||null,astrologerId,serviceName:"Private Astrology Consultation",
+      status:"created",createdAt:FieldValue.serverTimestamp()
+    });
+    return res.json({success:true,consultationId,orderId:order.id,keyId:RAZORPAY_KEY_ID,amount:order.amount,currency:order.currency});
+  }catch(e){console.error("Private consultation create-order error:",e);return res.status(500).json({error:e?.error?.description||e?.message||"Unable to create private consultation payment."});}
+});
+
+app.post("/private-consultation/verify-payment", express.json({limit:"15kb"}), async(req,res)=>{
+  const user=await requireUser(req,res);if(!user)return;
+  try{
+    const consultationId=String(req.body?.consultationId||"").trim();
+    const orderId=String(req.body?.razorpay_order_id||"").trim();
+    const paymentId=String(req.body?.razorpay_payment_id||"").trim();
+    const signature=String(req.body?.razorpay_signature||"").trim();
+    if(!consultationId||!orderId||!paymentId||!signature)return res.status(400).json({error:"Payment verification data is incomplete."});
+    const ref=db.collection("smv_private_consultations").doc(consultationId);
+    const snap=await ref.get();if(!snap.exists)return res.status(404).json({error:"Private consultation not found."});
+    const c=snap.data()||{};
+    if(c.customerId!==user.uid)return res.status(403).json({error:"You do not own this private consultation."});
+    if(c.razorpayOrderId!==orderId)return res.status(409).json({error:"Payment order mismatch."});
+    const expected=crypto.createHmac("sha256",RAZORPAY_KEY_SECRET).update(`${orderId}|${paymentId}`).digest("hex");
+    if(!signatureEqual(expected,signature))return res.status(400).json({error:"Payment signature verification failed."});
+    if(c.paymentStatus!=="paid"){
+      await ref.update({
+        paymentStatus:"paid",status:"pending_admin_approval",allocationStatus:"selected_astrologer",
+        razorpayPaymentId:paymentId,razorpaySignature:signature,paidAt:FieldValue.serverTimestamp(),
+        paymentRecordedAt:new Date().toISOString(),updatedAt:FieldValue.serverTimestamp()
+      });
+      await db.collection("smv_notifications").add({
+        userId:c.customerId,type:"private_consultation_payment",title:"Private consultation payment successful",
+        message:`Your private consultation with ${c.astrologerName||"the selected astrologer"} is waiting for Admin approval.`,
+        consultationId,createdAt:FieldValue.serverTimestamp(),read:false
+      });
+    }
+    return res.json({success:true,verified:true,consultationId,status:"pending_admin_approval"});
+  }catch(e){console.error("Private consultation verify-payment error:",e);return res.status(500).json({error:e?.message||"Unable to verify private consultation payment."});}
+});
+
 app.post("/create-order", express.json(), async (req, res) => {
   const razorpayMode = RAZORPAY_KEY_ID.startsWith('rzp_test_') ? 'test' : (RAZORPAY_KEY_ID.startsWith('rzp_live_') ? 'live' : 'invalid');
   if(razorpayMode === 'invalid'){

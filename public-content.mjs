@@ -170,6 +170,7 @@
     const section=$('private-consultation'),box=$('privateConsultationAstrologers');
     if(!section||!box)return;
     document.querySelectorAll('main section, body > section').forEach(s=>{if(s.id&&s.id!=='private-consultation')s.classList.add('hidden');});
+    $('astrologer-directory')?.classList.add('hidden');
     section.classList.remove('hidden');
     box.innerHTML='<div class="empty">Loading approved astrologers...</div>';
     section.scrollIntoView({behavior:'smooth',block:'start'});
@@ -181,21 +182,26 @@
       if(!items.length){box.innerHTML='<div class="empty">No approved astrologers available for private consultation.</div>';return;}
       box.innerHTML=items.map(a=>{
         const price=Number(a.chatPrice||0);
-        return `<div style="padding:12px 0;border-bottom:1px solid #e5e5e5">
-          <div style="display:flex;gap:10px;align-items:center">
-            ${a.photoData?`<img src="${esc(a.photoData)}" alt="${esc(a.name||'Astrologer')}" style="width:54px;height:54px;border-radius:50%;object-fit:cover">`:''}
-            <div><h3 style="margin:0">${esc(a.name||'Astrologer')}</h3><div class="small"><b>${esc(a.expertise||a.specialization||'Astrology')}</b> · ${esc(a.experience||'Experienced')} years experience</div></div>
+        return `<article class="smv-private-consult-row">
+          <div class="smv-private-consult-head">
+            ${a.photoData?`<img class="smv-private-consult-photo" src="${esc(a.photoData)}" alt="${esc(a.name||'Astrologer')}">`:''}
+            <div class="smv-private-consult-meta"><h3>${esc(a.name||'Astrologer')}</h3><div class="small"><b>${esc(a.expertise||a.specialization||'Astrology')}</b> · ${esc(a.experience||'Experienced')} years experience</div></div>
           </div>
-          <p style="margin:7px 0">${esc(a.profileDescription||a.bio||a.about||'Professional astrologer')}</p>
-          <div><b>Chat Price: ${price>=1?'₹'+price.toFixed(2):'Not available'}</b></div>
-          <button type="button" class="btn" data-private-consult-astro="${esc(a.id)}" ${price>=1?'':'disabled'} style="margin-top:7px">SELECT ASTROLOGER</button>
-        </div>`;
+          <p class="smv-private-consult-description">${esc(a.profileDescription||a.bio||a.about||'Professional astrologer')}</p>
+          <div class="smv-private-consult-price"><b>Chat Price: ${price>=1?'₹'+price.toFixed(2):'Not available'}</b></div>
+          <button type="button" class="btn smv-private-consult-select" data-private-consult-astro="${esc(a.id)}" ${price>=1?'':'disabled'}>SELECT ASTROLOGER</button>
+        </article>`;
       }).join('');
       box.querySelectorAll('[data-private-consult-astro]').forEach(b=>b.onclick=()=>{
         const astro=items.find(a=>String(a.id)===String(b.dataset.privateConsultAstro));
         if(!astro)return;
         window.__smvSelectedPrivateConsultAstrologer={id:astro.id,name:astro.name||'Astrologer',chatPrice:Number(astro.chatPrice||0)};
         box.querySelectorAll('[data-private-consult-astro]').forEach(x=>{x.textContent=x===b?'SELECTED':'SELECT ASTROLOGER';});
+        const card=$('privateConsultationQuestionCard'),selected=$('privateConsultationSelected'),summary=$('privateConsultPaymentSummary');
+        if(selected)selected.innerHTML='<b>Selected Astrologer:</b> '+esc(astro.name||'Astrologer');
+        if(summary)summary.innerHTML='<b>Private Consultation Chat Price: ₹'+Number(astro.chatPrice||0).toFixed(2)+'</b>';
+        card?.classList.remove('hidden');
+        card?.scrollIntoView({behavior:'smooth',block:'start'});
       });
     }catch(e){
       console.error('Private consultation astrologers load failed:',e);
@@ -203,9 +209,86 @@
     }
   }
 
+  let privateConsultSubmitting=false;
+  async function submitPrivateConsultation(e){
+    e.preventDefault();
+    if(privateConsultSubmitting)return;
+    const astro=window.__smvSelectedPrivateConsultAstrologer;
+    const msg=$('privateConsultMsg'),btn=$('privateConsultPayBtn');
+    if(!astro?.id||Number(astro.chatPrice)<1){if(msg)msg.innerHTML='<span class="error">Please select an available astrologer first.</span>';return;}
+    const payload={
+      astrologerId:String(astro.id),
+      customerName:String($('privateConsultName')?.value||'').trim(),
+      question:String($('privateConsultQuestion')?.value||'').trim(),
+      birthDetails:{
+        name:String($('privateConsultName')?.value||'').trim(),
+        birthDate:String($('privateConsultBirthDate')?.value||''),
+        birthTime:String($('privateConsultBirthTime')?.value||''),
+        birthPlace:String($('privateConsultBirthPlace')?.value||'').trim(),
+        birthGender:String($('privateConsultGender')?.value||''),
+        timezone:'Asia/Kolkata',utcOffsetMinutes:330
+      }
+    };
+    if(!payload.customerName||!payload.question||!payload.birthDetails.birthDate||!payload.birthDetails.birthTime||!payload.birthDetails.birthPlace){
+      if(msg)msg.innerHTML='<span class="error">Please complete all birth details and your question.</span>';return;
+    }
+    privateConsultSubmitting=true;if(btn){btn.disabled=true;btn.textContent='CREATING PAYMENT...';}
+    try{
+      const u=window.__smvFirebaseCurrentUser;
+      if(!u)throw new Error('Please login with your Customer account before payment.');
+      const token=await u.getIdToken();
+      const api=async(path,body)=>{
+        const r=await fetch(BACKEND+path,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(body),cache:'no-store'});
+        const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||`Service returned HTTP ${r.status}.`);return d;
+      };
+      const order=await api('/private-consultation/create-order',payload);
+      if(!order?.orderId||!order?.keyId||!order?.consultationId)throw new Error('Private consultation payment order was not created correctly.');
+      if(typeof window.Razorpay!=='function')throw new Error('Payment checkout is not ready. Please refresh and try again.');
+      const options={
+        key:order.keyId,amount:order.amount,currency:order.currency||'INR',name:'SMV ASTRO SERVICES',
+        description:'Private Astrology Consultation',order_id:order.orderId,
+        prefill:{email:u.email||''},notes:{consultationId:order.consultationId,astrologerId:String(astro.id)},
+        theme:{color:'#6b21a8'},
+        handler:async response=>{
+          if(btn){btn.disabled=true;btn.textContent='CONFIRMING PAYMENT...';}
+          try{
+            const vr=await api('/private-consultation/verify-payment',{
+              consultationId:order.consultationId,razorpay_order_id:response.razorpay_order_id,
+              razorpay_payment_id:response.razorpay_payment_id,razorpay_signature:response.razorpay_signature
+            });
+            if(!vr?.verified)throw new Error(vr?.error||'Payment verification failed.');
+            if(msg)msg.innerHTML='<span class="success">Payment successful. Your private consultation is waiting for Admin approval.</span>';
+            if(btn){btn.textContent='PAYMENT DONE ✓';}
+          }catch(err){if(msg)msg.innerHTML='<span class="error">'+esc(err.message||String(err))+'</span>';if(btn){btn.disabled=false;btn.textContent='PAY & SUBMIT';}}
+        },
+        modal:{ondismiss:()=>{privateConsultSubmitting=false;if(btn){btn.disabled=false;btn.textContent='PAY & SUBMIT';}}}
+      };
+      const rzp=new window.Razorpay(options);
+      rzp.on('payment.failed',resp=>{privateConsultSubmitting=false;if(msg)msg.innerHTML='<span class="error">'+esc(resp?.error?.description||'Payment failed. Please retry.')+'</span>';if(btn){btn.disabled=false;btn.textContent='PAY & SUBMIT';}});
+      if(btn){btn.disabled=false;btn.textContent='PAY & SUBMIT';}
+      rzp.open();
+    }catch(err){
+      privateConsultSubmitting=false;
+      if(msg)msg.innerHTML='<span class="error">'+esc(err.message||String(err))+'</span>';
+      if(btn){btn.disabled=false;btn.textContent='PAY & SUBMIT';}
+    }
+  }
+
   function setupAsk(){
+  $('privateConsultationQuestionForm')?.addEventListener('submit',submitPrivateConsultation);
   const privateConsultLink=$('privateConsultationHomeLink');
-  if(privateConsultLink)privateConsultLink.onclick=e=>{e.preventDefault();openPrivateConsultation();};
+  if(privateConsultLink)privateConsultLink.onclick=e=>{
+    e.preventDefault();
+    const section=$('private-consultation');
+    if(section && !section.classList.contains('hidden')){
+      section.classList.add('hidden');
+      $('home')?.classList.remove('hidden');
+      $('smv-master-services')?.classList.remove('hidden');
+      privateConsultLink.scrollIntoView({behavior:'smooth',block:'center'});
+      return;
+    }
+    openPrivateConsultation();
+  };
   // IMPORTANT: this script is a separate ES module from the main app module.
   // openQuestionService() is therefore not in this module's lexical scope.
   // Always cross the module boundary through the explicit window bridge.
