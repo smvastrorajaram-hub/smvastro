@@ -2279,9 +2279,10 @@ app.get("/astrologer/earnings", async (req, res) => {
   if (!user) return;
   try {
     const uid = String(user.uid);
-    const [paymentSnap, questionSnap] = await Promise.all([
+    const [paymentSnap, questionSnap, privateSnap] = await Promise.all([
       db.collection("smv_payments").where("astrologerId", "==", uid).get(),
-      db.collection("smv_questions").where("astrologerId", "==", uid).get()
+      db.collection("smv_questions").where("astrologerId", "==", uid).get(),
+      db.collection("smv_private_consultations").where("astrologerId", "==", uid).get()
     ]);
     const toIso = (v) => {
       try {
@@ -2294,15 +2295,17 @@ app.get("/astrologer/earnings", async (req, res) => {
     };
     const ledger = [];
     const creditedQuestionIds = new Set();
+    const creditedPrivateIds = new Set();
     paymentSnap.docs.forEach(d => {
       const p = d.data() || {};
       if (String(p.type || "") !== "astrologer_earning") return;
       if (String(p.status || "").toLowerCase() !== "credited") return;
       const amount = Number(p.earningAmount ?? p.commissionAmount ?? 0);
       if (!Number.isFinite(amount) || amount < 0) return;
-      const qid = String(p.questionId || "");
+      const qid = String(p.questionId || ""),pcid=String(p.consultationId||"");
       if (qid) creditedQuestionIds.add(qid);
-      ledger.push({ id: qid || d.id, paymentId: d.id, question: p.question || "Consultation", commission: amount, date: toIso(p.createdAt) });
+      if (pcid) creditedPrivateIds.add(pcid);
+      ledger.push({ id: pcid||qid||d.id, paymentId:d.id, consultationId:pcid||null, question:p.question||(pcid?"Private Consultation":"Consultation"), commission:amount, date:toIso(p.createdAt), source:pcid?"private_consultation":"public_question" });
     });
     // Backward compatibility for older credited questions that predate the
     // canonical astrologer_earning payment ledger.
@@ -2313,6 +2316,16 @@ app.get("/astrologer/earnings", async (req, res) => {
       const amount = Number(q.astrologerCommissionAmount ?? q.commissionAmount ?? 0);
       if (!Number.isFinite(amount) || amount < 0) return;
       ledger.push({ id:d.id, paymentId:null, question:q.question || "Consultation", commission:amount, date:toIso(q.commissionCreditedAt || q.answerApprovedAt || q.adminAnswerApprovedAt) });
+    });
+    // Backward compatibility: include already-credited private consultations
+    // that predate the canonical private earning payment ledger.
+    privateSnap.docs.forEach(d=>{
+      const c=d.data()||{};
+      if(String(c.commissionStatus||"")!=="credited"||!c.customerViewedAt)return;
+      if(creditedPrivateIds.has(d.id))return;
+      const amount=Number(c.astrologerCreditedAmount??c.astrologerAmount??0);
+      if(!Number.isFinite(amount)||amount<0)return;
+      ledger.push({id:d.id,paymentId:c.astrologerPaymentId||null,consultationId:d.id,question:c.question||"Private Consultation",commission:amount,date:toIso(c.commissionCreditedAt||c.customerViewedAt),source:"private_consultation"});
     });
     ledger.sort((a,b) => String(b.date || "").localeCompare(String(a.date || "")));
     const totalEarnings = Math.round(ledger.reduce((sum,x)=>sum+Number(x.commission||0),0)*100)/100;
@@ -2335,16 +2348,57 @@ app.get("/customer/private-consultations",async(req,res)=>{
 });
 app.post("/customer/private-consultation/mark-viewed",express.json({limit:"10kb"}),async(req,res)=>{
   const user=await requireUser(req,res);if(!user)return;
-  const id=String(req.body?.consultationId||"").trim(),ref=db.collection("smv_private_consultations").doc(id);
-  const s=await ref.get();if(!s.exists)return res.status(404).json({error:"Private consultation not found."});
-  const c=s.data()||{};if(c.customerId!==user.uid)return res.status(403).json({error:"You do not own this private consultation."});
-  if(c.status!=="answered"||!String(c.answer||"").trim())return res.status(409).json({error:"Answer is not ready to view."});
-  if(!c.customerViewedAt){
-    await ref.update({customerViewedAt:FieldValue.serverTimestamp(),customerViewStatus:"viewed",updatedAt:FieldValue.serverTimestamp()});
-    await db.collection("smv_notifications").add({userId:c.astrologerId,type:"private_answer_viewed",title:"Private Answer Viewed",message:`${c.customerName||"Customer"} viewed your private consultation answer.`,consultationId:id,createdAt:FieldValue.serverTimestamp(),read:false});
-    await addAdminPrivateNotification("private_answer_viewed","Private Answer Viewed by Customer",`${c.customerName||"Customer"} viewed the answer from ${c.astrologerName||"the selected astrologer"}.`,id,{customerId:c.customerId,astrologerId:c.astrologerId});
-  }
-  return res.json({success:true,consultationId:id,viewed:true});
+  const id=String(req.body?.consultationId||"").trim();
+  if(!id)return res.status(400).json({error:"Consultation ID is required."});
+  const ref=db.collection("smv_private_consultations").doc(id);
+  try{
+    const earningPaymentId="SMV-PC-EARN-"+id;
+    const earningRef=db.collection("smv_payments").doc(earningPaymentId);
+    const result=await db.runTransaction(async tx=>{
+      const s=await tx.get(ref);if(!s.exists)throw Object.assign(new Error("Private consultation not found."),{httpStatus:404});
+      const c=s.data()||{};
+      if(String(c.customerId||"")!==String(user.uid))throw Object.assign(new Error("You do not own this private consultation."),{httpStatus:403});
+      if(c.status!=="answered"||!String(c.answer||"").trim())throw Object.assign(new Error("Answer is not ready to view."),{httpStatus:409});
+      if(c.paymentStatus!=="paid"||c.refundId||c.status==="question_rejected")throw Object.assign(new Error("This consultation is not eligible for earnings credit."),{httpStatus:409});
+      if(c.answerStatus!=="approved")throw Object.assign(new Error("Answer is not approved for customer view."),{httpStatus:409});
+
+      const astrologerAmount=Number(c.astrologerAmount||0),adminAmount=Number(c.adminAmount||0),chatPrice=Number(c.chatPrice||c.amount||0);
+      if(!c.astrologerId||!Number.isFinite(astrologerAmount)||astrologerAmount<0||!Number.isFinite(adminAmount)||adminAmount<0)
+        throw Object.assign(new Error("Private consultation commission snapshot is invalid."),{httpStatus:409});
+
+      const alreadyCredited=String(c.commissionStatus||"")==="credited" && !!c.commissionCreditedAt;
+      const patch={customerViewedAt:c.customerViewedAt||FieldValue.serverTimestamp(),customerViewStatus:"viewed",updatedAt:FieldValue.serverTimestamp()};
+      if(!alreadyCredited){
+        tx.set(earningRef,{
+          paymentId:earningPaymentId,type:"astrologer_earning",source:"private_consultation_customer_view",
+          customerId:c.customerId||null,astrologerId:c.astrologerId,consultationId:id,questionId:null,
+          question:c.question||"Private Consultation",grossAmount:chatPrice,
+          commissionPercent:Math.max(0,100-Number(c.adminCommissionRate||0)),
+          commissionAmount:astrologerAmount,earningAmount:astrologerAmount,adminCommissionAmount:adminAmount,
+          status:"credited",paymentStatus:"pending_withdrawal",createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()
+        },{merge:false});
+        patch.commissionStatus="credited";
+        patch.commissionCreditedAt=FieldValue.serverTimestamp();
+        patch.astrologerPaymentId=earningPaymentId;
+        patch.astrologerCreditedAmount=astrologerAmount;
+        patch.adminCommissionStatus="credited";
+        patch.adminCommissionCreditedAt=FieldValue.serverTimestamp();
+        patch.adminCreditedAmount=adminAmount;
+      }
+      tx.update(ref,patch);
+      return {c,alreadyCredited,astrologerAmount,adminAmount,earningPaymentId};
+    });
+
+    if(!result.c.customerViewedAt){
+      await db.collection("smv_notifications").add({userId:result.c.astrologerId,type:"private_answer_viewed",title:"Private Answer Viewed",message:`${result.c.customerName||"Customer"} viewed your private consultation answer.`,consultationId:id,createdAt:FieldValue.serverTimestamp(),read:false});
+      await addAdminPrivateNotification("private_answer_viewed","Private Answer Viewed by Customer",`${result.c.customerName||"Customer"} viewed the answer from ${result.c.astrologerName||"the selected astrologer"}.`,id,{customerId:result.c.customerId,astrologerId:result.c.astrologerId});
+    }
+    if(!result.alreadyCredited){
+      await db.collection("smv_notifications").add({userId:result.c.astrologerId,type:"private_earning_credited",title:"Private Consultation Earning Credited",message:`Customer viewed your answer. ₹${result.astrologerAmount.toFixed(2)} is now available in your earnings.`,consultationId:id,commissionAmount:result.astrologerAmount,createdAt:FieldValue.serverTimestamp(),read:false});
+      await addAdminPrivateNotification("private_commission_credited","Private Consultation Commission Credited",`Customer viewed the answer. Astrologer ₹${result.astrologerAmount.toFixed(2)} and Admin ₹${result.adminAmount.toFixed(2)} were credited from the payment snapshot.`,id,{customerId:result.c.customerId,astrologerId:result.c.astrologerId,astrologerAmount:result.astrologerAmount,adminAmount:result.adminAmount});
+    }
+    return res.json({success:true,consultationId:id,viewed:true,credited:!result.alreadyCredited,astrologerAmount:result.astrologerAmount,adminAmount:result.adminAmount});
+  }catch(e){console.error("Private consultation mark-viewed/credit failed:",e);return res.status(e.httpStatus||500).json({error:e.message||"Unable to open private answer right now."});}
 });
 
 app.get("/customer/consultations", async (req, res) => {
