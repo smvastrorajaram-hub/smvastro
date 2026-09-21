@@ -1647,12 +1647,13 @@ app.get("/admin-data", async (req, res) => {
   try {
     // Read each collection independently. One damaged/missing collection must
     // never prevent the Admin Dashboard itself from opening.
-    const [users, astrologers, questions, payments, privateConsultations, commission, workflow, privateWorkflow] = await Promise.all([
+    const [users, astrologers, questions, payments, privateConsultations, adminNotifications, commission, workflow, privateWorkflow] = await Promise.all([
       readCollection("smv_users"),
       readCollection("smv_astrologers"),
       readCollection("smv_questions"),
       readCollection("smv_payments"),
       readCollection("smv_private_consultations"),
+      readCollection("smv_admin_notifications"),
       db.collection("smv_settings").doc("commission").get().then(s=>s.exists?s.data():null).catch(()=>null),
       db.collection("smv_settings").doc("workflow").get().then(s=>s.exists?s.data():{allowWithoutAdminApproval:false}).catch(()=>({allowWithoutAdminApproval:false})),
       db.collection("smv_settings").doc("privateConsultationWorkflow").get().then(s=>s.exists?s.data():{allowWithoutAdminApproval:false,minimumAnswerWords:20}).catch(()=>({allowWithoutAdminApproval:false,minimumAnswerWords:20}))
@@ -1667,6 +1668,7 @@ app.get("/admin-data", async (req, res) => {
       astrologers: astrologers.items,
       questions: questions.items,
       privateConsultations: privateConsultations.items,
+      adminNotifications: adminNotifications.items,
       payments: payments.items,
       errors: { users: users.error || null, astrologers: astrologers.error || null, questions: questions.error || null, payments: payments.error || null }
     });
@@ -1677,6 +1679,14 @@ app.get("/admin-data", async (req, res) => {
 });
 
 
+async function addAdminPrivateNotification(type,title,message,consultationId,extra={}){
+  try{
+    await db.collection("smv_admin_notifications").add({
+      type,title,message,consultationId:String(consultationId||""),read:false,
+      source:"private_consultation",...extra,createdAt:FieldValue.serverTimestamp()
+    });
+  }catch(e){console.warn("Admin private notification write skipped:",e?.message||e);}
+}
 async function getPrivateConsultWorkflow(){
   try{
     const s=await db.collection("smv_settings").doc("privateConsultationWorkflow").get();
@@ -1753,6 +1763,7 @@ app.post("/astrologer/private-consultation/submit-answer",express.json({limit:"3
   if(!id||wordCount<minimumWords)return res.status(400).json({error:`Enter an answer of at least ${minimumWords} words.`,minimumAnswerWords:minimumWords,wordCount});
   const direct=wf.allowWithoutAdminApproval===true;
   await ref.update({answer,status:direct?"answered":"answer_pending_admin_approval",answerStatus:direct?"approved":"pending_admin_approval",answerSubmittedAt:FieldValue.serverTimestamp(),answerLastEditedAt:FieldValue.serverTimestamp(),commissionStatus:"pending_customer_view",updatedAt:FieldValue.serverTimestamp()});
+  if(!direct)await addAdminPrivateNotification("private_answer_waiting","Private Answer Waiting for Approval",`${c.astrologerName||"Selected astrologer"} submitted an answer for ${c.customerName||"Customer"}.`,id,{customerId:c.customerId,astrologerId:c.astrologerId});
   return res.json({success:true,consultationId:id,status:direct?"answered":"answer_pending_admin_approval",minimumAnswerWords:minimumWords,wordCount});
 });
 app.post("/admin/private-consultation/approve-answer",express.json({limit:"10kb"}),async(req,res)=>{
@@ -1840,6 +1851,7 @@ app.post("/private-consultation/verify-payment", express.json({limit:"15kb"}), a
         razorpayPaymentId:paymentId,razorpaySignature:signature,paidAt:FieldValue.serverTimestamp(),
         paymentRecordedAt:new Date().toISOString(),updatedAt:FieldValue.serverTimestamp()
       });
+      await addAdminPrivateNotification("private_payment_received","Private Consultation Payment Received",`${c.customerName||"Customer"} paid ₹${Number(c.chatPrice||c.amount||0).toFixed(2)} for ${c.astrologerName||"the selected astrologer"}.`,consultationId,{customerId:c.customerId,astrologerId:c.astrologerId});
       await db.collection("smv_notifications").add({
         userId:c.customerId,type:"private_consultation_payment",title:"Private consultation payment successful",
         message:autoAllow?`Your private consultation is now visible to ${c.astrologerName||"the selected astrologer"}.`:`Your private consultation with ${c.astrologerName||"the selected astrologer"} is waiting for Admin approval.`,
@@ -2281,6 +2293,29 @@ app.get("/astrologer/earnings", async (req, res) => {
     console.error("Astrologer earnings load failed:", e);
     return res.status(500).json({error:"Unable to load astrologer earnings right now."});
   }
+});
+
+app.get("/customer/private-consultations",async(req,res)=>{
+  res.set("Cache-Control","private, no-store, max-age=0");
+  const user=await requireUser(req,res);if(!user)return;
+  try{
+    const snap=await db.collection("smv_private_consultations").where("customerId","==",user.uid).get();
+    const toIso=v=>{try{if(!v)return null;if(typeof v.toDate==="function")return v.toDate().toISOString();if(v instanceof Date)return v.toISOString();if(typeof v==="string")return v;return null;}catch(_e){return null;}};
+    const consultations=snap.docs.map(d=>{const c=d.data()||{};return {id:d.id,...c,createdAt:toIso(c.createdAt),updatedAt:toIso(c.updatedAt),paidAt:toIso(c.paidAt),questionApprovedAt:toIso(c.questionApprovedAt),answerSubmittedAt:toIso(c.answerSubmittedAt),answerApprovedAt:toIso(c.answerApprovedAt),answerRejectedAt:toIso(c.answerRejectedAt),customerViewedAt:toIso(c.customerViewedAt),refundCreatedAt:toIso(c.refundCreatedAt),refundProcessedAt:toIso(c.refundProcessedAt)};}).sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
+    return res.json({success:true,customerId:user.uid,consultations});
+  }catch(e){console.error("Private customer consultations load failed:",e);return res.status(500).json({error:"Unable to load private consultations."});}
+});
+app.post("/customer/private-consultation/mark-viewed",express.json({limit:"10kb"}),async(req,res)=>{
+  const user=await requireUser(req,res);if(!user)return;
+  const id=String(req.body?.consultationId||"").trim(),ref=db.collection("smv_private_consultations").doc(id);
+  const s=await ref.get();if(!s.exists)return res.status(404).json({error:"Private consultation not found."});
+  const c=s.data()||{};if(c.customerId!==user.uid)return res.status(403).json({error:"You do not own this private consultation."});
+  if(c.status!=="answered"||!String(c.answer||"").trim())return res.status(409).json({error:"Answer is not ready to view."});
+  if(!c.customerViewedAt){
+    await ref.update({customerViewedAt:FieldValue.serverTimestamp(),customerViewStatus:"viewed",updatedAt:FieldValue.serverTimestamp()});
+    await db.collection("smv_notifications").add({userId:c.astrologerId,type:"private_answer_viewed",title:"Private Answer Viewed",message:`${c.customerName||"Customer"} viewed your private consultation answer.`,consultationId:id,createdAt:FieldValue.serverTimestamp(),read:false});
+  }
+  return res.json({success:true,consultationId:id,viewed:true});
 });
 
 app.get("/customer/consultations", async (req, res) => {
