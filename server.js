@@ -1812,7 +1812,19 @@ async function privateConsultRefund(id,reason,user){
 app.post("/admin/private-consultation/reject-question",express.json({limit:"10kb"}),async(req,res)=>{
   const user=await requireUser(req,res);if(!user)return;if(!(await isAdminUser(user)))return res.status(403).json({error:"Admin access denied."});
   try{const id=String(req.body?.consultationId||"").trim(),reason=String(req.body?.reason||"").trim();if(!id||!reason)return res.status(400).json({error:"Consultation ID and reason are required."});return res.json(await privateConsultRefund(id,reason,user));}
-  catch(e){return res.status(e.httpStatus||500).json({error:e.message||"Private consultation refund failed."});}
+  catch(e){const id=String(req.body?.consultationId||"").trim();if(id)await db.collection("smv_private_consultations").doc(id).set({status:"question_rejected",refundStatus:"failed",refundReason:String(req.body?.reason||"Question rejected by Admin"),refundLastError:String(e.message||e),refundLastAttemptAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()},{merge:true}).catch(()=>{});return res.status(e.httpStatus||500).json({error:e.message||"Private consultation refund failed."});}
+});
+app.post("/admin/private-consultation/retry-refund",express.json({limit:"10kb"}),async(req,res)=>{
+ const user=await requireUser(req,res);if(!user)return;if(!(await isAdminUser(user)))return res.status(403).json({error:"Admin access denied."});
+ try{const id=String(req.body?.consultationId||"").trim(),ref=db.collection("smv_private_consultations").doc(id),s=await ref.get();if(!s.exists)return res.status(404).json({error:"Private consultation not found."});const c=s.data()||{};if(c.refundId)return res.status(409).json({error:"Refund ID already exists. Use Sync Razorpay Refund."});return res.json(await privateConsultRefund(id,String(c.refundReason||"Question rejected by Admin"),user));}
+ catch(e){const id=String(req.body?.consultationId||"").trim();if(id)await db.collection("smv_private_consultations").doc(id).set({refundStatus:"failed",refundLastError:String(e.message||e),refundLastAttemptAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()},{merge:true}).catch(()=>{});return res.status(e.httpStatus||500).json({error:e.message||"Private refund retry failed."});}
+});
+app.post("/admin/private-consultation/sync-refund",express.json({limit:"10kb"}),async(req,res)=>{
+ const user=await requireUser(req,res);if(!user)return;if(!(await isAdminUser(user)))return res.status(403).json({error:"Admin access denied."});
+ try{const id=String(req.body?.consultationId||"").trim(),ref=db.collection("smv_private_consultations").doc(id),s=await ref.get();if(!s.exists)return res.status(404).json({error:"Private consultation not found."});const c=s.data()||{};if(!c.refundId)return res.status(409).json({error:"Refund ID is not available. Use Retry Refund."});
+ const rr=await razorpay.refunds.fetch(c.refundId),refs=bankReferences(rr,c),status=String(rr.status||"pending"),patch={refundStatus:status,...refs,refundSyncedAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()};if(["processed","completed"].includes(status.toLowerCase()))patch.refundProcessedAt=FieldValue.serverTimestamp();await ref.set(patch,{merge:true});
+ return res.json({success:true,consultationId:id,refundId:rr.id,refundStatus:status,...refs});
+ }catch(e){return res.status(502).json({error:e.message||"Unable to sync Razorpay refund."});}
 });
 app.get("/astrologer/private-consultations",async(req,res)=>{
   const user=await requireUser(req,res);if(!user)return;
@@ -1912,6 +1924,34 @@ app.post("/private-consultation/create-order", express.json({limit:"30kb"}), asy
   }catch(e){console.error("Private consultation create-order error:",e);return res.status(500).json({error:e?.error?.description||e?.message||"Unable to create private consultation payment."});}
 });
 
+app.post("/private-consultation/retry-payment",express.json({limit:"10kb"}),async(req,res)=>{
+ const user=await requireUser(req,res);if(!user)return;
+ try{const id=String(req.body?.consultationId||"").trim(),ref=db.collection("smv_private_consultations").doc(id),s=await ref.get();if(!s.exists)return res.status(404).json({error:"Private consultation not found."});const c=s.data()||{};
+ if(c.customerId!==user.uid)return res.status(403).json({error:"You do not own this private consultation."});if(c.paymentStatus==="paid")return res.status(409).json({error:"This consultation is already paid."});if(c.refundId||c.status==="question_rejected")return res.status(409).json({error:"Rejected/refunded consultations cannot be repaid."});
+ const price=Number(c.chatPrice||c.amount||0);if(!Number.isFinite(price)||price<1)return res.status(409).json({error:"Saved Chat Price is invalid."});
+ const order=await razorpay.orders.create({amount:Math.round(price*100),currency:c.paymentCurrency||"INR",receipt:`SMV_PC_R_${id.slice(0,18)}_${Date.now()}`,notes:{consultationId:id,customerId:user.uid,astrologerId:c.astrologerId,retry:"true"}});
+ await ref.set({razorpayOrderId:order.id,paymentStatus:"order_created",status:"awaiting_payment",paymentRetryCount:FieldValue.increment(1),lastPaymentAttemptAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()},{merge:true});
+ return res.json({success:true,consultationId:id,orderId:order.id,keyId:RAZORPAY_KEY_ID,amount:order.amount,currency:order.currency,chatPrice:price});
+ }catch(e){return res.status(500).json({error:e?.error?.description||e?.message||"Unable to retry payment."});}
+});
+app.post("/private-consultation/cancel-payment",express.json({limit:"10kb"}),async(req,res)=>{
+ const user=await requireUser(req,res);if(!user)return;const id=String(req.body?.consultationId||"").trim(),ref=db.collection("smv_private_consultations").doc(id),s=await ref.get();if(!s.exists)return res.status(404).json({error:"Private consultation not found."});const c=s.data()||{};
+ if(c.customerId!==user.uid)return res.status(403).json({error:"You do not own this private consultation."});if(c.paymentStatus==="paid")return res.status(409).json({error:"Payment is already completed."});
+ await ref.set({paymentStatus:"cancelled",status:"awaiting_payment",paymentCancelledAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()},{merge:true});return res.json({success:true});
+});
+app.post("/private-consultation/recover-payment",express.json({limit:"10kb"}),async(req,res)=>{
+ const user=await requireUser(req,res);if(!user)return;
+ try{const id=String(req.body?.consultationId||"").trim(),ref=db.collection("smv_private_consultations").doc(id),s=await ref.get();if(!s.exists)return res.status(404).json({error:"Private consultation not found."});const c=s.data()||{};
+ if(c.customerId!==user.uid)return res.status(403).json({error:"You do not own this private consultation."});if(c.paymentStatus==="paid")return res.json({success:true,recovered:true,alreadyPaid:true});
+ if(!c.razorpayOrderId)return res.status(409).json({error:"No Razorpay order is available to recover."});
+ const list=await razorpay.orders.fetchPayments(c.razorpayOrderId),expected=Math.round(Number(c.chatPrice||c.amount||0)*100),captured=(list?.items||[]).find(p=>p.status==="captured"&&Number(p.amount)===expected);
+ if(!captured)return res.json({success:true,recovered:false});
+ const wf=await getPrivateConsultWorkflow(),auto=wf.allowWithoutAdminApproval===true;
+ await ref.set({paymentStatus:"paid",status:auto?"approved_for_astrologer":"pending_admin_approval",allocationStatus:"selected_astrologer",questionApprovalBypassed:auto,razorpayPaymentId:captured.id,paidAt:FieldValue.serverTimestamp(),paymentRecoveredAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()},{merge:true});
+ await addAdminPrivateNotification("private_payment_recovered","Private Consultation Payment Recovered",`${c.customerName||"Customer"} payment ₹${Number(c.chatPrice||c.amount||0).toFixed(2)} recovered from Razorpay.`,id,{customerId:c.customerId,astrologerId:c.astrologerId});
+ return res.json({success:true,recovered:true,consultationId:id,paymentId:captured.id});
+ }catch(e){return res.status(500).json({error:e?.message||"Unable to recover payment."});}
+});
 app.post("/private-consultation/verify-payment", express.json({limit:"15kb"}), async(req,res)=>{
   const user=await requireUser(req,res);if(!user)return;
   try{
