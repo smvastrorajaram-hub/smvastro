@@ -1618,7 +1618,10 @@ app.post("/customer/mark-answer-viewed", express.json({limit:"10kb"}), async (re
     }
     const patch={customerAnswerViewedAt:q.customerAnswerViewedAt||FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()};
     if(shouldCredit){
-      patch.commissionStatus="credited"; patch.commissionCreditedAt=FieldValue.serverTimestamp();
+      patch.privateAstrologerCommissionRate=astrologerRate;
+        patch.privateAdminCommissionRate=Math.round((100-astrologerRate)*100)/100;
+        patch.astrologerAmount=astrologerAmount;patch.adminAmount=adminAmount;
+        patch.commissionStatus="credited"; patch.commissionCreditedAt=FieldValue.serverTimestamp();
       patch.commissionAmount=amount; patch.astrologerCommissionAmount=amount; patch.astrologerPaymentId=astrologerPaymentId;
     }
     await ref.update(patch);
@@ -1647,7 +1650,7 @@ app.get("/admin-data", async (req, res) => {
   try {
     // Read each collection independently. One damaged/missing collection must
     // never prevent the Admin Dashboard itself from opening.
-    const [users, astrologers, questions, payments, privateConsultations, adminNotifications, legacyNotifications, commission, workflow, privateWorkflow] = await Promise.all([
+    const [users, astrologers, questions, payments, privateConsultations, adminNotifications, legacyNotifications, commission, privateCommission, workflow, privateWorkflow] = await Promise.all([
       readCollection("smv_users"),
       readCollection("smv_astrologers"),
       readCollection("smv_questions"),
@@ -1656,6 +1659,7 @@ app.get("/admin-data", async (req, res) => {
       readCollection("smv_admin_notifications"),
       readCollection("smv_notifications"),
       db.collection("smv_settings").doc("commission").get().then(s=>s.exists?s.data():null).catch(()=>null),
+      getPrivateCommissionSettings(),
       db.collection("smv_settings").doc("workflow").get().then(s=>s.exists?s.data():{allowWithoutAdminApproval:false}).catch(()=>({allowWithoutAdminApproval:false})),
       db.collection("smv_settings").doc("privateConsultationWorkflow").get().then(s=>s.exists?s.data():{allowWithoutAdminApproval:false,minimumAnswerWords:20}).catch(()=>({allowWithoutAdminApproval:false,minimumAnswerWords:20}))
     ]);
@@ -1663,7 +1667,7 @@ app.get("/admin-data", async (req, res) => {
     const customers = users.items.filter(x => String(x.role || "").toLowerCase() === "customer");
     return res.json({
       success: true,
-      settings: {commission, workflow, privateWorkflow},
+      settings: {commission, privateCommission, workflow, privateWorkflow},
       customers,
       users: users.items,
       astrologers: astrologers.items,
@@ -1696,6 +1700,22 @@ app.get("/admin-data", async (req, res) => {
 });
 
 
+async function getPrivateCommissionSettings(){
+  try{
+    const s=await db.collection("smv_settings").doc("privateConsultationCommission").get();
+    const d=s.exists?s.data()||{}:{};
+    const astrologerRate=Math.max(0,Math.min(100,Number(d.astrologerRate??20)));
+    return {astrologerRate,adminRate:Math.round((100-astrologerRate)*100)/100};
+  }catch(_e){return {astrologerRate:20,adminRate:80};}
+}
+function privateCommissionSnapshot(chatPrice,settings){
+  const price=Math.round(Number(chatPrice||0)*100)/100;
+  const astrologerRate=Math.max(0,Math.min(100,Number(settings?.astrologerRate??20)));
+  const adminRate=Math.round((100-astrologerRate)*100)/100;
+  const astrologerAmount=Math.round(price*astrologerRate)/100;
+  const adminAmount=Math.round((price-astrologerAmount)*100)/100;
+  return {privateAstrologerCommissionRate:astrologerRate,privateAdminCommissionRate:adminRate,astrologerAmount,adminAmount};
+}
 async function addAdminPrivateNotification(type,title,message,consultationId,extra={}){
   try{
     await db.collection("smv_admin_notifications").add({
@@ -1711,6 +1731,35 @@ async function getPrivateConsultWorkflow(){
     return {allowWithoutAdminApproval:d.allowWithoutAdminApproval===true,minimumAnswerWords:Math.max(1,Math.min(10000,Number(d.minimumAnswerWords||20)))};
   }catch(_e){return {allowWithoutAdminApproval:false,minimumAnswerWords:20};}
 }
+app.post("/admin/private-consultation/set-commission",express.json({limit:"5kb"}),async(req,res)=>{
+  const user=await requireUser(req,res);if(!user)return;
+  if(!(await isAdminUser(user)))return res.status(403).json({error:"Admin access denied."});
+  const astrologerRate=Number(req.body?.astrologerRate);
+  if(!Number.isFinite(astrologerRate)||astrologerRate<0||astrologerRate>100)return res.status(400).json({error:"Astrologer commission must be between 0 and 100."});
+  const adminRate=Math.round((100-astrologerRate)*100)/100;
+  await db.collection("smv_settings").doc("privateConsultationCommission").set({astrologerRate,adminRate,updatedAt:FieldValue.serverTimestamp(),updatedBy:user.uid},{merge:true});
+
+  // One-time backward credit/backfill: only paid, answered, approved, customer-viewed,
+  // non-refunded consultations that have not already been credited.
+  const snap=await db.collection("smv_private_consultations").get();
+  let backfilled=0,skipped=0;
+  for(const d of snap.docs){
+    const c=d.data()||{},id=d.id;
+    const eligible=c.paymentStatus==="paid"&&c.status==="answered"&&c.answerStatus==="approved"&&!!c.customerViewedAt&&!c.refundId&&String(c.commissionStatus||"")!=="credited";
+    if(!eligible){skipped++;continue;}
+    const amounts=privateCommissionSnapshot(c.chatPrice||c.amount,{astrologerRate});
+    const earningId="SMV-PC-EARN-"+id,earningRef=db.collection("smv_payments").doc(earningId);
+    await db.runTransaction(async tx=>{
+      const fresh=await tx.get(d.ref),e=await tx.get(earningRef);if(!fresh.exists)return;
+      const fc=fresh.data()||{};if(String(fc.commissionStatus||"")==="credited"||e.exists)return;
+      tx.set(earningRef,{paymentId:earningId,type:"astrologer_earning",source:"private_consultation_backfill",customerId:fc.customerId||null,astrologerId:fc.astrologerId,consultationId:id,questionId:null,question:fc.question||"Private Consultation",grossAmount:Number(fc.chatPrice||fc.amount||0),commissionPercent:amounts.privateAstrologerCommissionRate,commissionAmount:amounts.astrologerAmount,earningAmount:amounts.astrologerAmount,adminCommissionAmount:amounts.adminAmount,status:"credited",paymentStatus:"pending_withdrawal",createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()});
+      tx.update(d.ref,{...amounts,commissionStatus:"credited",commissionCreditedAt:FieldValue.serverTimestamp(),astrologerPaymentId:earningId,astrologerCreditedAmount:amounts.astrologerAmount,adminCommissionStatus:"credited",adminCommissionCreditedAt:FieldValue.serverTimestamp(),adminCreditedAmount:amounts.adminAmount,commissionBackfilled:true,updatedAt:FieldValue.serverTimestamp()});
+    });
+    backfilled++;
+  }
+  await addAdminPrivateNotification("private_commission_setting","Private Consultation Commission Updated",`Global Private Consultation commission set to Astrologer ${astrologerRate}% / Admin ${adminRate}%. Eligible past viewed consultations backfilled: ${backfilled}.`,"",{astrologerRate,adminRate,backfilled});
+  return res.json({success:true,astrologerRate,adminRate,backfilled,skipped});
+});
 app.post("/admin/private-consultation/set-word-count",express.json({limit:"5kb"}),async(req,res)=>{
   const user=await requireUser(req,res);if(!user)return;
   if(!(await isAdminUser(user)))return res.status(403).json({error:"Admin access denied."});
@@ -1771,7 +1820,7 @@ app.get("/astrologer/private-consultations",async(req,res)=>{
   const snap=await db.collection("smv_private_consultations").where("astrologerId","==",user.uid).get();
   const items=snap.docs.map(d=>({id:d.id,...d.data()})).filter(c=>c.paymentStatus==="paid"&&!["pending_admin_approval","question_rejected"].includes(String(c.status||"")));
   const privateWorkflow=await getPrivateConsultWorkflow();
-  return res.json({success:true,consultations:items,settings:{minimumAnswerWords:privateWorkflow.minimumAnswerWords,allowWithoutAdminApproval:privateWorkflow.allowWithoutAdminApproval}});
+  return res.json({success:true,consultations:items,settings:{minimumAnswerWords:privateWorkflow.minimumAnswerWords,allowWithoutAdminApproval:privateWorkflow.allowWithoutAdminApproval,privateCommission:await getPrivateCommissionSettings()}});
 });
 app.post("/astrologer/private-consultation/submit-answer",express.json({limit:"30kb"}),async(req,res)=>{
   const user=await requireUser(req,res);if(!user)return;
@@ -1828,9 +1877,9 @@ app.post("/private-consultation/create-order", express.json({limit:"30kb"}), asy
       return res.status(409).json({error:"Selected astrologer is not currently approved."});
     const chatPrice=Number(a.pricePerQuestion||0);
     if(!Number.isFinite(chatPrice)||chatPrice<1)return res.status(409).json({error:"This astrologer's Chat Price is not available."});
-    const adminCommissionRate=Math.max(0,Math.min(100,Number(a.adminCommissionRate??a.commissionRate??a.commissionPercent??20)));
-    const adminAmount=Math.round(chatPrice*adminCommissionRate)/100;
-    const astrologerAmount=Math.round((chatPrice-adminAmount)*100)/100;
+    const privateCommission=await getPrivateCommissionSettings();
+    const commissionSnapshot=privateCommissionSnapshot(chatPrice,privateCommission);
+    const {privateAstrologerCommissionRate,privateAdminCommissionRate,astrologerAmount,adminAmount}=commissionSnapshot;
     const ref=db.collection("smv_private_consultations").doc();
     const consultationId=ref.id;
     const order=await razorpay.orders.create({
@@ -1841,7 +1890,7 @@ app.post("/private-consultation/create-order", express.json({limit:"30kb"}), asy
     await ref.set({
       consultationId,customerId:user.uid,customerEmail:user.email||null,customerName,question,
       astrologerId,astrologerName:String(a.name||"Astrologer"),
-      chatPrice,adminCommissionRate,adminAmount,astrologerAmount,
+      chatPrice,privateAstrologerCommissionRate,privateAdminCommissionRate,adminAmount,astrologerAmount,
       amount:chatPrice,status:"awaiting_payment",paymentStatus:"order_created",allocationStatus:"selected_astrologer",
       birthDetails:{name:customerName,birthDate:String(birth.birthDate),birthTime:String(birth.birthTime),birthPlace:String(birth.birthPlace).trim(),birthGender:String(birth.birthGender||""),timezone:"Asia/Kolkata",utcOffsetMinutes:330},
       razorpayOrderId:order.id,paymentCurrency:"INR",createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()
@@ -2362,7 +2411,14 @@ app.post("/customer/private-consultation/mark-viewed",express.json({limit:"10kb"
       if(c.paymentStatus!=="paid"||c.refundId||c.status==="question_rejected")throw Object.assign(new Error("This consultation is not eligible for earnings credit."),{httpStatus:409});
       if(c.answerStatus!=="approved")throw Object.assign(new Error("Answer is not approved for customer view."),{httpStatus:409});
 
-      const astrologerAmount=Number(c.astrologerAmount||0),adminAmount=Number(c.adminAmount||0),chatPrice=Number(c.chatPrice||c.amount||0);
+      const chatPrice=Number(c.chatPrice||c.amount||0);
+      let astrologerAmount=Number(c.astrologerAmount),adminAmount=Number(c.adminAmount);
+      let astrologerRate=Number(c.privateAstrologerCommissionRate);
+      if(!Number.isFinite(astrologerAmount)||!Number.isFinite(adminAmount)||!Number.isFinite(astrologerRate)){
+        const livePrivateCommission=await getPrivateCommissionSettings();
+        const snapAmounts=privateCommissionSnapshot(chatPrice,livePrivateCommission);
+        astrologerAmount=snapAmounts.astrologerAmount;adminAmount=snapAmounts.adminAmount;astrologerRate=snapAmounts.privateAstrologerCommissionRate;
+      }
       if(!c.astrologerId||!Number.isFinite(astrologerAmount)||astrologerAmount<0||!Number.isFinite(adminAmount)||adminAmount<0)
         throw Object.assign(new Error("Private consultation commission snapshot is invalid."),{httpStatus:409});
 
@@ -2373,7 +2429,7 @@ app.post("/customer/private-consultation/mark-viewed",express.json({limit:"10kb"
           paymentId:earningPaymentId,type:"astrologer_earning",source:"private_consultation_customer_view",
           customerId:c.customerId||null,astrologerId:c.astrologerId,consultationId:id,questionId:null,
           question:c.question||"Private Consultation",grossAmount:chatPrice,
-          commissionPercent:Math.max(0,100-Number(c.adminCommissionRate||0)),
+          commissionPercent:astrologerRate,
           commissionAmount:astrologerAmount,earningAmount:astrologerAmount,adminCommissionAmount:adminAmount,
           status:"credited",paymentStatus:"pending_withdrawal",createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()
         },{merge:false});
