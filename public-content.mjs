@@ -193,6 +193,13 @@
         </article>`;
       }).join('');
       box.querySelectorAll('[data-private-consult-astro]').forEach(b=>b.onclick=()=>{
+        const user=window.__smvFirebaseCurrentUser;
+        const role=String(window.__smvCurrentRole||'').toLowerCase();
+        if(!user || role!=='customer'){
+          alert('Customer Login Required — Please login with a Customer account to select an astrologer.');
+          if(!user)$('authBtn')?.click();
+          return;
+        }
         const astro=items.find(a=>String(a.id)===String(b.dataset.privateConsultAstro));
         if(!astro)return;
         window.__smvSelectedPrivateConsultAstrologer={id:astro.id,name:astro.name||'Astrologer',chatPrice:Number(astro.chatPrice||0)};
@@ -235,7 +242,7 @@
     privateConsultSubmitting=true;if(btn){btn.disabled=true;btn.textContent='CREATING PAYMENT...';}
     try{
       const u=window.__smvFirebaseCurrentUser;
-      if(!u)throw new Error('Please login with your Customer account before payment.');
+      if(!u || String(window.__smvCurrentRole||'').toLowerCase()!=='customer')throw new Error('Please login with your Customer account before payment.');
       const token=await u.getIdToken();
       const api=async(path,body)=>{
         const r=await fetch(BACKEND+path,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(body),cache:'no-store'});
@@ -276,6 +283,17 @@
 
   function setupAsk(){
   $('privateConsultationQuestionForm')?.addEventListener('submit',submitPrivateConsultation);
+  $('privateConsultationQuestionClose')?.addEventListener('click',()=>{
+    $('privateConsultationQuestionCard')?.classList.add('hidden');
+    window.__smvSelectedPrivateConsultAstrologer=null;
+    document.querySelectorAll('[data-private-consult-astro]').forEach(b=>{b.textContent='SELECT ASTROLOGER';b.disabled=false;});
+    const selected=$('privateConsultationSelected'),summary=$('privateConsultPaymentSummary'),msg=$('privateConsultMsg');
+    if(selected)selected.textContent='';
+    if(summary)summary.textContent='';
+    if(msg)msg.textContent='';
+    $('privateConsultationQuestionForm')?.reset();
+    $('privateConsultationAstrologers')?.scrollIntoView({behavior:'smooth',block:'start'});
+  });
   const privateConsultLink=$('privateConsultationHomeLink');
   if(privateConsultLink)privateConsultLink.onclick=e=>{
     e.preventDefault();

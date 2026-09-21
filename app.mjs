@@ -775,6 +775,7 @@ async function submitAuth(mode){
     const role=String(profile.role||loginRole||"customer").toLowerCase();
     const adminUser=(loginCred.user.uid===ADMIN_UID || role==="admin");
     setHeaderRoleLabel(adminUser?'admin':role);
+    window.__smvCurrentRole=adminUser?'admin':role;
 
     /* IMPORTANT: Do NOT clear pendingAfterLogin before the Firebase
        onAuthStateChanged callback has seen the protected ASK NOW intent.
@@ -1262,7 +1263,7 @@ async function logoutToHome(reason=''){
   selectedAstro=null;
   try{await signOut(auth);}catch(e){console.warn("Logout failed",e);}
   currentUser=null;
-  window.__smvCurrentUserPresent=false;
+  window.__smvCurrentUserPresent=false; window.__smvCurrentRole=null;
   window.__SMV_LOGGED_OUT=true;
   const authButton=$('authBtn');
   if(authButton) authButton.textContent='Login';
@@ -3624,6 +3625,7 @@ if(auth){ onAuthStateChanged(auth,async user=>{
      const headerProfile=adminUser?{role:'admin'}:await getUserProfile(user.uid).catch(()=>({role:'customer'}));
      const headerRole=adminUser?'admin':String(headerProfile?.role||'customer').toLowerCase();
      setHeaderRoleLabel(headerRole);
+     window.__smvCurrentRole=headerRole;
      // CRITICAL LATE-RACE GUARD: ASK NOW may have started while the auth
      // listener was awaiting Firebase/profile data. Never let this older
      // listener resume and overwrite the Question Form with Dashboard.

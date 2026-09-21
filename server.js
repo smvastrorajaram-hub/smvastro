@@ -1864,6 +1864,9 @@ app.post("/admin/private-consultation/reject-answer",express.json({limit:"10kb"}
 app.post("/private-consultation/create-order", express.json({limit:"30kb"}), async (req,res)=>{
   const user=await requireUser(req,res);if(!user)return;
   try{
+    const customerProfileSnap=await db.collection("smv_users").doc(user.uid).get();
+    const customerRole=String(customerProfileSnap.exists?(customerProfileSnap.data()?.role||"customer"):"customer").toLowerCase();
+    if(customerRole!=="customer")return res.status(403).json({error:"Customer Login Required — Please login with a Customer account to start a private consultation."});
     const astrologerId=String(req.body?.astrologerId||"").trim();
     const customerName=String(req.body?.customerName||req.body?.birthDetails?.name||"").trim();
     const question=String(req.body?.question||"").trim();

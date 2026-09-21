@@ -230,8 +230,9 @@ html.smv-desktop-site #dashboardContent .astro-dashboard-summary > .card:nth-chi
 <div class="wrap">
 <div class="section-title"><h2>Private Consultation</h2><p>Choose an approved astrologer for a private consultation. The Chat Price shown below is set by Admin.</p></div>
 <div id="privateConsultationAstrologers"><div class="empty">Loading approved astrologers...</div></div>
-<div class="card hidden" id="privateConsultationQuestionCard">
-  <h3>Private Consultation Question</h3>
+<div class="card hidden" id="privateConsultationQuestionCard" style="position:relative">
+  <button type="button" id="privateConsultationQuestionClose" aria-label="Close Private Consultation Question" title="Close" style="position:absolute;right:14px;top:10px;border:0;background:transparent;font-size:28px;line-height:1;cursor:pointer;padding:4px 8px;color:#8b0000">×</button>
+  <h3 style="padding-right:42px">Private Consultation Question</h3>
   <div id="privateConsultationSelected" class="small"></div>
   <form id="privateConsultationQuestionForm">
     <label>Your Name<input id="privateConsultName" maxlength="120" required></label>
