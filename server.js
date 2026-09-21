@@ -1818,9 +1818,14 @@ app.get("/astrologer/private-consultations",async(req,res)=>{
   const user=await requireUser(req,res);if(!user)return;
   const a=await db.collection("smv_astrologers").doc(user.uid).get();if(!a.exists||!["approved","active"].includes(String(a.data()?.status||"").toLowerCase()))return res.status(403).json({error:"Approved astrologer access required."});
   const snap=await db.collection("smv_private_consultations").where("astrologerId","==",user.uid).get();
-  const items=snap.docs.map(d=>({id:d.id,...d.data()})).filter(c=>c.paymentStatus==="paid"&&!["pending_admin_approval","question_rejected"].includes(String(c.status||"")));
+  const allItems=snap.docs.map(d=>({id:d.id,...d.data()})).filter(c=>c.paymentStatus==="paid");
+  const items=allItems.filter(c=>!["pending_admin_approval","question_rejected"].includes(String(c.status||"")));
+  const history=allItems.filter(c=>{
+    const st=String(c.status||"");
+    return st==="question_rejected" || st==="revision_required" || st==="answer_pending_admin_approval" || st==="answered" || !!c.customerViewedAt || String(c.commissionStatus||"")==="credited";
+  });
   const privateWorkflow=await getPrivateConsultWorkflow();
-  return res.json({success:true,consultations:items,settings:{minimumAnswerWords:privateWorkflow.minimumAnswerWords,allowWithoutAdminApproval:privateWorkflow.allowWithoutAdminApproval,privateCommission:await getPrivateCommissionSettings()}});
+  return res.json({success:true,consultations:items,history,settings:{minimumAnswerWords:privateWorkflow.minimumAnswerWords,allowWithoutAdminApproval:privateWorkflow.allowWithoutAdminApproval,privateCommission:await getPrivateCommissionSettings()}});
 });
 app.post("/astrologer/private-consultation/submit-answer",express.json({limit:"30kb"}),async(req,res)=>{
   const user=await requireUser(req,res);if(!user)return;

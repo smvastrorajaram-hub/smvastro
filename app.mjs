@@ -2294,6 +2294,32 @@ ${ad.status === 'rejected' && ad.rejectionReason
     }).join(''):'<div class="empty">No private consultations assigned to you.</div>'}`;
     pcBox.querySelectorAll('[data-pc-edit]').forEach(b=>b.onclick=()=>{const id=b.dataset.pcEdit;$('pcview_'+id)?.classList.add('hidden');$('pcedit_'+id)?.classList.remove('hidden');b.classList.add('hidden');});
     pcBox.querySelectorAll('[data-pc-answer]').forEach(b=>b.onclick=async()=>{const id=b.dataset.pcAnswer,answer=$('pcans_'+id)?.value.trim()||'',count=answer.split(/\s+/).filter(Boolean).length;if(count<privateMinWords){$('pcwc_'+id).innerHTML='<span class="error">Need at least '+privateMinWords+' words. Current: '+count+'</span>';return;}b.disabled=true;try{await renderApi('/astrologer/private-consultation/submit-answer',{method:'POST',body:JSON.stringify({consultationId:id,answer})});await loadDashboard('astrologer',true);}catch(e){alert(e.message||String(e));b.disabled=false;}});
+    const historyItems=Array.isArray(pr?.history)?pr.history.slice():[];
+    const histBox=document.createElement('div');
+    histBox.className='card';
+    histBox.style.marginTop='16px';
+    histBox.id='privateConsultationHistoryCard';
+    const histStatus=c=>{
+      const st=String(c.status||'');
+      if(st==='question_rejected'||c.refundId)return 'REFUNDED / REJECTED';
+      if(c.customerViewedAt&&String(c.commissionStatus||'')==='credited')return 'COMPLETED / EARNING CREDITED';
+      if(c.customerViewedAt)return 'COMPLETED / CUSTOMER VIEWED';
+      if(st==='answered')return 'ANSWERED / WAITING FOR CUSTOMER VIEW';
+      if(st==='answer_pending_admin_approval')return 'WAITING FOR ADMIN APPROVAL';
+      if(st==='revision_required')return 'REVISION REQUIRED';
+      if(st==='approved_for_astrologer')return 'PENDING';
+      return (st||'PENDING').replaceAll('_',' ').toUpperCase();
+    };
+    const histTime=c=>c.commissionCreditedAt||c.customerViewedAt||c.answerApprovedAt||c.answerSubmittedAt||c.questionApprovedAt||c.paidAt||c.updatedAt||c.createdAt;
+    historyItems.sort((a,b)=>{const av=histTime(a),bv=histTime(b);const am=av?.seconds?av.seconds*1000:(Date.parse(av||'')||0),bm=bv?.seconds?bv.seconds*1000:(Date.parse(bv||'')||0);return bm-am;});
+    histBox.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><h3 style="margin:0">Private Consultation History</h3><button type="button" id="privateConsultHistoryToggle" aria-label="Minimize or expand Private Consultation History" style="border:0;background:transparent;font-size:20px;cursor:pointer">▼</button></div><div id="privateConsultHistoryBody" style="margin-top:12px">${historyItems.length?historyItems.map(c=>{
+      const chat=Number(c.chatPrice||c.amount||0);
+      const earning=Number(Number.isFinite(Number(c.astrologerCreditedAmount))?c.astrologerCreditedAmount:(Number.isFinite(Number(c.astrologerAmount))?c.astrologerAmount:(chat*privateAstroRate/100)));
+      return `<div style="padding:12px 0;border-bottom:1px solid #eee"><div class="badge">${escapeHtml(histStatus(c))}</div><p><b>Question:</b> ${escapeHtml(c.question||'Private Consultation')}</p><div class="small"><b>Customer:</b> ${escapeHtml(c.customerName||'Customer')}</div><div class="small"><b>Chat Price:</b> ₹${chat.toFixed(2)} · <b>Your Commission:</b> ₹${earning.toFixed(2)}</div><div class="small"><b>Consultation ID:</b> ${escapeHtml(c.id||c.consultationId||'—')}</div><div class="small"><b>Date & Time:</b> ${escapeHtml(smvDateTime(histTime(c)))}</div>${c.refundId?`<div class="small"><b>Refund:</b> ${escapeHtml(c.refundStatus||'Processing')} · <b>Refund ID:</b> ${escapeHtml(c.refundId)}</div>`:''}</div>`;
+    }).join(''):'<div class="empty">No Private Consultation history yet.</div>'}</div>`;
+    pcBox.insertAdjacentElement('afterend',histBox);
+    const ht=$('privateConsultHistoryToggle'),hb=$('privateConsultHistoryBody');
+    if(ht&&hb)ht.onclick=()=>{const hidden=hb.classList.toggle('hidden');ht.textContent=hidden?'▶':'▼';};
   }catch(e){console.warn('Private consultation load skipped:',e);}
 
   if($('withdrawBtn')) $('withdrawBtn').onclick = async () => {
