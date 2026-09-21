@@ -1967,6 +1967,11 @@ app.post("/private-consultation/verify-payment", express.json({limit:"15kb"}), a
     if(c.razorpayOrderId!==orderId)return res.status(409).json({error:"Payment order mismatch."});
     const expected=crypto.createHmac("sha256",RAZORPAY_KEY_SECRET).update(`${orderId}|${paymentId}`).digest("hex");
     if(!signatureEqual(expected,signature))return res.status(400).json({error:"Payment signature verification failed."});
+    const verifiedPayment=await razorpay.payments.fetch(paymentId);
+    const expectedAmount=Math.round(Number(c.chatPrice||c.amount||0)*100);
+    if(String(verifiedPayment.order_id||"")!==orderId)return res.status(409).json({error:"Razorpay payment/order mismatch."});
+    if(Number(verifiedPayment.amount)!==expectedAmount)return res.status(409).json({error:"Razorpay payment amount mismatch."});
+    if(!["captured","authorized"].includes(String(verifiedPayment.status||"").toLowerCase()))return res.status(409).json({error:"Razorpay payment is not captured/authorized."});
     if(c.paymentStatus!=="paid"){
       const privateWorkflow=await getPrivateConsultWorkflow();
       const autoAllow=privateWorkflow.allowWithoutAdminApproval===true;
@@ -1983,7 +1988,8 @@ app.post("/private-consultation/verify-payment", express.json({limit:"15kb"}), a
         consultationId,createdAt:FieldValue.serverTimestamp(),read:false
       });
     }
-    return res.json({success:true,verified:true,consultationId,status:(await getPrivateConsultWorkflow()).allowWithoutAdminApproval?"approved_for_astrologer":"pending_admin_approval"});
+    const finalSnap=await ref.get(),finalData=finalSnap.data()||{};
+    return res.json({success:true,verified:true,consultationId,status:String(finalData.status||"pending_admin_approval"),paymentStatus:String(finalData.paymentStatus||"paid")});
   }catch(e){console.error("Private consultation verify-payment error:",e);return res.status(500).json({error:e?.message||"Unable to verify private consultation payment."});}
 });
 
