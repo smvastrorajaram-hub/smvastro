@@ -1647,23 +1647,26 @@ app.get("/admin-data", async (req, res) => {
   try {
     // Read each collection independently. One damaged/missing collection must
     // never prevent the Admin Dashboard itself from opening.
-    const [users, astrologers, questions, payments, commission, workflow] = await Promise.all([
+    const [users, astrologers, questions, payments, privateConsultations, commission, workflow, privateWorkflow] = await Promise.all([
       readCollection("smv_users"),
       readCollection("smv_astrologers"),
       readCollection("smv_questions"),
       readCollection("smv_payments"),
+      readCollection("smv_private_consultations"),
       db.collection("smv_settings").doc("commission").get().then(s=>s.exists?s.data():null).catch(()=>null),
-      db.collection("smv_settings").doc("workflow").get().then(s=>s.exists?s.data():{allowWithoutAdminApproval:false}).catch(()=>({allowWithoutAdminApproval:false}))
+      db.collection("smv_settings").doc("workflow").get().then(s=>s.exists?s.data():{allowWithoutAdminApproval:false}).catch(()=>({allowWithoutAdminApproval:false})),
+      db.collection("smv_settings").doc("privateConsultationWorkflow").get().then(s=>s.exists?s.data():{allowWithoutAdminApproval:false}).catch(()=>({allowWithoutAdminApproval:false}))
     ]);
 
     const customers = users.items.filter(x => String(x.role || "").toLowerCase() === "customer");
     return res.json({
       success: true,
-      settings: {commission, workflow},
+      settings: {commission, workflow, privateWorkflow},
       customers,
       users: users.items,
       astrologers: astrologers.items,
       questions: questions.items,
+      privateConsultations: privateConsultations.items,
       payments: payments.items,
       errors: { users: users.error || null, astrologers: astrologers.error || null, questions: questions.error || null, payments: payments.error || null }
     });
@@ -1671,6 +1674,90 @@ app.get("/admin-data", async (req, res) => {
     console.error("Admin data load failed:", e);
     return res.status(500).json({ error: e?.message || "Unable to load Admin data." });
   }
+});
+
+
+async function getPrivateConsultWorkflow(){
+  try{
+    const s=await db.collection("smv_settings").doc("privateConsultationWorkflow").get();
+    return {allowWithoutAdminApproval:s.exists&&s.data()?.allowWithoutAdminApproval===true};
+  }catch(_e){return {allowWithoutAdminApproval:false};}
+}
+app.post("/admin/private-consultation/set-workflow",express.json({limit:"5kb"}),async(req,res)=>{
+  const user=await requireUser(req,res);if(!user)return;
+  if(!(await isAdminUser(user)))return res.status(403).json({error:"Admin access denied."});
+  const allow=req.body?.allowWithoutAdminApproval===true;
+  await db.collection("smv_settings").doc("privateConsultationWorkflow").set({allowWithoutAdminApproval:allow,updatedAt:FieldValue.serverTimestamp(),updatedBy:user.uid},{merge:true});
+  return res.json({success:true,allowWithoutAdminApproval:allow});
+});
+app.post("/admin/private-consultation/approve-question",express.json({limit:"10kb"}),async(req,res)=>{
+  const user=await requireUser(req,res);if(!user)return;
+  if(!(await isAdminUser(user)))return res.status(403).json({error:"Admin access denied."});
+  const id=String(req.body?.consultationId||"").trim(),ref=db.collection("smv_private_consultations").doc(id);
+  const s=await ref.get();if(!s.exists)return res.status(404).json({error:"Private consultation not found."});
+  const c=s.data()||{};if(c.paymentStatus!=="paid")return res.status(409).json({error:"Payment is not verified."});
+  if(c.status!=="pending_admin_approval")return res.status(409).json({error:"This private consultation is not waiting for question approval."});
+  await ref.update({status:"approved_for_astrologer",allocationStatus:"selected_astrologer",questionApprovedAt:FieldValue.serverTimestamp(),questionApprovedBy:user.uid,commissionStatus:"pending_answer",updatedAt:FieldValue.serverTimestamp()});
+  await db.collection("smv_notifications").add({userId:c.astrologerId,type:"private_question_assigned",title:"New Private Consultation",message:"Admin approved a paid private consultation selected for you.",consultationId:id,createdAt:FieldValue.serverTimestamp(),read:false});
+  return res.json({success:true,consultationId:id});
+});
+async function privateConsultRefund(id,reason,user){
+  const ref=db.collection("smv_private_consultations").doc(id),s=await ref.get();
+  if(!s.exists)throw Object.assign(new Error("Private consultation not found."),{httpStatus:404});
+  const c=s.data()||{};if(c.paymentStatus!=="paid"||!c.razorpayPaymentId)throw Object.assign(new Error("No verified Razorpay payment exists."),{httpStatus:409});
+  if(c.refundId){
+    const rr=await razorpay.refunds.fetch(c.refundId),refs=bankReferences(rr,c);
+    await ref.set({refundStatus:String(rr.status||"pending"),...refs,refundSyncedAt:FieldValue.serverTimestamp()},{merge:true});
+    return {success:true,consultationId:id,refundId:rr.id,refundStatus:rr.status,...refs};
+  }
+  const amount=Math.round(Number(c.chatPrice||c.amount||0)*100);
+  const payment=await razorpay.payments.fetch(c.razorpayPaymentId);
+  if(payment.order_id!==c.razorpayOrderId)throw Object.assign(new Error("Payment/order mismatch."),{httpStatus:409});
+  const digest=crypto.createHash("sha256").update("private:"+id+":"+c.razorpayPaymentId+":"+amount).digest("hex").slice(0,32);
+  const response=await fetch("https://api.razorpay.com/v1/payments/"+encodeURIComponent(c.razorpayPaymentId)+"/refund",{method:"POST",headers:{Authorization:"Basic "+Buffer.from(RAZORPAY_KEY_ID+":"+RAZORPAY_KEY_SECRET).toString("base64"),"Content-Type":"application/json","X-Refund-Idempotency":"smv-private-"+digest},body:JSON.stringify({amount,speed:"normal",receipt:"SMV-PC-"+digest,notes:{consultationId:id}}),signal:AbortSignal.timeout(25000)});
+  const rr=await response.json();if(!response.ok)throw Object.assign(new Error(rr?.error?.description||"Razorpay refund failed."),{httpStatus:502});
+  const refs=bankReferences(rr,c);
+  await ref.set({status:"question_rejected",allocationStatus:"rejected_by_admin",refundReason:reason,refundId:rr.id,refundStatus:String(rr.status||"pending"),refundAmount:Number(rr.amount||amount)/100,...refs,refundCreatedAt:FieldValue.serverTimestamp(),commissionStatus:"refund_pending",adminQuestionRejectedAt:FieldValue.serverTimestamp(),adminQuestionRejectedBy:user.uid,updatedAt:FieldValue.serverTimestamp()},{merge:true});
+  return {success:true,consultationId:id,refundId:rr.id,refundStatus:rr.status,...refs};
+}
+app.post("/admin/private-consultation/reject-question",express.json({limit:"10kb"}),async(req,res)=>{
+  const user=await requireUser(req,res);if(!user)return;if(!(await isAdminUser(user)))return res.status(403).json({error:"Admin access denied."});
+  try{const id=String(req.body?.consultationId||"").trim(),reason=String(req.body?.reason||"").trim();if(!id||!reason)return res.status(400).json({error:"Consultation ID and reason are required."});return res.json(await privateConsultRefund(id,reason,user));}
+  catch(e){return res.status(e.httpStatus||500).json({error:e.message||"Private consultation refund failed."});}
+});
+app.get("/astrologer/private-consultations",async(req,res)=>{
+  const user=await requireUser(req,res);if(!user)return;
+  const a=await db.collection("smv_astrologers").doc(user.uid).get();if(!a.exists||!["approved","active"].includes(String(a.data()?.status||"").toLowerCase()))return res.status(403).json({error:"Approved astrologer access required."});
+  const snap=await db.collection("smv_private_consultations").where("astrologerId","==",user.uid).get();
+  const items=snap.docs.map(d=>({id:d.id,...d.data()})).filter(c=>c.paymentStatus==="paid"&&!["pending_admin_approval","question_rejected"].includes(String(c.status||"")));
+  return res.json({success:true,consultations:items});
+});
+app.post("/astrologer/private-consultation/submit-answer",express.json({limit:"30kb"}),async(req,res)=>{
+  const user=await requireUser(req,res);if(!user)return;
+  const id=String(req.body?.consultationId||"").trim(),answer=String(req.body?.answer||"").trim();
+  if(!id||answer.split(/\s+/).filter(Boolean).length<20)return res.status(400).json({error:"Enter an answer of at least 20 words."});
+  const ref=db.collection("smv_private_consultations").doc(id),s=await ref.get();if(!s.exists)return res.status(404).json({error:"Private consultation not found."});
+  const c=s.data()||{};if(c.astrologerId!==user.uid)return res.status(403).json({error:"This private consultation is assigned to another astrologer."});
+  if(!["approved_for_astrologer","revision_required"].includes(String(c.status||"")))return res.status(409).json({error:"This consultation is not available for answering."});
+  const wf=await getPrivateConsultWorkflow(),direct=wf.allowWithoutAdminApproval===true;
+  await ref.update({answer,status:direct?"answered":"answer_pending_admin_approval",answerStatus:direct?"approved":"pending_admin_approval",answerSubmittedAt:FieldValue.serverTimestamp(),commissionStatus:"pending_customer_view",updatedAt:FieldValue.serverTimestamp()});
+  return res.json({success:true,consultationId:id,status:direct?"answered":"answer_pending_admin_approval"});
+});
+app.post("/admin/private-consultation/approve-answer",express.json({limit:"10kb"}),async(req,res)=>{
+  const user=await requireUser(req,res);if(!user)return;if(!(await isAdminUser(user)))return res.status(403).json({error:"Admin access denied."});
+  const id=String(req.body?.consultationId||"").trim(),ref=db.collection("smv_private_consultations").doc(id),s=await ref.get();if(!s.exists)return res.status(404).json({error:"Private consultation not found."});
+  const c=s.data()||{};if(!String(c.answer||"").trim())return res.status(409).json({error:"No answer is waiting."});
+  await ref.update({status:"answered",answerStatus:"approved",answerApprovedAt:FieldValue.serverTimestamp(),answerApprovedBy:user.uid,commissionStatus:"pending_customer_view",updatedAt:FieldValue.serverTimestamp()});
+  return res.json({success:true,consultationId:id});
+});
+app.post("/admin/private-consultation/reject-answer",express.json({limit:"10kb"}),async(req,res)=>{
+  const user=await requireUser(req,res);if(!user)return;if(!(await isAdminUser(user)))return res.status(403).json({error:"Admin access denied."});
+  const id=String(req.body?.consultationId||"").trim(),reason=String(req.body?.reason||"").trim();if(!id||!reason)return res.status(400).json({error:"Consultation ID and reason are required."});
+  const ref=db.collection("smv_private_consultations").doc(id),s=await ref.get();if(!s.exists)return res.status(404).json({error:"Private consultation not found."});
+  const c=s.data()||{};if(!String(c.answer||"").trim())return res.status(409).json({error:"No answer is waiting."});
+  await ref.update({status:"revision_required",answerStatus:"rejected",answerRejectionReason:reason,answerRejectedAt:FieldValue.serverTimestamp(),answerRejectedBy:user.uid,commissionStatus:"answer_rejected_no_credit",commissionCreditedAt:FieldValue.delete(),adminCommissionCreditedAt:FieldValue.delete(),updatedAt:FieldValue.serverTimestamp()});
+  await db.collection("smv_notifications").add({userId:c.astrologerId,type:"private_answer_rejected",title:"Private consultation answer revision required",message:"Admin rejected your answer. No earning has been credited. Reason: "+reason,consultationId:id,createdAt:FieldValue.serverTimestamp(),read:false});
+  return res.json({success:true,consultationId:id,status:"revision_required"});
 });
 
 app.post("/private-consultation/create-order", express.json({limit:"30kb"}), async (req,res)=>{
@@ -1732,18 +1819,21 @@ app.post("/private-consultation/verify-payment", express.json({limit:"15kb"}), a
     const expected=crypto.createHmac("sha256",RAZORPAY_KEY_SECRET).update(`${orderId}|${paymentId}`).digest("hex");
     if(!signatureEqual(expected,signature))return res.status(400).json({error:"Payment signature verification failed."});
     if(c.paymentStatus!=="paid"){
+      const privateWorkflow=await getPrivateConsultWorkflow();
+      const autoAllow=privateWorkflow.allowWithoutAdminApproval===true;
       await ref.update({
-        paymentStatus:"paid",status:"pending_admin_approval",allocationStatus:"selected_astrologer",
+        paymentStatus:"paid",status:autoAllow?"approved_for_astrologer":"pending_admin_approval",allocationStatus:"selected_astrologer",
+        questionApprovalBypassed:autoAllow,
         razorpayPaymentId:paymentId,razorpaySignature:signature,paidAt:FieldValue.serverTimestamp(),
         paymentRecordedAt:new Date().toISOString(),updatedAt:FieldValue.serverTimestamp()
       });
       await db.collection("smv_notifications").add({
         userId:c.customerId,type:"private_consultation_payment",title:"Private consultation payment successful",
-        message:`Your private consultation with ${c.astrologerName||"the selected astrologer"} is waiting for Admin approval.`,
+        message:autoAllow?`Your private consultation is now visible to ${c.astrologerName||"the selected astrologer"}.`:`Your private consultation with ${c.astrologerName||"the selected astrologer"} is waiting for Admin approval.`,
         consultationId,createdAt:FieldValue.serverTimestamp(),read:false
       });
     }
-    return res.json({success:true,verified:true,consultationId,status:"pending_admin_approval"});
+    return res.json({success:true,verified:true,consultationId,status:(await getPrivateConsultWorkflow()).allowWithoutAdminApproval?"approved_for_astrologer":"pending_admin_approval"});
   }catch(e){console.error("Private consultation verify-payment error:",e);return res.status(500).json({error:e?.message||"Unable to verify private consultation payment."});}
 });
 

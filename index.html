@@ -380,7 +380,16 @@ html.smv-desktop-site #dashboardContent .astro-dashboard-summary > .card:nth-chi
 <div id="dashboardContent"></div>
 </section><section class="hidden" id="admin" style="margin-top:45px">
 <div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div><h2 style="margin:0">Admin Dashboard</h2><p class="small" style="margin:6px 0 0">SMV ASTRO administration and approval center</p></div></div><div id="adminDataLoadMsg" style="margin-top:12px"></div><div class="stats-grid admin-summary-grid" id="adminSummary" style="margin-top:16px"></div></div>
-<div class="card" style="margin-top:16px"><h3>Public Question Approval</h3><div id="adminPendingQuestions"><div class="empty">Loading questions...</div></div></div>
+<div class="card" style="margin-top:16px"><h3>Public Question Approval</h3><div id="adminPendingQuestions"><div class="empty">Loading questions...</div></div></div><div class="card" style="margin-top:16px" id="adminPrivateConsultationCard">
+<h3>Private Consultation — Question Approval</h3>
+<p class="small">Separate from Ask Now. Paid private questions are handled only with the customer-selected astrologer.</p>
+<div id="privateConsultWorkflowControl"></div>
+<div id="adminPrivatePending"><div class="empty">Loading private consultations...</div></div>
+</div>
+<div class="card" style="margin-top:16px">
+<h3>Private Consultation — Answers Awaiting Approval</h3>
+<div id="adminPrivateAnswers"><div class="empty">Loading private answers...</div></div>
+</div>
 <div class="card" style="margin-top:16px"><h3>Astrologer Applications</h3><div id="pendingAstros"><div class="empty">Loading applications...</div></div></div>
 <div class="card" style="margin-top:16px"><h3>Astrologer Profile Management</h3><p class="small">Allow or block profile-description editing, review submitted descriptions, or update an approved public description directly.</p><div id="adminAstrologerProfiles"><div class="empty">Loading approved astrologer profiles...</div></div></div>
 <div class="card" style="margin-top:16px"><h3>Payment Method Changes — Admin Approval</h3><div id="adminPayoutChanges"><div class="empty">Loading payment method changes...</div></div></div>

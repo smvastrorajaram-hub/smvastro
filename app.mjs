@@ -572,6 +572,7 @@ async function smvRefreshWorkflowCards(){
   if(currentUser?.uid!==uid)return;
   renderAdminWorkflows({data,api:renderApi,refresh:smvRefreshWorkflowCards,lang:"en",escape:escapeHtml,date:smvDateTime});
   smvRenderOpenWorkflowControl(data);
+  smvRenderPrivateConsultAdmin(data);
  })();
  try{return await smvBoardRequest;}finally{smvBoardRequest=null;}
 }
@@ -2223,6 +2224,17 @@ ${ad.status === 'rejected' && ad.rejectionReason
      const updateCount=()=>{const n=t.value.trim()?t.value.trim().split(/\s+/).filter(Boolean).length:0;if(counter)counter.textContent=`${n} / ${min} words`;if(btn)btn.disabled=n<min;};
      t.addEventListener('input',updateCount);updateCount();
    });
+  // Private Consultation is deliberately separate from Ask Now/Open Questions.
+  try{
+    const pr=await renderApi('/astrologer/private-consultations',{method:'GET'});
+    const pcs=Array.isArray(pr?.consultations)?pr.consultations:[];
+    let pcBox=$('astroPrivateConsultations');
+    if(!pcBox){pcBox=document.createElement('div');pcBox.id='astroPrivateConsultations';pcBox.className='card';pcBox.style.marginTop='16px';box.appendChild(pcBox);}
+    const actionable=pcs.filter(c=>['approved_for_astrologer','revision_required','answer_pending_admin_approval','answered'].includes(String(c.status||'')));
+    pcBox.innerHTML=`<h3>Private Consultations</h3><p class="small">Only customers who selected you are shown here.</p>${actionable.length?actionable.map(c=>`<div class="card" style="margin:10px 0"><div class="badge">${escapeHtml(String(c.status||'').replaceAll('_',' ').toUpperCase())}</div><p><b>Question:</b> ${escapeHtml(c.question||'')}</p><div class="small"><b>Customer:</b> ${escapeHtml(c.customerName||'')} · <b>Birth:</b> ${escapeHtml(c.birthDetails?.birthDate||'')} ${escapeHtml(c.birthDetails?.birthTime||'')} · ${escapeHtml(c.birthDetails?.birthPlace||'')}</div>${['approved_for_astrologer','revision_required'].includes(String(c.status||''))?`<textarea id="pcans_${c.id}" rows="5" placeholder="Write at least 20 words...">${escapeHtml(c.answer||'')}</textarea><button class="btn" data-pc-answer="${c.id}">${c.status==='revision_required'?'EDIT & RESUBMIT':'SUBMIT ANSWER'}</button>${c.answerRejectionReason?`<div class="error">Admin reason: ${escapeHtml(c.answerRejectionReason)}</div>`:''}`:`<p><b>Answer:</b> ${escapeHtml(c.answer||'')}</p>`}</div>`).join(''):'<div class="empty">No private consultations assigned to you.</div>'}`;
+    pcBox.querySelectorAll('[data-pc-answer]').forEach(b=>b.onclick=async()=>{const id=b.dataset.pcAnswer,answer=$('pcans_'+id)?.value.trim()||'';b.disabled=true;try{await renderApi('/astrologer/private-consultation/submit-answer',{method:'POST',body:JSON.stringify({consultationId:id,answer})});await loadDashboard('astrologer',true);}catch(e){alert(e.message||String(e));b.disabled=false;}});
+  }catch(e){console.warn('Private consultation load skipped:',e);}
+
   if($('withdrawBtn')) $('withdrawBtn').onclick = async () => {
 
   if(!currentUser){
@@ -2729,6 +2741,23 @@ function initContentManager(){
 }
 initContentManager();
 loadPublicContent();
+
+function smvRenderPrivateConsultAdmin(data){
+ const host=$('adminPrivatePending'),answers=$('adminPrivateAnswers'),control=$('privateConsultWorkflowControl');
+ if(!host||!answers||!control)return;
+ const items=Array.isArray(data?.privateConsultations)?data.privateConsultations:[];
+ const auto=data?.settings?.privateWorkflow?.allowWithoutAdminApproval===true;
+ control.innerHTML=`<div class="action-row"><button class="btn ${auto?'':'gray'}" id="privateWorkflowToggle">${auto?'AUTO ALLOW ON':'ADMIN ALLOW ON'}</button><span class="small">${auto?'Paid questions go directly to the selected astrologer; submitted answers go directly to the customer.':'Admin must approve private questions and answers.'}</span></div><div id="privateWorkflowMsg" class="small"></div>`;
+ $('privateWorkflowToggle').onclick=async()=>{const b=$('privateWorkflowToggle');b.disabled=true;try{await renderApi('/admin/private-consultation/set-workflow',{method:'POST',body:JSON.stringify({allowWithoutAdminApproval:!auto})});await loadAdminPanel();}catch(e){$('privateWorkflowMsg').innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';b.disabled=false;}};
+ const pending=items.filter(c=>c.paymentStatus==='paid'&&c.status==='pending_admin_approval');
+ host.innerHTML=pending.length?pending.map(c=>`<div class="card" style="margin:10px 0"><b>${escapeHtml(c.customerName||'Customer')}</b> → <b>${escapeHtml(c.astrologerName||'Selected Astrologer')}</b><p>${escapeHtml(c.question||'')}</p><div class="small">Chat Price: ₹${Number(c.chatPrice||c.amount||0).toFixed(2)} · Consultation ID: ${escapeHtml(c.id||c.consultationId||'')}</div><div class="action-row"><button class="btn" data-pc-approve="${c.id}">ACCEPT QUESTION</button><button class="btn gray" data-pc-reject="${c.id}">REJECT & REFUND</button></div></div>`).join(''):'<div class="empty">No private questions waiting for approval.</div>';
+ const waiting=items.filter(c=>c.status==='answer_pending_admin_approval'&&String(c.answer||'').trim());
+ answers.innerHTML=waiting.length?waiting.map(c=>`<div class="card" style="margin:10px 0"><b>${escapeHtml(c.astrologerName||'Astrologer')}</b><p><b>Question:</b> ${escapeHtml(c.question||'')}</p><p><b>Answer:</b> ${escapeHtml(c.answer||'')}</p><div class="action-row"><button class="btn" data-pca-approve="${c.id}">APPROVE ANSWER</button><button class="btn gray" data-pca-reject="${c.id}">REJECT ANSWER</button></div></div>`).join(''):'<div class="empty">No private answers waiting for approval.</div>';
+ host.querySelectorAll('[data-pc-approve]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{await renderApi('/admin/private-consultation/approve-question',{method:'POST',body:JSON.stringify({consultationId:b.dataset.pcApprove})});await loadAdminPanel();}catch(e){alert(e.message||String(e));b.disabled=false;}});
+ host.querySelectorAll('[data-pc-reject]').forEach(b=>b.onclick=async()=>{const reason=prompt('Reason for rejection and refund:');if(!reason)return;b.disabled=true;try{const r=await renderApi('/admin/private-consultation/reject-question',{method:'POST',body:JSON.stringify({consultationId:b.dataset.pcReject,reason})});alert('Refund '+(r.refundStatus||'requested')+(r.refundRrn?' · RRN: '+r.refundRrn:''));await loadAdminPanel();}catch(e){alert(e.message||String(e));b.disabled=false;}});
+ answers.querySelectorAll('[data-pca-approve]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{await renderApi('/admin/private-consultation/approve-answer',{method:'POST',body:JSON.stringify({consultationId:b.dataset.pcaApprove})});await loadAdminPanel();}catch(e){alert(e.message||String(e));b.disabled=false;}});
+ answers.querySelectorAll('[data-pca-reject]').forEach(b=>b.onclick=async()=>{const reason=prompt('Reason for answer rejection:');if(!reason)return;b.disabled=true;try{await renderApi('/admin/private-consultation/reject-answer',{method:'POST',body:JSON.stringify({consultationId:b.dataset.pcaReject,reason})});await loadAdminPanel();}catch(e){alert(e.message||String(e));b.disabled=false;}});
+}
 
 function smvRenderOpenWorkflowControl(data){
  const host=$('adminSummary'); if(!host)return; let card=$('smvOpenWorkflowControl');
