@@ -10169,3 +10169,42 @@ html.smv-desktop-site #dashboardContent .astro-dashboard-summary > .card:nth-chi
     box-sizing:border-box!important;
   }
 }
+
+/* SMV 2026-09-23 FINAL — Admin top 3 jump buttons, mobile only.
+   Equal width + equal height + one row. No other Admin controls are changed. */
+@media (max-width:600px){
+  html body #admin div.smv-admin-nav{
+    display:grid!important;
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    gap:8px!important;
+    width:100%!important;
+    max-width:100%!important;
+    margin:0 0 14px!important;
+    padding:6px 0!important;
+    box-sizing:border-box!important;
+    align-items:stretch!important;
+  }
+  html body #admin div.smv-admin-nav > button.smv-admin-jump{
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    width:100%!important;
+    min-width:0!important;
+    max-width:100%!important;
+    height:54px!important;
+    min-height:54px!important;
+    max-height:54px!important;
+    margin:0!important;
+    padding:6px 4px!important;
+    box-sizing:border-box!important;
+    flex:none!important;
+    text-align:center!important;
+    white-space:normal!important;
+    word-break:keep-all!important;
+    overflow-wrap:normal!important;
+    line-height:1.12!important;
+    font-size:11px!important;
+    font-weight:800!important;
+    overflow:hidden!important;
+  }
+}
