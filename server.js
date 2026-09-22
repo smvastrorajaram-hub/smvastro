@@ -1708,7 +1708,7 @@ app.post("/admin/astrologer-quiz/sync-google-form",express.json({limit:"10kb"}),
     const cfg=await getAstrologerAutoApprovalSettings(true);
     if(!cfg.syncWebAppUrl)return res.status(400).json({error:"Google Apps Script Web App URL is not configured. Deploy the Apps Script as a Web App and save its /exec URL first."});
     if(!cfg.webhookSecret)return res.status(400).json({error:"Quiz webhook secret is not configured."});
-    const rr=await fetch(cfg.syncWebAppUrl,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"sync_google_form",secret:cfg.webhookSecret}),redirect:"follow",signal:AbortSignal.timeout(30000)});
+    const rr=await fetch(cfg.syncWebAppUrl,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"sync_google_form",secret:cfg.webhookSecret}),redirect:"follow",signal:AbortSignal.timeout(90000)});
     const raw=await rr.text();let data={};try{data=JSON.parse(raw);}catch(_){data={};}
     if(!rr.ok||data.success!==true)return res.status(502).json({error:String(data.error||raw||("Google Apps Script sync failed (HTTP "+rr.status+").")).slice(0,800)});
     return res.json({success:true,formUrl:String(data.formUrl||cfg.formUrl||""),enabledQuestions:Number(data.enabledQuestions||0),passMark:Number(data.passMark||cfg.passMark),message:"Google Form synced successfully."});

@@ -41,13 +41,15 @@ async function renderApi(path, options={}, userOverride=null){
  const user=userOverride||auth?.currentUser;
  if(!user)throw new Error('Login session is missing. Please login again.');
  const method=(options.method||'GET').toUpperCase(),key=user.uid+':'+path;
+ const timeoutMs=Number(options.timeoutMs)||(method==='GET'?20000:60000);
+ const fetchOptions={...options};delete fetchOptions.timeoutMs;
  if(method==='GET'&&smvReadRequests.has(key))return smvReadRequests.get(key);
  const task=(async()=>{
   const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),method==='GET'?20000:60000);
+  const timer=setTimeout(()=>controller.abort(),timeoutMs);
   try{
    const token=await user.getIdToken();
-   const response=await fetch(RAZORPAY_BACKEND_URL+path,{...options,cache:'no-store',signal:controller.signal,headers:{'Content-Type':'application/json',...(options.headers||{}),Authorization:`Bearer ${token}`}});
+   const response=await fetch(RAZORPAY_BACKEND_URL+path,{...fetchOptions,cache:'no-store',signal:controller.signal,headers:{'Content-Type':'application/json',...(fetchOptions.headers||{}),Authorization:`Bearer ${token}`}});
    const data=await response.json().catch(()=>({}));
    if(!response.ok){
     if(response.status===404&&!data.error)throw new Error('Backend API unavailable (404). Deploy the updated server.js and refund-service.js to Render and check the backend URL.'+' '+path);
@@ -2917,7 +2919,7 @@ async function loadAdminPanelData(background=false){
       };bind();
       $('quizLoadDefaults').onclick=async()=>{const b=$('quizLoadDefaults');b.disabled=true;try{const r=await renderApi('/admin/astrologer-quiz/load-defaults',{method:'POST',body:JSON.stringify({fillMissing:false})});$('quizManagerMsg').innerHTML='<span class="success">Default professional Vedic Astrology questions loaded: '+escapeHtml(String(r.created))+'/25.</span>';await renderQuizManager();}catch(e){$('quizManagerMsg').innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';b.disabled=false;}};
       $('quizAddQuestion').onclick=()=>{list.insertAdjacentHTML('afterbegin',editor({id:'',order:qs.length+1,enabled:true,choicesTa:['','','',''],choicesEn:['','','',''],correctIndex:0}));const c=list.firstElementChild;c.querySelector('[data-f="enabled"]').value='true';c.querySelector('[data-f="correctIndex"]').value='0';bind();};
-      $('quizSyncGoogleForm').onclick=async()=>{const b=$('quizSyncGoogleForm');b.disabled=true;b.textContent='SYNCING...';$('quizManagerMsg').textContent='';try{const r=await renderApi('/admin/astrologer-quiz/sync-google-form',{method:'POST',body:JSON.stringify({})});$('quizManagerMsg').innerHTML='<span class="success">Google Form synced successfully. Enabled Questions: '+escapeHtml(String(r.enabledQuestions||0))+' · Pass Mark: '+escapeHtml(String(r.passMark||''))+'</span>';}catch(e){$('quizManagerMsg').innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';}finally{b.disabled=false;b.textContent='SYNC GOOGLE FORM';}};
+      $('quizSyncGoogleForm').onclick=async()=>{const b=$('quizSyncGoogleForm');b.disabled=true;b.textContent='SYNCING...';$('quizManagerMsg').textContent='';try{const r=await renderApi('/admin/astrologer-quiz/sync-google-form',{method:'POST',body:JSON.stringify({}),timeoutMs:95000});$('quizManagerMsg').innerHTML='<span class="success">Google Form synced successfully. Enabled Questions: '+escapeHtml(String(r.enabledQuestions||0))+' · Pass Mark: '+escapeHtml(String(r.passMark||''))+'</span>';}catch(e){$('quizManagerMsg').innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';}finally{b.disabled=false;b.textContent='SYNC GOOGLE FORM';}};
     }catch(e){qm.innerHTML='<h3>Astrologer Qualification Test — Question Manager</h3><div class="error">'+escapeHtml(e.message||String(e))+'</div>';}
   };
   renderQuizManager();
