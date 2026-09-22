@@ -10108,3 +10108,40 @@ html.smv-desktop-site #dashboardContent .astro-dashboard-summary > .card:nth-chi
     box-sizing:border-box!important;
   }
 }
+
+/* SMV 2026-09-23 — Admin top 3 buttons: mobile full-width single row, equal size. */
+@media (max-width:600px){
+  html body .smv-admin-nav{
+    display:grid!important;
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    column-gap:6px!important;
+    row-gap:0!important;
+    width:100%!important;
+    max-width:100%!important;
+    padding:6px 0!important;
+    margin:0 0 12px!important;
+    box-sizing:border-box!important;
+    align-items:stretch!important;
+  }
+  html body .smv-admin-nav > .smv-admin-jump,
+  html body .smv-admin-nav button.smv-admin-jump{
+    display:flex!important;
+    width:100%!important;
+    min-width:0!important;
+    max-width:none!important;
+    height:44px!important;
+    min-height:44px!important;
+    max-height:44px!important;
+    margin:0!important;
+    padding:4px 7px!important;
+    box-sizing:border-box!important;
+    align-items:center!important;
+    justify-content:center!important;
+    text-align:center!important;
+    font-size:11px!important;
+    line-height:1.08!important;
+    font-weight:800!important;
+    white-space:normal!important;
+    overflow:hidden!important;
+  }
+}
