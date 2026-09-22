@@ -976,7 +976,7 @@ async function submitAuth(mode){
       // unavailable. The dashboard renderer hydrates the already-visible shell.
       show("dashboard");
       show("dashboardContent");
-      if($("dashboardTitle")) $("dashboardTitle").textContent="Dashboard";
+      if($("dashboardTitle")) $("dashboardTitle").textContent=role==="astrologer"?"ASTROLOGER DASHBOARD":"CUSTOMER DASHBOARD";
       if($("dashboardContent")) $("dashboardContent").innerHTML='<div class="card"><div class="small">Loading your dashboard...</div></div>';
       smvShowRoleNav();
       smvEnterInternalView("dashboard",true);
@@ -1871,7 +1871,7 @@ async function loadDashboard(expectedRole=null,force=false,background=false){
    // The role is already shown by the role badge/content; changing the heading
    // during async loading makes Customer/Astrologer dashboards appear to
    // interact or flash before the final dashboard is rendered.
-   $('dashboardTitle').textContent='Dashboard';
+   $('dashboardTitle').textContent=role==='astrologer'?'ASTROLOGER DASHBOARD':'CUSTOMER DASHBOARD';
    if(role==='astrologer'){
    let ad=preloadedAstro||{};
 
@@ -1908,7 +1908,7 @@ const userStatus=String(
     if(!active())return;
     if(background&&smvEditing("dashboard")){smvLiveQueue?.request();return;}
     box.innerHTML=`<div class="card" style="max-width:900px;margin:0 auto">
-      <h2>Astrologer Dashboard</h2>
+      <h2>ASTROLOGER DASHBOARD</h2>
       <div class="card" style="border:2px solid #c62828;background:#fff5f5">
         <h3 style="margin-top:0;color:#b71c1c">❌ Astrologer Application Rejected</h3>
         <p>Your astrologer application has been rejected by Admin.</p>
@@ -1944,7 +1944,7 @@ const userStatus=String(
         <p class="small">You can login and view this status now. Customer questions, answering, earnings and withdrawals will become available after Admin approval.</p>
       </div>`;
     }
-    box.innerHTML=`<div class="card" style="max-width:900px;margin:0 auto"><h2>Astrologer Dashboard</h2>${pendingContent}<div class="action-row"><button class="btn gray" id="astroRefreshApproval">REFRESH STATUS</button><button class="btn" id="astroLogoutPending">LOGOUT</button></div></div>`;
+    box.innerHTML=`<div class="card" style="max-width:900px;margin:0 auto"><h2>ASTROLOGER DASHBOARD</h2>${pendingContent}<div class="action-row"><button class="btn gray" id="astroRefreshApproval">REFRESH STATUS</button><button class="btn" id="astroLogoutPending">LOGOUT</button></div></div>`;
   }
 
   $('astroRefreshApproval')?.addEventListener('click',()=>loadDashboard('astrologer',true));
@@ -3836,7 +3836,7 @@ if(auth){ onAuthStateChanged(auth,async user=>{
        hidePrimarySections('dashboard');
        show('dashboard');
        show('dashboardContent');
-       $('dashboardTitle').textContent='Dashboard';
+       $('dashboardTitle').textContent=headerRole==='astrologer'?'ASTROLOGER DASHBOARD':'CUSTOMER DASHBOARD';
        $('dashboardContent').innerHTML='<div class="card"><div class="small">Loading your dashboard...</div></div>';
        smvShowRoleNav(); smvInternalView="dashboard";
        try{history.replaceState({smvView:"dashboard"},"","#dashboard");}catch(_e){}
