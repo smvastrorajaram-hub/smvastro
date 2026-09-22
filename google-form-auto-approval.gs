@@ -16,10 +16,7 @@ function createSmvAstrologerQualificationForm(){
   return syncSmvAstrologerQualificationForm();
 }
 function syncSmvAstrologerQualificationForm(){
-  const configUrl=BACKEND_WEBHOOK_URL.replace('/webhooks/google-form/astrologer-qualification','/google-form/astrologer-quiz-config');
-  const rr=UrlFetchApp.fetch(configUrl,{headers:{'x-smv-quiz-secret':WEBHOOK_SECRET},muteHttpExceptions:true});
-  if(rr.getResponseCode()!==200)throw new Error('Question Bank fetch failed: '+rr.getContentText());
-  const cfg=JSON.parse(rr.getContentText()),questions=cfg.questions||[];
+  const cfg=smvFetchQuizConfig_(),questions=cfg.questions||[];
   if(!questions.length)throw new Error('No enabled qualification questions found in Admin Question Manager.');
   if(Number(cfg.passMark)>questions.length)throw new Error('Pass Mark cannot be greater than the number of enabled questions.');
   const props=PropertiesService.getScriptProperties();let form,id=props.getProperty(FORM_ID_PROPERTY);
@@ -58,4 +55,24 @@ function onSmvQualificationSubmit(e){
   const payload={email:email,score:score,maxScore:maxScore,responseId:response.getId(),submittedAt:new Date().toISOString()};
   const r=UrlFetchApp.fetch(BACKEND_WEBHOOK_URL,{method:'post',contentType:'application/json',headers:{'x-smv-quiz-secret':WEBHOOK_SECRET},payload:JSON.stringify(payload),muteHttpExceptions:true});
   console.log(r.getResponseCode(),r.getContentText());
+}
+
+function doPost(e){
+  try{
+    const body=JSON.parse((e&&e.postData&&e.postData.contents)||'{}');
+    if(String(body.secret||'')!==String(WEBHOOK_SECRET||''))return smvJson_({success:false,error:'Invalid sync secret.'});
+    if(body.action!=='sync_google_form')return smvJson_({success:false,error:'Unknown action.'});
+    const formUrl=syncSmvAstrologerQualificationForm();
+    const cfg=smvFetchQuizConfig_();
+    return smvJson_({success:true,formUrl:formUrl,enabledQuestions:(cfg.questions||[]).length,passMark:Number(cfg.passMark||0)});
+  }catch(err){return smvJson_({success:false,error:String(err&&err.message||err)});}
+}
+function smvJson_(obj){
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+function smvFetchQuizConfig_(){
+  const configUrl=BACKEND_WEBHOOK_URL.replace('/webhooks/google-form/astrologer-qualification','/google-form/astrologer-quiz-config');
+  const rr=UrlFetchApp.fetch(configUrl,{headers:{'x-smv-quiz-secret':WEBHOOK_SECRET},muteHttpExceptions:true});
+  if(rr.getResponseCode()!==200)throw new Error('Question Bank fetch failed: '+rr.getContentText());
+  return JSON.parse(rr.getContentText());
 }
