@@ -206,7 +206,7 @@
         box.querySelectorAll('[data-private-consult-astro]').forEach(x=>{x.textContent=x===b?'SELECTED':'SELECT ASTROLOGER';});
         const card=$('privateConsultationQuestionCard'),selected=$('privateConsultationSelected'),summary=$('privateConsultPaymentSummary');
         if(selected)selected.innerHTML='<b>Selected Astrologer:</b> '+esc(astro.name||'Astrologer');
-        if(summary)summary.innerHTML='<b>Private Consultation Chat Price: ₹'+Number(astro.chatPrice||0).toFixed(2)+'</b>';
+        if(summary){summary.innerHTML='<b>Private Consultation Chat Price: ₹'+Number(astro.chatPrice||0).toFixed(2)+'</b>';if(!$('privateConsultPromoCode'))summary.insertAdjacentHTML('afterend','<div class="action-row" style="margin:8px 0"><input id="privateConsultPromoCode" maxlength="40" placeholder="Promotion code (optional)"><span class="small">Automatic eligible offers are checked at payment.</span></div>');}
         card?.classList.remove('hidden');
         card?.scrollIntoView({behavior:'smooth',block:'start'});
       });
@@ -225,6 +225,7 @@
     if(!astro?.id||Number(astro.chatPrice)<1){if(msg)msg.innerHTML='<span class="error">Please select an available astrologer first.</span>';return;}
     const payload={
       astrologerId:String(astro.id),
+      promoCode:String($('privateConsultPromoCode')?.value||'').trim(),
       customerName:String($('privateConsultName')?.value||'').trim(),
       question:String($('privateConsultQuestion')?.value||'').trim(),
       birthDetails:{
@@ -250,6 +251,7 @@
       };
       const order=await api('/private-consultation/create-order',payload);
       if(!order?.orderId||!order?.keyId||!order?.consultationId)throw new Error('Private consultation payment order was not created correctly.');
+      if(order?.offerId&&msg)msg.innerHTML='<span class="success">'+esc(order.offerBannerText||order.offerName||'Offer applied')+' — Pay ₹'+(Number(order.amount||0)/100).toFixed(2)+'</span>';
       if(typeof window.Razorpay!=='function')throw new Error('Payment checkout is not ready. Please refresh and try again.');
       const options={
         key:order.keyId,amount:order.amount,currency:order.currency||'INR',name:'SMV ASTRO SERVICES',

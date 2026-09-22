@@ -2024,6 +2024,134 @@ app.post("/admin/private-consultation/reject-answer",express.json({limit:"10kb"}
   return res.json({success:true,consultationId:id,status:"revision_required"});
 });
 
+
+// SMV ASTRO OFFER & PROMOTION ENGINE
+// Server is authoritative for eligibility and final payable amount. The browser may
+// request a quote, but Razorpay orders are always created from this server-side result.
+const OFFER_COLLECTION = "smv_offers";
+const OFFER_AUDIT_COLLECTION = "smv_offer_audit";
+const BUILTIN_WELCOME_ID = "builtin_welcome_first_question";
+
+function offerText(v, max=160){ return String(v == null ? "" : v).trim().slice(0,max); }
+function offerMoney(v){ const n=Number(v); return Number.isFinite(n) ? Math.round(n*100)/100 : null; }
+function offerDateMs(v){
+  if(!v) return null;
+  if(typeof v.toMillis === "function") return v.toMillis();
+  const n=Date.parse(String(v)); return Number.isFinite(n)?n:null;
+}
+async function ensureBuiltinWelcomeOffer(){
+  const ref=db.collection(OFFER_COLLECTION).doc(BUILTIN_WELCOME_ID), snap=await ref.get();
+  if(!snap.exists){
+    await ref.set({
+      id:BUILTIN_WELCOME_ID,name:"₹1 New Customer Welcome Offer",kind:"welcome",enabled:false,
+      automatic:true,promoCode:"",discountType:"fixed_price",offerPrice:1,eligibility:"new_customer",
+      appliesTo:["public_question"],usageRule:"first_only",perCustomerLimit:1,totalUsageLimit:0,
+      minimumAmount:1,displayMode:"payment_only",bannerText:"Welcome Offer Applied — First Question ₹1",
+      builtIn:true,priority:100,usedCount:0,successfulPayments:0,totalDiscountGiven:0,
+      createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()
+    });
+  }
+}
+async function customerPaidCount(uid, service){
+  if(service==="private_consultation"){
+    const s=await db.collection("smv_private_consultations").where("customerId","==",uid).where("paymentStatus","==","paid").limit(1).get();
+    return s.empty?0:1;
+  }
+  const s=await db.collection("smv_questions").where("customerId","==",uid).where("paymentStatus","==","paid").limit(1).get();
+  return s.empty?0:1;
+}
+async function offerUsageCount(uid, offerId){
+  const s=await db.collection(OFFER_AUDIT_COLLECTION).where("customerId","==",uid).where("offerId","==",offerId).where("status","==","used").get();
+  return s.size;
+}
+function computeOfferPrice(original, offer){
+  let final=original;
+  const type=String(offer.discountType||"fixed_price");
+  if(type==="fixed_price") final=Number(offer.offerPrice);
+  else if(type==="percentage") final=original-(original*Math.max(0,Math.min(100,Number(offer.discountValue||0)))/100);
+  else if(type==="flat") final=original-Math.max(0,Number(offer.discountValue||0));
+  if(!Number.isFinite(final)) return null;
+  return Math.max(1,Math.round(final*100)/100);
+}
+async function resolveOfferForCustomer({uid,service,originalAmount,promoCode}){
+  await ensureBuiltinWelcomeOffer();
+  const original=offerMoney(originalAmount), code=offerText(promoCode,40).toUpperCase();
+  if(original==null||original<1) throw new Error("Invalid original price.");
+  const now=Date.now(), snap=await db.collection(OFFER_COLLECTION).where("enabled","==",true).get();
+  const paidBefore=await customerPaidCount(uid,service);
+  const candidates=[];
+  for(const d of snap.docs){
+    const o={id:d.id,...d.data()};
+    const services=Array.isArray(o.appliesTo)?o.appliesTo:[String(o.appliesTo||"public_question")];
+    if(!services.includes(service)&&!services.includes("all")) continue;
+    const start=offerDateMs(o.startAt), end=offerDateMs(o.endAt);
+    if(start&&now<start)continue;if(end&&now>end)continue;
+    if(Number(o.minimumAmount||0)>original)continue;
+    if(Number(o.totalUsageLimit||0)>0&&Number(o.usedCount||0)>=Number(o.totalUsageLimit))continue;
+    const eligibility=String(o.eligibility||"all");
+    if(eligibility==="new_customer"&&paidBefore>0)continue;
+    if(eligibility==="existing_customer"&&paidBefore===0)continue;
+    const limit=Number(o.perCustomerLimit||0);
+    if(limit>0 && await offerUsageCount(uid,d.id)>=limit)continue;
+    const oCode=offerText(o.promoCode,40).toUpperCase();
+    if(oCode){ if(!code||code!==oCode)continue; }
+    else if(o.automatic===false)continue;
+    const final=computeOfferPrice(original,o);if(final==null||final>=original)continue;
+    candidates.push({...o,finalAmount:final,discountAmount:Math.round((original-final)*100)/100});
+  }
+  // Strict priority: built-in ₹1 welcome -> explicit promo -> automatic seasonal -> normal price.
+  candidates.sort((a,b)=>{
+    const rank=o=>o.id===BUILTIN_WELCOME_ID?300:(offerText(o.promoCode,40)?200:100)+Number(o.priority||0);
+    return rank(b)-rank(a) || a.finalAmount-b.finalAmount;
+  });
+  const best=candidates[0]||null;
+  return best?{originalAmount:original,finalAmount:best.finalAmount,discountAmount:best.discountAmount,offerId:best.id,offerName:best.name||"Offer",promoCode:offerText(best.promoCode,40).toUpperCase(),displayMode:best.displayMode||"payment_only",bannerText:best.bannerText||"Offer applied",kind:best.kind||"promotion"}:{originalAmount:original,finalAmount:original,discountAmount:0,offerId:null,offerName:null,promoCode:code||"",displayMode:"hidden",bannerText:"",kind:null};
+}
+async function consumeOfferAfterPayment({uid,service,referenceId,paymentId,quote}){
+  if(!quote?.offerId)return;
+  const auditRef=db.collection(OFFER_AUDIT_COLLECTION).doc(`${service}_${referenceId}`);
+  await db.runTransaction(async tx=>{
+    const audit=await tx.get(auditRef);if(audit.exists&&audit.data()?.status==="used")return;
+    const offerRef=db.collection(OFFER_COLLECTION).doc(quote.offerId), offerSnap=await tx.get(offerRef);
+    tx.set(auditRef,{customerId:uid,service,referenceId,paymentId:paymentId||null,offerId:quote.offerId,offerName:quote.offerName||null,promoCode:quote.promoCode||"",originalAmount:Number(quote.originalAmount||0),finalAmount:Number(quote.finalAmount||0),discountAmount:Number(quote.discountAmount||0),status:"used",usedAt:FieldValue.serverTimestamp(),createdAt:FieldValue.serverTimestamp()},{merge:true});
+    if(offerSnap.exists)tx.set(offerRef,{usedCount:FieldValue.increment(1),successfulPayments:FieldValue.increment(1),totalDiscountGiven:FieldValue.increment(Number(quote.discountAmount||0)),updatedAt:FieldValue.serverTimestamp()},{merge:true});
+  });
+}
+app.post("/offers/quote",express.json({limit:"10kb"}),async(req,res)=>{
+  const user=await requireUser(req,res);if(!user)return;
+  try{
+    const service=String(req.body?.service||"public_question");
+    let original=Number(req.body?.originalAmount||0);
+    if(service==="public_question"){const q=await db.collection("smv_settings").doc("question").get();original=Number(q.data()?.price||0);}
+    const quote=await resolveOfferForCustomer({uid:user.uid,service,originalAmount:original,promoCode:req.body?.promoCode});
+    return res.json({success:true,...quote});
+  }catch(e){return res.status(400).json({error:e?.message||"Unable to calculate offer."});}
+});
+app.get("/admin/offers",async(req,res)=>{
+  const user=await requireUser(req,res);if(!user)return;if(!(await isAdminUser(user)))return res.status(403).json({error:"Admin access denied."});
+  await ensureBuiltinWelcomeOffer();const s=await db.collection(OFFER_COLLECTION).get();
+  return res.json({success:true,offers:s.docs.map(d=>({id:d.id,...d.data()}))});
+});
+app.post("/admin/offers/save",express.json({limit:"30kb"}),async(req,res)=>{
+  const user=await requireUser(req,res);if(!user)return;if(!(await isAdminUser(user)))return res.status(403).json({error:"Admin access denied."});
+  try{
+    const b=req.body||{}, requested=offerText(b.id,80), id=requested||db.collection(OFFER_COLLECTION).doc().id, builtIn=id===BUILTIN_WELCOME_ID;
+    const promo=offerText(b.promoCode,40).toUpperCase().replace(/[^A-Z0-9_-]/g,"");
+    const discountType=["fixed_price","percentage","flat"].includes(String(b.discountType))?String(b.discountType):"fixed_price";
+    const applies=Array.isArray(b.appliesTo)?b.appliesTo.filter(x=>["public_question","private_consultation","all"].includes(String(x))):["public_question"];
+    const data={name:offerText(b.name,120)||"Promotion",kind:builtIn?"welcome":offerText(b.kind,30)||"promotion",enabled:b.enabled===true,automatic:builtIn?true:b.automatic===true,promoCode:builtIn?"":promo,discountType,offerPrice:offerMoney(b.offerPrice),discountValue:offerMoney(b.discountValue)||0,eligibility:["new_customer","existing_customer","all"].includes(String(b.eligibility))?String(b.eligibility):"all",appliesTo:applies.length?applies:["public_question"],usageRule:offerText(b.usageRule,30)||"one_per_customer",perCustomerLimit:Math.max(0,Math.floor(Number(b.perCustomerLimit||0))),totalUsageLimit:Math.max(0,Math.floor(Number(b.totalUsageLimit||0))),minimumAmount:Math.max(0,Number(b.minimumAmount||0)),displayMode:["hidden","home_banner","customer_dashboard","payment_only","home_dashboard"].includes(String(b.displayMode))?String(b.displayMode):"payment_only",bannerText:offerText(b.bannerText,240),startAt:b.startAt?String(b.startAt):null,endAt:b.endAt?String(b.endAt):null,priority:Number(b.priority||0),builtIn,updatedAt:FieldValue.serverTimestamp(),updatedBy:user.uid};
+    if(discountType==="fixed_price"&&(!Number.isFinite(data.offerPrice)||data.offerPrice<1))return res.status(400).json({error:"Fixed offer price must be at least ₹1."});
+    await db.collection(OFFER_COLLECTION).doc(id).set({...data,createdAt:FieldValue.serverTimestamp()},{merge:true});
+    return res.json({success:true,id});
+  }catch(e){return res.status(400).json({error:e?.message||"Unable to save offer."});}
+});
+app.post("/admin/offers/delete",express.json({limit:"10kb"}),async(req,res)=>{
+  const user=await requireUser(req,res);if(!user)return;if(!(await isAdminUser(user)))return res.status(403).json({error:"Admin access denied."});
+  const id=offerText(req.body?.id,80);if(!id)return res.status(400).json({error:"Offer ID required."});
+  if(id===BUILTIN_WELCOME_ID)return res.status(409).json({error:"Built-in ₹1 Welcome Offer cannot be deleted. Disable it instead."});
+  await db.collection(OFFER_COLLECTION).doc(id).delete();return res.json({success:true});
+});
+
 app.post("/private-consultation/create-order", express.json({limit:"30kb"}), async (req,res)=>{
   const user=await requireUser(req,res);if(!user)return;
   try{
@@ -2041,8 +2169,10 @@ app.post("/private-consultation/create-order", express.json({limit:"30kb"}), asy
     const a=aSnap.data()||{};
     if(!["approved","active"].includes(String(a.status||"").toLowerCase()))
       return res.status(409).json({error:"Selected astrologer is not currently approved."});
-    const chatPrice=Number(a.pricePerQuestion||0);
-    if(!Number.isFinite(chatPrice)||chatPrice<1)return res.status(409).json({error:"This astrologer's Chat Price is not available."});
+    const originalChatPrice=Number(a.pricePerQuestion||0);
+    if(!Number.isFinite(originalChatPrice)||originalChatPrice<1)return res.status(409).json({error:"This astrologer's Chat Price is not available."});
+    const offerQuote=await resolveOfferForCustomer({uid:user.uid,service:"private_consultation",originalAmount:originalChatPrice,promoCode:req.body?.promoCode});
+    const chatPrice=offerQuote.finalAmount;
     const privateCommission=await getPrivateCommissionSettings();
     const commissionSnapshot=privateCommissionSnapshot(chatPrice,privateCommission);
     const {privateAstrologerCommissionRate,privateAdminCommissionRate,astrologerAmount,adminAmount}=commissionSnapshot;
@@ -2056,7 +2186,7 @@ app.post("/private-consultation/create-order", express.json({limit:"30kb"}), asy
     await ref.set({
       consultationId,customerId:user.uid,customerEmail:user.email||null,customerName,question,
       astrologerId,astrologerName:String(a.name||"Astrologer"),
-      chatPrice,privateAstrologerCommissionRate,privateAdminCommissionRate,adminAmount,astrologerAmount,
+      chatPrice,originalChatPrice,offerId:offerQuote.offerId||null,offerName:offerQuote.offerName||null,offerPromoCode:offerQuote.promoCode||"",offerDiscountAmount:offerQuote.discountAmount||0,offerBannerText:offerQuote.bannerText||"",offerDisplayMode:offerQuote.displayMode||"hidden",privateAstrologerCommissionRate,privateAdminCommissionRate,adminAmount,astrologerAmount,
       amount:chatPrice,status:"awaiting_payment",paymentStatus:"order_created",allocationStatus:"selected_astrologer",
       birthDetails:{name:customerName,birthDate:String(birth.birthDate),birthTime:String(birth.birthTime),birthPlace:String(birth.birthPlace).trim(),birthGender:String(birth.birthGender||""),timezone:"Asia/Kolkata",utcOffsetMinutes:330},
       razorpayOrderId:order.id,paymentCurrency:"INR",createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()
@@ -2066,7 +2196,7 @@ app.post("/private-consultation/create-order", express.json({limit:"30kb"}), asy
       firebaseUid:user.uid,customerEmail:user.email||null,astrologerId,serviceName:"Private Astrology Consultation",
       status:"created",createdAt:FieldValue.serverTimestamp()
     });
-    return res.json({success:true,consultationId,orderId:order.id,keyId:RAZORPAY_KEY_ID,amount:order.amount,currency:order.currency});
+    return res.json({success:true,consultationId,orderId:order.id,keyId:RAZORPAY_KEY_ID,amount:order.amount,currency:order.currency,originalAmount:offerQuote.originalAmount,offerId:offerQuote.offerId||null,offerName:offerQuote.offerName||null,promoCode:offerQuote.promoCode||"",discountAmount:offerQuote.discountAmount||0,offerBannerText:offerQuote.bannerText||""});
   }catch(e){console.error("Private consultation create-order error:",e);return res.status(500).json({error:e?.error?.description||e?.message||"Unable to create private consultation payment."});}
 });
 
@@ -2127,6 +2257,7 @@ app.post("/private-consultation/verify-payment", express.json({limit:"15kb"}), a
         razorpayPaymentId:paymentId,razorpaySignature:signature,paidAt:FieldValue.serverTimestamp(),
         paymentRecordedAt:new Date().toISOString(),updatedAt:FieldValue.serverTimestamp()
       });
+      await consumeOfferAfterPayment({uid:user.uid,service:"private_consultation",referenceId:consultationId,paymentId,quote:{offerId:c.offerId||null,offerName:c.offerName||null,promoCode:c.offerPromoCode||"",originalAmount:Number(c.originalChatPrice||c.chatPrice||c.amount||0),finalAmount:Number(c.chatPrice||c.amount||0),discountAmount:Number(c.offerDiscountAmount||0)}});
       await addAdminPrivateNotification("private_payment_received","Private Consultation Payment Received",`${c.customerName||"Customer"} paid ₹${Number(c.chatPrice||c.amount||0).toFixed(2)} for ${c.astrologerName||"the selected astrologer"}.`,consultationId,{customerId:c.customerId,astrologerId:c.astrologerId});
       await db.collection("smv_notifications").add({
         userId:c.customerId,type:"private_consultation_payment",title:"Private consultation payment successful",
@@ -2151,6 +2282,7 @@ app.post("/create-order", express.json(), async (req, res) => {
     let questionId = String(req.body?.questionId || "").trim();
     let qRef;
     let q;
+    let createdNow = false;
     if (!questionId) questionId = await nextQuestionId();
 
     // Create/read the question on the trusted server. The browser no longer calls
@@ -2163,6 +2295,7 @@ app.post("/create-order", express.json(), async (req, res) => {
       qRef = db.collection("smv_questions").doc(questionId);
       const qSnap = await qRef.get();
       if (!qSnap.exists) {
+        createdNow = true;
         const settingSnap = await db.collection("smv_settings").doc("question").get();
         const configuredPrice = Number(settingSnap.data()?.price || 5);
         const birth = req.body?.birthDetails || {};
@@ -2261,9 +2394,17 @@ app.post("/create-order", express.json(), async (req, res) => {
         createdAt: FieldValue.serverTimestamp()
       };
       await qRef.set(q);
+      createdNow = true;
     }
 
     if (!q || q.customerId !== user.uid) return res.status(403).json({ error: "You do not own this question." });
+    // Apply offers only when this question is first created. Retry payments always keep
+    // the amount already locked on the saved question.
+    if(createdNow){
+      const quote=await resolveOfferForCustomer({uid:user.uid,service:"public_question",originalAmount:Number(q.amount||0),promoCode:req.body?.promoCode});
+      q={...q,amount:quote.finalAmount,originalAmount:quote.originalAmount,offerId:quote.offerId,offerName:quote.offerName,offerPromoCode:quote.promoCode||"",offerDiscountAmount:quote.discountAmount,offerBannerText:quote.bannerText||"",offerDisplayMode:quote.displayMode||"hidden"};
+      await qRef.set({amount:q.amount,originalAmount:q.originalAmount,offerId:q.offerId||null,offerName:q.offerName||null,offerPromoCode:q.offerPromoCode||"",offerDiscountAmount:q.offerDiscountAmount||0,offerBannerText:q.offerBannerText||"",offerDisplayMode:q.offerDisplayMode||"hidden",offerLockedAt:FieldValue.serverTimestamp()},{merge:true});
+    }
     console.log("[create-order] questionId=", questionId, "customer=", user.uid);
 
     if (!["awaiting_payment", "payment_failed"].includes(q.status)) {
@@ -2316,7 +2457,7 @@ app.post("/create-order", express.json(), async (req, res) => {
       firebaseUid: user.uid, customerEmail: user.email || null, astrologerId: String(q.astrologerId || ""),
       serviceName: req.body?.serviceName || "Public Astrology Question", status: "created", createdAt: FieldValue.serverTimestamp()
     });
-    return res.json({ success: true, questionId, orderId: order.id, keyId: RAZORPAY_KEY_ID, amount: order.amount, currency: order.currency });
+    return res.json({ success: true, questionId, orderId: order.id, keyId: RAZORPAY_KEY_ID, amount: order.amount, currency: order.currency, originalAmount:Number(q.originalAmount||q.amount||0), offerId:q.offerId||null, offerName:q.offerName||null, promoCode:q.offerPromoCode||"", discountAmount:Number(q.offerDiscountAmount||0), offerBannerText:q.offerBannerText||"" });
   } catch (e) {
     console.error("Create order error:", e);
     return res.status(500).json({ error: e?.error?.description || e?.description || e?.message || "Unable to create Razorpay order" });
@@ -2361,6 +2502,7 @@ async function markQuestionPaid(questionId, orderId, paymentId, signature, sourc
     await db.collection("smv_notifications").add({ userId: result.customerId, type: "payment", title: "Payment successful", message: workflow.allowWithoutAdminApproval ? `Your payment was verified. Your question is now open to approved astrologers. Payment ID: ${result.customerPaymentId || "N/A"}.` : `Your payment was verified. Your question is now waiting for Admin approval. Payment ID: ${result.customerPaymentId || "N/A"}.`, paymentId: result.customerPaymentId || null, razorpayPaymentId: paymentId || null, questionId, createdAt: FieldValue.serverTimestamp(), read: false });
     const qSnap = await qRef.get();
     const q = qSnap.exists ? (qSnap.data() || {}) : {};
+    await consumeOfferAfterPayment({uid:result.customerId,service:"public_question",referenceId:questionId,paymentId,quote:{offerId:q.offerId||null,offerName:q.offerName||null,promoCode:q.offerPromoCode||"",originalAmount:Number(q.originalAmount||q.amount||0),finalAmount:Number(q.amount||0),discountAmount:Number(q.offerDiscountAmount||0)}});
     const customerEmail = String(q.customerEmail || await getUserEmail(result.customerId) || "").trim();
     const amount = Number(q.amount || 0);
     await sendSystemEmail({
