@@ -10217,6 +10217,10 @@ html.smv-desktop-site #dashboardContent .astro-dashboard-summary > .card:nth-chi
   -webkit-text-fill-color:#ff1493!important;
 }
 
+
+
+/* SMV 2026-09-23 — Admin top three actions ONLY, mobile final fit.
+   Refresh and every other control remain untouched. */
 @media (max-width:600px){
   html body #admin div.smv-admin-nav{
     display:grid!important;
@@ -10230,64 +10234,27 @@ html.smv-desktop-site #dashboardContent .astro-dashboard-summary > .card:nth-chi
     align-items:stretch!important;
   }
   html body #admin div.smv-admin-nav > button.smv-admin-jump{
-    display:flex!important;
-    align-items:center!important;
-    justify-content:center!important;
     width:100%!important;
     min-width:0!important;
     max-width:none!important;
-    height:42px!important;
-    min-height:42px!important;
-    max-height:42px!important;
+    height:46px!important;
+    min-height:46px!important;
+    max-height:46px!important;
+    padding:4px 7px!important;
     margin:0!important;
-    padding:4px 5px!important;
     box-sizing:border-box!important;
     aspect-ratio:auto!important;
-    border-radius:6px!important;
-    text-align:center!important;
-    white-space:normal!important;
-    word-break:normal!important;
-    overflow-wrap:normal!important;
-    line-height:1.05!important;
-    font-size:10px!important;
-    font-weight:800!important;
-    overflow:hidden!important;
-  }
-}
-
-/* SMV 2026-09-23 — Admin top three actions ONLY, mobile final fit.
-   Refresh and every other control remain untouched. */
-@media (max-width:600px){
-  html body #admin div.smv-admin-nav{
-    display:grid!important;
-    grid-template-columns:repeat(3,minmax(0,1fr))!important;
-    column-gap:6px!important;
-    row-gap:0!important;
-    width:100%!important;
-    padding:4px 0!important;
-    margin:0 0 14px!important;
-    box-sizing:border-box!important;
-    align-items:stretch!important;
-  }
-  html body #admin div.smv-admin-nav > button.smv-admin-jump{
-    width:100%!important;
-    min-width:0!important;
-    max-width:100%!important;
-    height:38px!important;
-    min-height:38px!important;
-    max-height:38px!important;
-    padding:3px 6px!important;
-    margin:0!important;
-    border-radius:6px!important;
-    box-sizing:border-box!important;
     display:flex!important;
     align-items:center!important;
     justify-content:center!important;
     text-align:center!important;
-    font-size:9.5px!important;
-    line-height:1.05!important;
     white-space:normal!important;
+    overflow-wrap:normal!important;
+    word-break:normal!important;
     overflow:hidden!important;
-    aspect-ratio:auto!important;
+    font-size:11px!important;
+    line-height:1.08!important;
+    font-weight:800!important;
+    border-radius:6px!important;
   }
 }
