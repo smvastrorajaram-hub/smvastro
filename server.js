@@ -2164,8 +2164,17 @@ app.post("/admin/offers/save",express.json({limit:"30kb"}),async(req,res)=>{
     const applies=Array.isArray(b.appliesTo)?b.appliesTo.filter(x=>["public_question","private_consultation","all"].includes(String(x))):["public_question"];
     const data={name:offerText(b.name,120)||"Promotion",kind:builtIn?"welcome":offerText(b.kind,30)||"promotion",enabled:b.enabled===true,automatic:builtIn?true:b.automatic===true,promoCode:builtIn?"":promo,discountType,offerPrice:offerMoney(b.offerPrice),discountValue:offerMoney(b.discountValue)||0,eligibility:["new_customer","existing_customer","all"].includes(String(b.eligibility))?String(b.eligibility):"all",appliesTo:applies.length?applies:["public_question"],usageRule:offerText(b.usageRule,30)||"one_per_customer",perCustomerLimit:Math.max(0,Math.floor(Number(b.perCustomerLimit||0))),totalUsageLimit:Math.max(0,Math.floor(Number(b.totalUsageLimit||0))),minimumAmount:Math.max(0,Number(b.minimumAmount||0)),displayMode:["hidden","home_banner","customer_dashboard","payment_only","home_dashboard"].includes(String(b.displayMode))?String(b.displayMode):"payment_only",bannerText:offerText(b.bannerText,240),startAt:b.startAt?String(b.startAt):null,endAt:b.endAt?String(b.endAt):null,priority:Number(b.priority||0),builtIn,updatedAt:FieldValue.serverTimestamp(),updatedBy:user.uid};
     if(discountType==="fixed_price"&&(!Number.isFinite(data.offerPrice)||data.offerPrice<1))return res.status(400).json({error:"Fixed offer price must be at least ₹1."});
-    await db.collection(OFFER_COLLECTION).doc(id).set({...data,createdAt:FieldValue.serverTimestamp()},{merge:true});
-    return res.json({success:true,id});
+    const ref=db.collection(OFFER_COLLECTION).doc(id);
+    const before=await ref.get();
+    const writeData={...data};
+    if(!before.exists)writeData.createdAt=FieldValue.serverTimestamp();
+    await ref.set(writeData,{merge:true});
+    // Read back the exact persisted document. This prevents the Admin UI from
+    // reporting success when the values were not actually stored.
+    const savedSnap=await ref.get();
+    if(!savedSnap.exists)return res.status(500).json({error:"Offer save verification failed."});
+    const saved={id:savedSnap.id,...savedSnap.data()};
+    return res.json({success:true,id,saved});
   }catch(e){return res.status(400).json({error:e?.message||"Unable to save offer."});}
 });
 app.post("/admin/offers/delete",express.json({limit:"10kb"}),async(req,res)=>{
