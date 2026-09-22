@@ -10145,3 +10145,27 @@ html.smv-desktop-site #dashboardContent .astro-dashboard-summary > .card:nth-chi
     overflow:hidden!important;
   }
 }
+
+/* SMV mobile alignment fix — Blogs & Media uses the same horizontal reading gutter as About SMV Astro. */
+@media (max-width:760px){
+  html body.smv-v12-theme #smv-content-hub{
+    width:100%!important;
+    max-width:100%!important;
+    margin-left:auto!important;
+    margin-right:auto!important;
+    padding-left:16px!important;
+    padding-right:16px!important;
+    box-sizing:border-box!important;
+  }
+  html body.smv-v12-theme #smv-content-hub > .feature-shell.card,
+  html body.smv-v12-theme #smv-content-hub .smv-v173-subregion,
+  html body.smv-v12-theme #smv-content-hub #publicBlogs,
+  html body.smv-v12-theme #smv-content-hub #publicMedia,
+  html body.smv-v12-theme #smv-content-hub #publicMedia .smv-media-type-grid{
+    width:100%!important;
+    max-width:100%!important;
+    margin-left:0!important;
+    margin-right:0!important;
+    box-sizing:border-box!important;
+  }
+}
