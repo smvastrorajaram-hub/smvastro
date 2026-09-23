@@ -1193,6 +1193,71 @@ async function refreshOfferQuote(showInvalid=false){
   }catch(e){if($("smvOfferMsg")&&showInvalid)$("smvOfferMsg").innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';return null;}
 }
 
+
+// V38 — Keep Automatic Offers visible in the actual payment forms.
+// The backend remains authoritative for the final Razorpay amount. This UI sync
+// only mirrors the server quote and removes promo-code controls when no code is
+// required.
+let smvPrivateOfferQuote=null;
+function smvMoneyFromText(text){
+  const matches=[...String(text||'').matchAll(/₹\s*([0-9]+(?:\.[0-9]{1,2})?)/g)];
+  if(!matches.length)return 0;
+  const nums=matches.map(m=>Number(m[1])).filter(n=>Number.isFinite(n)&&n>=1);
+  return nums.length?Math.max(...nums):0;
+}
+function smvHidePrivatePromoControls(automatic){
+  const root=$("privateConsultationQuestionCard"); if(!root)return;
+  root.querySelectorAll('input').forEach(input=>{
+    const hint=((input.placeholder||'')+' '+(input.getAttribute('aria-label')||'')).toLowerCase();
+    if(!hint.includes('promo')&&!hint.includes('promotion'))return;
+    const holder=input.closest('label,.action-row,.field,.form-group,div')||input;
+    holder.classList.toggle('hidden',!!automatic);
+    if(automatic)input.value='';
+  });
+  root.querySelectorAll('button').forEach(btn=>{
+    const txt=(btn.textContent||'').trim().toLowerCase();
+    if(txt==='apply'||txt.includes('apply promo')||txt.includes('apply promotion')){
+      const holder=btn.closest('.action-row,.field,.form-group')||btn;
+      holder.classList.toggle('hidden',!!automatic);
+    }
+  });
+}
+async function refreshPrivateOfferQuote(){
+  if(!currentUser)return null;
+  const card=$("privateConsultationQuestionCard");
+  if(!card||card.classList.contains('hidden'))return null;
+  const selected=$("privateConsultationSelected"), summary=$("privateConsultPaymentSummary");
+  const original=smvMoneyFromText((selected?.textContent||'')+' '+(summary?.textContent||''));
+  if(!original)return null;
+  try{
+    const q=await renderApi('/offers/quote',{method:'POST',body:JSON.stringify({service:'private_consultation',originalAmount:original,promoCode:''})});
+    smvPrivateOfferQuote=q;
+    const automatic=!!(q?.offerId&&q?.automatic===true);
+    smvHidePrivatePromoControls(automatic);
+    let note=$("smvPrivateAutomaticOffer");
+    if(!note&&summary){note=document.createElement('div');note.id='smvPrivateAutomaticOffer';summary.insertAdjacentElement('afterend',note);}
+    if(note){
+      note.className='small'+(automatic?' success':'');
+      note.innerHTML=automatic?`<b><s>₹${Number(q.originalAmount).toFixed(2)}</s> ₹${Number(q.finalAmount).toFixed(2)}</b><br>${escapeHtml(q.bannerText||q.offerName||'Automatic offer applied')} — no promo code required.`:'';
+    }
+    if(automatic&&summary){
+      // Do not replace the existing summary structure; append a server-verified
+      // price marker so existing Private Consultation handlers keep working.
+      summary.dataset.smvOfferFinal=String(q.finalAmount);
+    }
+    return q;
+  }catch(e){console.warn('Private consultation offer quote refresh skipped:',e);return null;}
+}
+function smvSchedulePrivateOfferRefresh(){setTimeout(()=>refreshPrivateOfferQuote().catch(()=>{}),0);setTimeout(()=>refreshPrivateOfferQuote().catch(()=>{}),250);}
+document.addEventListener('click',e=>{
+  if(e.target?.closest?.('#private-consultation,.smv-private-consult-select'))smvSchedulePrivateOfferRefresh();
+},true);
+const smvPrivateOfferObserver=new MutationObserver(muts=>{
+  if(muts.some(m=>m.target?.id==='privateConsultationSelected'||m.target?.id==='privateConsultPaymentSummary'||m.addedNodes?.length))smvSchedulePrivateOfferRefresh();
+});
+const smvPrivateOfferObserverStart=()=>{const root=$("privateConsultationQuestionCard");if(root)smvPrivateOfferObserver.observe(root,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class']});};
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',smvPrivateOfferObserverStart,{once:true});else smvPrivateOfferObserverStart();
+
 let questionPriceUnsubscribe=null;
 async function loadQuestionPrice(){
   const rateBox=$("askRate");
