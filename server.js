@@ -2050,7 +2050,12 @@ function offerDateMs(v){
   const n=Date.parse(raw);
   return Number.isFinite(n)?n:null;
 }
+let builtinWelcomeOfferEnsured=false;
 async function ensureBuiltinWelcomeOffer(){
+  // PERFORMANCE: this migration is process-level initialization, not payment-path work.
+  // Previously every offer quote performed a Firestore read AND an unconditional write,
+  // which made Ask/Private offer display and Razorpay creation unnecessarily slow.
+  if(builtinWelcomeOfferEnsured)return;
   const ref=db.collection(OFFER_COLLECTION).doc(BUILTIN_WELCOME_ID), snap=await ref.get();
   if(!snap.exists){
     await ref.set({
@@ -2061,17 +2066,9 @@ async function ensureBuiltinWelcomeOffer(){
       builtIn:true,priority:100,usedCount:0,successfulPayments:0,totalDiscountGiven:0,
       createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()
     });
-  }else{
-    // Keep Admin ON/OFF state and statistics, but migrate the built-in offer to
-    // first-paid-service semantics across Ask Question OR Private Consultation.
-    await ref.set({
-      name:"₹1 New Customer Welcome Offer",kind:"welcome",automatic:true,promoCode:"",
-      discountType:"fixed_price",offerPrice:1,eligibility:"new_customer",
-      appliesTo:["public_question","private_consultation"],usageRule:"first_paid_service",
-      perCustomerLimit:1,totalUsageLimit:0,minimumAmount:1,builtIn:true,priority:100,
-      bannerText:"Welcome Offer Applied — First Paid Service ₹1",updatedAt:FieldValue.serverTimestamp()
-    },{merge:true});
   }
+  // Existing documents are managed by Admin. Do not rewrite them on every quote/payment.
+  builtinWelcomeOfferEnsured=true;
 }
 async function customerPaidCount(uid, service){
   if(service==="private_consultation"){
@@ -2102,13 +2099,17 @@ function computeOfferPrice(original, offer){
   return Math.max(1,Math.round(final*100)/100);
 }
 async function resolveOfferForCustomer({uid,service,originalAmount,promoCode}){
-  await ensureBuiltinWelcomeOffer();
   const original=offerMoney(originalAmount), code=offerText(promoCode,40).toUpperCase();
   if(original==null||original<1) throw new Error("Invalid original price.");
-  const now=Date.now(), snap=await db.collection(OFFER_COLLECTION).where("enabled","==",true).get();
-  const paidBefore=await customerPaidCount(uid,service);
-  const hasAnyPaidService=await customerHasAnyPaidService(uid);
-  const candidates=[];
+  // PERFORMANCE: independent reads run together. Built-in initialization is also
+  // concurrent and becomes a no-op after the first request in this server process.
+  const [snap,paidBefore,hasAnyPaidService]=await Promise.all([
+    db.collection(OFFER_COLLECTION).where("enabled","==",true).get(),
+    customerPaidCount(uid,service),
+    customerHasAnyPaidService(uid),
+    ensureBuiltinWelcomeOffer()
+  ]);
+  const now=Date.now(), preCandidates=[];
   for(const d of snap.docs){
     const o={id:d.id,...d.data()};
     const services=Array.isArray(o.appliesTo)?o.appliesTo:[String(o.appliesTo||"public_question")];
@@ -2126,15 +2127,18 @@ async function resolveOfferForCustomer({uid,service,originalAmount,promoCode}){
       if(eligibility==="existing_customer"&&paidBefore===0)continue;
     }
     const limit=Number(o.perCustomerLimit||0);
-    if(limit>0 && await offerUsageCount(uid,d.id)>=limit)continue;
     const oCode=offerText(o.promoCode,40).toUpperCase();
     // Automatic offers never require a promo code. A stale code saved on an
     // older automatic offer is ignored. Manual offers always require an exact code.
     if(o.automatic===true){ /* eligible automatically */ }
     else { if(!oCode || !code || code!==oCode) continue; }
     const final=computeOfferPrice(original,o);if(final==null||final>=original)continue;
-    candidates.push({...o,finalAmount:final,discountAmount:Math.round((original-final)*100)/100});
+    preCandidates.push({...o,_limit:limit,finalAmount:final,discountAmount:Math.round((original-final)*100)/100});
   }
+  // Only candidates that actually need a per-customer usage lookup pay that cost,
+  // and those lookups run in parallel rather than one-by-one.
+  const usage=await Promise.all(preCandidates.map(o=>o._limit>0?offerUsageCount(uid,o.id):Promise.resolve(0)));
+  const candidates=preCandidates.filter((o,i)=>!(o._limit>0&&usage[i]>=o._limit));
   // Strict priority: built-in ₹1 welcome -> explicit promo -> automatic seasonal -> normal price.
   candidates.sort((a,b)=>{
     const rank=o=>o.id===BUILTIN_WELCOME_ID?300:(offerText(o.promoCode,40)?200:100)+Number(o.priority||0);
