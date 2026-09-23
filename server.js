@@ -920,75 +920,28 @@ app.post("/appointment-booking", express.json({ limit: "20kb" }), async (req, re
   } catch(e){console.error("Appointment booking failed:",e);return res.status(502).json({error:e?.message||"Unable to create booking right now."});}
 });
 
+let publicAstrologersCache={expiresAt:0,data:null};
 app.get("/public/astrologers", async (req, res) => {
   try {
-    const snap = await db.collection("smv_astrologers")
-      .limit(200)
-      .get();
-
-    const approvedDocs = snap.docs.filter(d => {
-      const x = d.data() || {};
-      return String(x.status || "").toLowerCase() === "approved";
-    });
-
-    const astrologers = [];
-
-    for (const d of approvedDocs) {
-      const x = d.data() || {};
-
-      let emailVerified = false;
-
-      try {
-        const authUser = await admin.auth().getUser(d.id);
-        emailVerified = authUser.emailVerified === true;
-      } catch (authErr) {
-        console.warn(
-          "Unable to check email verification for astrologer:",
-          d.id,
-          authErr?.message || authErr
-        );
-        emailVerified = false;
-      }
-
-      /*
-       * PUBLIC ASTROLOGER LIST RULE:
-       *
-       * Admin Approved       = REQUIRED
-       * Email Verified       = REQUIRED
-       */
-      if (!emailVerified) {
-        continue;
-      }
-
-      astrologers.push({
-        id: d.id,
-        name: x.name || "Astrologer",
-        expertise: x.expertise || x.specialization || "Astrology",
-        specialization: x.specialization || x.expertise || "Astrology",
-        experience: x.experience || 0,
-        profileDescription: x.profileDescription || x.bio || x.about || "",
-        bio: x.profileDescription || x.bio || x.about || "",
-        about: x.profileDescription || x.about || x.bio || "",
-        photoData: x.photoData || x.photoURL || x.photoUrl || "",
-        rating: x.rating || x.averageRating || "New",
-        publicId: x.publicId || "",
-        chatPrice: Number(x.pricePerQuestion || 0),
-        status: x.status || ""
-      });
+    const now=Date.now();
+    if(publicAstrologersCache.data && publicAstrologersCache.expiresAt>now){
+      res.set("Cache-Control","public, max-age=30, stale-while-revalidate=60");
+      return res.json({success:true,astrologers:publicAstrologersCache.data,cached:true});
     }
-
-    return res.json({
-      success: true,
-      astrologers
-    });
-
-  } catch (e) {
-    console.error("Public astrologers load failed:", e);
-
-    return res.status(500).json({
-      error: e?.message || "Unable to load approved astrologers."
-    });
-  }
+    const snap=await db.collection("smv_astrologers").where("status","==","approved").limit(200).get();
+    const checked=await Promise.all(snap.docs.map(async d=>{
+      const x=d.data()||{};
+      try{
+        const authUser=await admin.auth().getUser(d.id);
+        if(authUser.emailVerified!==true)return null;
+      }catch(authErr){console.warn("Unable to check email verification for astrologer:",d.id,authErr?.message||authErr);return null;}
+      return {id:d.id,name:x.name||"Astrologer",expertise:x.expertise||x.specialization||"Astrology",specialization:x.specialization||x.expertise||"Astrology",experience:x.experience||0,profileDescription:x.profileDescription||x.bio||x.about||"",bio:x.profileDescription||x.bio||x.about||"",about:x.profileDescription||x.about||x.bio||"",photoData:x.photoData||x.photoURL||x.photoUrl||"",rating:x.rating||x.averageRating||"New",publicId:x.publicId||"",chatPrice:Number(x.pricePerQuestion||0),status:x.status||""};
+    }));
+    const astrologers=checked.filter(Boolean);
+    publicAstrologersCache={expiresAt:now+60000,data:astrologers};
+    res.set("Cache-Control","public, max-age=30, stale-while-revalidate=60");
+    return res.json({success:true,astrologers});
+  }catch(e){console.error("Public astrologers load failed:",e);return res.status(500).json({error:e?.message||"Unable to load approved astrologers."});}
 });
 app.get("/public/astrologers/:astrologerId/reviews", async(req,res)=>{
   try{
@@ -996,8 +949,8 @@ app.get("/public/astrologers/:astrologerId/reviews", async(req,res)=>{
     if(!astrologerId) return res.status(400).json({error:"Astrologer ID is required."});
     const astroSnap=await db.collection("smv_astrologers").doc(astrologerId).get();
     if(!astroSnap.exists || String(astroSnap.data()?.status||"").toLowerCase()!=="approved") return res.status(404).json({error:"Approved astrologer not found."});
-    const snap=await db.collection("smv_reviews").limit(200).get();
-    const reviews=snap.docs.map(d=>({id:d.id,...d.data()})).filter(r=>r.astrologerId===astrologerId && (r.approved===true || String(r.status||"").toLowerCase()==="approved"));
+    const snap=await db.collection("smv_reviews").where("astrologerId","==",astrologerId).limit(100).get();
+    const reviews=snap.docs.map(d=>({id:d.id,...d.data()})).filter(r=>r.approved===true || String(r.status||"").toLowerCase()==="approved");
     return res.json({success:true,astrologerId,reviews});
   }catch(e){console.error("Public astrologer reviews load failed:",e);return res.status(500).json({error:e?.message||"Unable to load astrologer reviews."});}
 });
@@ -2102,12 +2055,16 @@ function computeOfferPrice(original, offer){
   return Math.max(1,Math.round(final*100)/100);
 }
 async function resolveOfferForCustomer({uid,service,originalAmount,promoCode}){
-  await ensureBuiltinWelcomeOffer();
   const original=offerMoney(originalAmount), code=offerText(promoCode,40).toUpperCase();
   if(original==null||original<1) throw new Error("Invalid original price.");
-  const now=Date.now(), snap=await db.collection(OFFER_COLLECTION).where("enabled","==",true).get();
-  const paidBefore=await customerPaidCount(uid,service);
-  const hasAnyPaidService=await customerHasAnyPaidService(uid);
+  const now=Date.now();
+  const [snap,questionPaid,privatePaid]=await Promise.all([
+    db.collection(OFFER_COLLECTION).where("enabled","==",true).get(),
+    db.collection("smv_questions").where("customerId","==",uid).where("paymentStatus","==","paid").limit(1).get(),
+    db.collection("smv_private_consultations").where("customerId","==",uid).where("paymentStatus","==","paid").limit(1).get()
+  ]);
+  const paidBefore=service==="private_consultation"?(privatePaid.empty?0:1):(questionPaid.empty?0:1);
+  const hasAnyPaidService=!questionPaid.empty||!privatePaid.empty;
   const candidates=[];
   for(const d of snap.docs){
     const o={id:d.id,...d.data()};
@@ -2168,7 +2125,6 @@ app.post("/offers/quote",express.json({limit:"10kb"}),async(req,res)=>{
 // Payment eligibility/final amount remain server-verified separately.
 app.get("/offers/public-banners", async (req, res) => {
   try {
-    await ensureBuiltinWelcomeOffer();
     const now = Date.now();
     const bannerDateMs = (v) => {
       if (!v) return null;

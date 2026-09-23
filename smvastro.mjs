@@ -1120,32 +1120,9 @@ async function smvLoadAstroCards(){
     const btn=row.querySelector('.smv-review-toggle'),reviewBox=row.querySelector('.smv-inline-reviews'),summaryBox=row.querySelector('.smv-astro-rating-summary');
     let loaded=false,reviewsCache=null;
     const ensureReviews=async()=>{if(reviewsCache)return reviewsCache;reviewsCache=await getReviews(a);return reviewsCache;};
-    ensureReviews().then(reviews=>{
-      const summary=ratingSummary(reviews);
-      summaryBox.innerHTML=summary.count?`${ratingStars(summary.avg)} <strong>${summary.avg.toFixed(1)} / 5</strong> <span class="smv-rating-count">(${summary.count} review${summary.count===1?'':'s'})</span>`:`<span class="smv-rating-none">No ratings yet</span>`;
-      addPrivateRating(a,summary);
-      const host=$('privateConsultationAstrologers');
-      /* V123: Observe only actual consultation-row insertion. The previous observer
-         watched the whole subtree and addPrivateRating() changed that same subtree,
-         which could recursively trigger itself and freeze Consult an Astrologer. */
-      if(host&&!host.__smvRatingObserver){
-        let ratingSyncTimer=0;
-        const syncPrivateRatings=()=>{
-          clearTimeout(ratingSyncTimer);
-          ratingSyncTimer=setTimeout(()=>{
-            const obs=host.__smvRatingObserver;
-            try{obs?.disconnect();}catch(_e){}
-            items.forEach(x=>{if(x.__smvSummary)addPrivateRating(x,x.__smvSummary);});
-            try{obs?.observe(host,{childList:true});}catch(_e){}
-          },0);
-        };
-        host.__smvRatingObserver=new MutationObserver(mutations=>{
-          if(mutations.some(m=>[...m.addedNodes].some(n=>n.nodeType===1))) syncPrivateRatings();
-        });
-        host.__smvRatingObserver.observe(host,{childList:true});
-      }
-      a.__smvSummary=summary;
-    }).catch(err=>{console.warn('Rating summary load failed:',err);summaryBox.innerHTML='<span class="smv-rating-none">Ratings unavailable</span>';});
+    const storedRating=Number(a.rating||0);
+    summaryBox.innerHTML=storedRating>0?`${ratingStars(storedRating)} <strong>${clampRating(storedRating).toFixed(1)} / 5</strong>`:`<span class="smv-rating-none">Reviews load on request</span>`;
+    if(storedRating>0){a.__smvSummary={avg:clampRating(storedRating),count:1};addPrivateRating(a,a.__smvSummary);}
     btn.onclick=async()=>{
       const opening=reviewBox.classList.contains('hidden');
       reviewBox.classList.toggle('hidden',!opening);btn.setAttribute('aria-expanded',String(opening));
@@ -1248,15 +1225,27 @@ async function refreshPrivateOfferQuote(){
     return q;
   }catch(e){console.warn('Private consultation offer quote refresh skipped:',e);return null;}
 }
-function smvSchedulePrivateOfferRefresh(){setTimeout(()=>refreshPrivateOfferQuote().catch(()=>{}),0);setTimeout(()=>refreshPrivateOfferQuote().catch(()=>{}),250);}
+let smvPrivateOfferTimer=0,smvPrivateOfferInFlight=null,smvPrivateOfferLastKey="",smvPrivateOfferLastAt=0;
+function smvSchedulePrivateOfferRefresh(delay=80){
+  clearTimeout(smvPrivateOfferTimer);
+  smvPrivateOfferTimer=setTimeout(()=>{
+    const selected=$("privateConsultationSelected"),summary=$("privateConsultPaymentSummary");
+    const original=smvMoneyFromText((selected?.textContent||'')+' '+(summary?.textContent||''));
+    if(!original)return;
+    const key=String(original);
+    if(smvPrivateOfferInFlight)return;
+    if(key===smvPrivateOfferLastKey && Date.now()-smvPrivateOfferLastAt<15000)return;
+    smvPrivateOfferLastKey=key;smvPrivateOfferLastAt=Date.now();
+    smvPrivateOfferInFlight=refreshPrivateOfferQuote().finally(()=>{smvPrivateOfferInFlight=null;});
+  },delay);
+}
 document.addEventListener('click',e=>{
   if(e.target?.closest?.('#private-consultation,.smv-private-consult-select'))smvSchedulePrivateOfferRefresh();
 },true);
-const smvPrivateOfferObserver=new MutationObserver(muts=>{
-  if(muts.some(m=>m.target?.id==='privateConsultationSelected'||m.target?.id==='privateConsultPaymentSummary'||m.addedNodes?.length))smvSchedulePrivateOfferRefresh();
-});
-const smvPrivateOfferObserverStart=()=>{const root=$("privateConsultationQuestionCard");if(root)smvPrivateOfferObserver.observe(root,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class']});};
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',smvPrivateOfferObserverStart,{once:true});else smvPrivateOfferObserverStart();
+document.addEventListener('change',e=>{
+  if(e.target?.closest?.('#privateConsultationQuestionCard'))smvSchedulePrivateOfferRefresh();
+},true);
+// V45: No MutationObserver here. Offer UI updates must never recursively request another quote.
 
 let questionPriceUnsubscribe=null;
 async function loadQuestionPrice(){

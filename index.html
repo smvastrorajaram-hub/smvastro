@@ -483,7 +483,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <div id="modalContent"></div>
 </div>
 </div>
-<script src="./smvastro.mjs?v=20260924-v38-auto-offer-ui" type="module"></script>
+<script src="./smvastro.mjs?v=20260924-v45-quota-safe" type="module"></script>
 <script>
 /* Tamil Horoscope Generator - V121: server-side astronomical calculation engine. */
 (function(){
@@ -3882,8 +3882,12 @@ document.addEventListener('DOMContentLoaded', function(){
     });
     tick(); window.clearInterval(window.__smvOfferCountdownTimer); window.__smvOfferCountdownTimer=window.setInterval(tick,60000);
   }
-  async function loadHomeOfferBanners(){
+  let __smvBannerLastLoad=0,__smvBannerLoading=false;
+  async function loadHomeOfferBanners(force=false){
     const host=document.getElementById("smvHomeOfferBanners"); if(!host)return;
+    if(__smvBannerLoading)return;
+    if(!force && Date.now()-__smvBannerLastLoad<30000)return;
+    __smvBannerLoading=true;
     try{
       const r=await fetch(BACKEND_URL+"/offers/public-banners?t="+Date.now(),{cache:"no-store",headers:{"Accept":"application/json"}});
       const data=await r.json().catch(()=>({offers:[]})); if(!r.ok)throw new Error(data.error||"Offer banner request failed");
@@ -3907,9 +3911,10 @@ document.addEventListener('DOMContentLoaded', function(){
         el.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();openAskNow();}});
       });
     }catch(e){console.warn("Home offer banner load failed:",e);host.innerHTML="";host.classList.add("hidden");}
+    finally{__smvBannerLoading=false;__smvBannerLastLoad=Date.now();}
   }
-  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",loadHomeOfferBanners,{once:true}); else loadHomeOfferBanners();
-  window.addEventListener("focus",loadHomeOfferBanners);
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",()=>loadHomeOfferBanners(),{once:true}); else loadHomeOfferBanners();
+  window.addEventListener("focus",()=>{if(Date.now()-__smvBannerLastLoad>60000)loadHomeOfferBanners();});
 })();
 </script>
 
