@@ -10291,3 +10291,96 @@ html body.smv-legal-page nav.contents a{
     gap:8px!important;
   }
 }
+
+
+/* SMV 2026-09-23 — Sitemap page isolation fix.
+   Keeps sitemap links as clean text links and prevents main-site nav/button CSS leaking in. */
+html body.smv-legal-page.smv-sitemap-page nav.smv-sitemap-links{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:10px 24px!important;
+  width:100%!important;
+  height:auto!important;
+  min-height:0!important;
+  margin:24px 0 0!important;
+  padding:20px 22px!important;
+  background:#fff5e9!important;
+  border:0!important;
+  border-radius:10px!important;
+  box-shadow:none!important;
+  overflow:visible!important;
+}
+html body.smv-legal-page.smv-sitemap-page nav.smv-sitemap-links > a{
+  display:block!important;
+  width:auto!important;
+  min-width:0!important;
+  max-width:none!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  margin:0!important;
+  padding:7px 0!important;
+  background:transparent!important;
+  border:0!important;
+  border-bottom:1px solid #eadde0!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+  color:#a81640!important;
+  font-size:15px!important;
+  font-weight:600!important;
+  line-height:1.45!important;
+  text-align:left!important;
+  text-decoration:none!important;
+  white-space:normal!important;
+  overflow:visible!important;
+  text-overflow:clip!important;
+  transform:none!important;
+  flex:none!important;
+}
+html body.smv-legal-page.smv-sitemap-page nav.smv-sitemap-links > a:hover,
+html body.smv-legal-page.smv-sitemap-page nav.smv-sitemap-links > a:focus{
+  background:transparent!important;
+  color:#850a20!important;
+  box-shadow:none!important;
+  transform:none!important;
+  text-decoration:underline!important;
+}
+@media(max-width:600px){
+  html body.smv-legal-page.smv-sitemap-page{
+    max-width:none!important;
+    width:100%!important;
+    margin:0!important;
+    padding:0!important;
+  }
+  html body.smv-legal-page.smv-sitemap-page main{
+    width:auto!important;
+    max-width:none!important;
+    margin:12px!important;
+    padding:24px 20px!important;
+  }
+  html body.smv-legal-page.smv-sitemap-page nav.smv-sitemap-links{
+    grid-template-columns:1fr!important;
+    gap:0!important;
+    padding:14px 16px!important;
+  }
+  html body.smv-legal-page.smv-sitemap-page nav.smv-sitemap-links > a{
+    font-size:14px!important;
+    padding:9px 0!important;
+  }
+}
+
+
+/* SMV 2026-09-23 — Advanced English sitemap V2 (isolated from global nav/button rules) */
+html body.smv-sitemap-page.smv-sitemap-v2{background:#fffaf8!important;color:#2f2528!important;}
+html body.smv-sitemap-page.smv-sitemap-v2 main{width:min(1080px,calc(100% - 32px))!important;max-width:1080px!important;margin:32px auto!important;padding:clamp(24px,4vw,48px)!important;box-sizing:border-box!important;background:#fff!important;border:1px solid #eadbdd!important;border-radius:22px!important;box-shadow:0 12px 34px rgba(94,20,30,.07)!important;overflow:visible!important;}
+html body.smv-sitemap-page.smv-sitemap-v2 .smv-sitemap-kicker{margin:0 0 10px!important;color:#7d1722!important;font-size:13px!important;font-weight:900!important;letter-spacing:2.4px!important;text-transform:uppercase!important;}
+html body.smv-sitemap-page.smv-sitemap-v2 h1{margin:0 0 12px!important;color:#9d1118!important;font-size:clamp(34px,6vw,58px)!important;line-height:1.08!important;font-weight:900!important;letter-spacing:-1px!important;}
+html body.smv-sitemap-page.smv-sitemap-v2 .smv-sitemap-intro{max-width:760px!important;margin:0 0 34px!important;color:#5d5255!important;font-size:clamp(16px,2vw,19px)!important;line-height:1.7!important;}
+html body.smv-sitemap-page.smv-sitemap-v2 .smv-sitemap-section{margin:0 0 30px!important;padding:0!important;background:transparent!important;border:0!important;box-shadow:none!important;}
+html body.smv-sitemap-page.smv-sitemap-v2 .smv-sitemap-section h2{margin:0 0 13px!important;padding:0 0 9px!important;border-bottom:2px solid #9d1118!important;color:#7d1722!important;font-size:clamp(20px,3vw,27px)!important;line-height:1.25!important;font-weight:900!important;}
+html body.smv-sitemap-page.smv-sitemap-v2 nav.smv-sitemap-links{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important;width:100%!important;height:auto!important;min-height:0!important;margin:0!important;padding:0!important;background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;overflow:visible!important;}
+html body.smv-sitemap-page.smv-sitemap-v2 nav.smv-sitemap-links>a{display:flex!important;flex-direction:column!important;align-items:flex-start!important;justify-content:center!important;width:100%!important;min-width:0!important;max-width:none!important;height:auto!important;min-height:82px!important;max-height:none!important;margin:0!important;padding:14px 16px!important;box-sizing:border-box!important;background:#fffaf5!important;border:1px solid #ead7d2!important;border-radius:12px!important;box-shadow:none!important;color:#7d1722!important;text-align:left!important;text-decoration:none!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;transform:none!important;flex:none!important;}
+html body.smv-sitemap-page.smv-sitemap-v2 nav.smv-sitemap-links>a strong{display:block!important;margin:0 0 4px!important;color:#8d1019!important;font-size:15px!important;font-weight:900!important;line-height:1.35!important;}
+html body.smv-sitemap-page.smv-sitemap-v2 nav.smv-sitemap-links>a span{display:block!important;color:#675b5e!important;font-size:13px!important;font-weight:500!important;line-height:1.45!important;}
+html body.smv-sitemap-page.smv-sitemap-v2 nav.smv-sitemap-links>a:hover,html body.smv-sitemap-page.smv-sitemap-v2 nav.smv-sitemap-links>a:focus{background:#fff4ea!important;border-color:#cda99f!important;color:#7d1722!important;box-shadow:none!important;transform:none!important;text-decoration:none!important;}
+@media(max-width:680px){html body.smv-sitemap-page.smv-sitemap-v2 main{width:calc(100% - 20px)!important;margin:10px auto 24px!important;padding:24px 16px!important;border-radius:16px!important;}html body.smv-sitemap-page.smv-sitemap-v2 .smv-sitemap-intro{margin-bottom:28px!important;}html body.smv-sitemap-page.smv-sitemap-v2 .smv-sitemap-section{margin-bottom:26px!important;}html body.smv-sitemap-page.smv-sitemap-v2 nav.smv-sitemap-links{grid-template-columns:1fr!important;gap:8px!important;}html body.smv-sitemap-page.smv-sitemap-v2 nav.smv-sitemap-links>a{min-height:0!important;padding:13px 14px!important;}html body.smv-sitemap-page.smv-sitemap-v2 nav.smv-sitemap-links>a strong{font-size:14px!important;}html body.smv-sitemap-page.smv-sitemap-v2 nav.smv-sitemap-links>a span{font-size:12.5px!important;}}
