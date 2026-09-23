@@ -1065,6 +1065,68 @@ function loadAstroCards(){
 }
 async function smvLoadAstroCards(){
  const box=$("astroCards");if(!box)return;box.innerHTML='<div class="empty">Loading approved astrologers...</div>';
+ const clampRating=v=>Math.max(0,Math.min(5,Number(v)||0));
+ const ratingStars=v=>{
+   const n=clampRating(v);
+   return `<span class="smv-rating-stars" aria-label="${n.toFixed(1)} out of 5">${[0,1,2,3,4].map(i=>`<span class="smv-rating-star" style="--fill:${Math.max(0,Math.min(1,n-i))*100}%">★</span>`).join('')}</span>`;
+ };
+ const ratingSummary=reviews=>{
+   const valid=(Array.isArray(reviews)?reviews:[]).filter(r=>Number(r.rating)>0);
+   const avg=valid.length?valid.reduce((sum,r)=>sum+clampRating(r.rating),0)/valid.length:0;
+   return {avg,count:valid.length};
+ };
+ const getReviews=async a=>{
+   try{
+     const rr=await withTimeout(fetch(RAZORPAY_BACKEND_URL+"/public/astrologers/"+encodeURIComponent(a.id)+"/reviews",{cache:"no-store"}),10000);
+     const rd=await rr.json().catch(()=>({}));if(!rr.ok)throw new Error(rd.error||`Review service returned HTTP ${rr.status}.`);
+     return Array.isArray(rd.reviews)?rd.reviews:[];
+   }catch(apiErr){
+     console.warn('Public review API unavailable; using Firestore fallback:',apiErr);
+     const snap=await withTimeout(getDocs(query(collection(db,'smv_reviews'),where('astrologerId','==',a.id),where('approved','==',true))),10000);
+     return snap.docs.map(d=>({id:d.id,...(d.data()||{})}));
+   }
+ };
+ const smvPrivateRatingCache=window.__smvPrivateRatingCache||(window.__smvPrivateRatingCache=new Map());
+ const addPrivateRating=(a,summary)=>{
+   smvPrivateRatingCache.set(String(a.name||'').trim().toLowerCase(),summary);
+   const host=$('privateConsultationAstrologers'); if(!host)return;
+   // Keep public experience wording consistent in Private Consultation.
+   host.querySelectorAll('.smv-private-consult-meta .small').forEach(el=>{
+     el.textContent=(el.textContent||'')
+  .replace(/\s*·\s*/g,' / ')
+  .replace(/(\d+(?:\.\d+)?)\s+years?\s+(?:of\s+)?experience/ig,'$1 Years of Experience');
+   });
+   const target=[...host.querySelectorAll('.smv-private-consult-row')].find(row=>{
+     const name=(row.querySelector('h3')?.textContent||'').trim().toLowerCase();
+     return name===String(a.name||'').trim().toLowerCase();
+   });
+   if(!target)return;
+   let el=target.querySelector('.smv-private-rating-summary');
+   if(!el){el=document.createElement('div');el.className='smv-private-rating-summary';const desc=target.querySelector('.smv-private-consult-description');(desc||target.querySelector('.smv-private-consult-head')||target).insertAdjacentElement(desc?'beforebegin':'afterend',el);}
+   const ratingHtml=summary.count?`${ratingStars(summary.avg)} <strong>${summary.avg.toFixed(1)} / 5</strong>`:`<span class="smv-rating-none">No ratings yet</span>`;
+   // Avoid a MutationObserver feedback loop when the Private Consultation list is rendered.
+   if(el.innerHTML!==ratingHtml) el.innerHTML=ratingHtml;
+ };
+ const syncPrivateRatings=()=>{
+   const host=$('privateConsultationAstrologers'); if(!host)return;
+   host.querySelectorAll('.smv-private-consult-row').forEach(row=>{
+     const key=(row.querySelector('h3')?.textContent||'').trim().toLowerCase();
+     const summary=smvPrivateRatingCache.get(key);
+     if(!summary)return;
+     if(!row.querySelector('.smv-private-rating-summary')){
+       addPrivateRating({name:row.querySelector('h3')?.textContent||''},summary);
+     }
+   });
+ };
+ const privateHost=$('privateConsultationAstrologers');
+ if(privateHost && privateHost.dataset.smvRatingObserver!=='1'){
+   privateHost.dataset.smvRatingObserver='1';
+   let timer=0;
+   new MutationObserver(()=>{
+     clearTimeout(timer);
+     timer=setTimeout(syncPrivateRatings,40);
+   }).observe(privateHost,{childList:true,subtree:true});
+ }
  try{
   let items=[];
   try {
@@ -1084,9 +1146,23 @@ async function smvLoadAstroCards(){
     row.className="smv-astro-directory-row";
     const photo=a.photoData||a.photoURL||a.photoUrl||"";
     const description=a.profileDescription||a.bio||a.about||"Professional astrologer";
-    row.innerHTML=`<div class="smv-astro-directory-head">${photo?`<img src="${escapeHtml(photo)}" alt="${escapeHtml(a.name||'Astrologer')} photo">`:''}<div><h3>${escapeHtml(a.name||"Astrologer")}</h3><p class="smv-astro-speciality"><b>${escapeHtml(a.expertise||a.specialization||"Astrology")}</b></p><p class="small">⭐ ${escapeHtml(a.experience||"Experienced")} years experience</p></div></div><p class="smv-astro-description">${escapeHtml(description)}</p><button class="btn gray smv-review-toggle" type="button" aria-expanded="false">REVIEWS &amp; RATINGS</button><div class="smv-inline-reviews hidden"><div class="empty">Reviews will load when opened.</div></div>`;
-    const btn=row.querySelector('.smv-review-toggle'),reviewBox=row.querySelector('.smv-inline-reviews');
-    let loaded=false;
+    row.innerHTML=`<div class="smv-astro-directory-head">${photo?`<img src="${escapeHtml(photo)}" alt="${escapeHtml(a.name||'Astrologer')} photo">`:''}<div><h3>${escapeHtml(a.name||"Astrologer")}</h3><p class="smv-astro-speciality">
+  <span class="smv-expertise">${escapeHtml(a.expertise||a.specialization||"Astrology")}</span>
+  <span class="smv-profile-separator"> / </span>
+  <span class="smv-experience">${escapeHtml(a.experience||"Experienced")} Years of Experience</span>
+</p></div></div><div class="smv-astro-rating-summary"><span class="smv-rating-loading">Loading ratings...</span></div><p class="smv-astro-description">${escapeHtml(description)}</p><button class="btn gray smv-review-toggle" type="button" aria-expanded="false">REVIEWS &amp; RATINGS</button><div class="smv-inline-reviews hidden"><div class="empty">Reviews will load when opened.</div></div>`;
+    const btn=row.querySelector('.smv-review-toggle'),reviewBox=row.querySelector('.smv-inline-reviews'),summaryBox=row.querySelector('.smv-astro-rating-summary');
+    let loaded=false,reviewsCache=null;
+    const ensureReviews=async()=>{if(reviewsCache)return reviewsCache;reviewsCache=await getReviews(a);return reviewsCache;};
+    ensureReviews().then(reviews=>{
+      const summary=ratingSummary(reviews);
+      summaryBox.innerHTML=summary.count?`${ratingStars(summary.avg)} <strong>${summary.avg.toFixed(1)} / 5</strong> <span class="smv-rating-count">(${summary.count} review${summary.count===1?'':'s'})</span>`:`<span class="smv-rating-none">No ratings yet</span>`;
+      a.__smvSummary=summary;
+      // Sync the same rating into Private Consultation without a MutationObserver.
+      // The old observer could retrigger itself because addPrivateRating updates text/HTML,
+      // causing a browser freeze after the Private Consultation list opened.
+      [0,120,400,1000,2200].forEach(delay=>setTimeout(()=>addPrivateRating(a,summary),delay));
+    }).catch(err=>{console.warn('Rating summary load failed:',err);summaryBox.innerHTML='<span class="smv-rating-none">Ratings unavailable</span>';});
     btn.onclick=async()=>{
       const opening=reviewBox.classList.contains('hidden');
       reviewBox.classList.toggle('hidden',!opening);btn.setAttribute('aria-expanded',String(opening));
@@ -1094,18 +1170,8 @@ async function smvLoadAstroCards(){
       if(!opening||loaded)return;
       reviewBox.innerHTML='<div class="empty">Loading reviews...</div>';
       try{
-        let reviews=[];
-        try{
-          const rr=await withTimeout(fetch(RAZORPAY_BACKEND_URL+"/public/astrologers/"+encodeURIComponent(a.id)+"/reviews",{cache:"no-store"}),10000);
-          const rd=await rr.json().catch(()=>({}));if(!rr.ok)throw new Error(rd.error||`Review service returned HTTP ${rr.status}.`);
-          reviews=Array.isArray(rd.reviews)?rd.reviews:[];
-        }catch(apiErr){
-          console.warn('Public review API unavailable; using Firestore fallback:',apiErr);
-          const snap=await withTimeout(getDocs(query(collection(db,'smv_reviews'),where('astrologerId','==',a.id),where('approved','==',true))),10000);
-          reviews=snap.docs.map(d=>({id:d.id,...(d.data()||{})}));
-        }
-        const stars=n=>'★'.repeat(Math.max(0,Math.min(5,Number(n||0))))+'☆'.repeat(5-Math.max(0,Math.min(5,Number(n||0))));
-        reviewBox.innerHTML=reviews.length?reviews.map(r=>`<div class="smv-directory-review"><div class="stars">${stars(r.rating)}</div><p>${escapeHtml(r.review||'Verified customer review')}</p><span class="small">Verified customer</span></div>`).join(''):'<div class="empty">No approved reviews for this astrologer yet.</div>';
+        const reviews=await ensureReviews();
+        reviewBox.innerHTML=reviews.length?reviews.map(r=>`<div class="smv-directory-review"><div class="stars">${ratingStars(r.rating)}</div><p>${escapeHtml(r.review||'Verified customer review')}</p><span class="small">${escapeHtml(r.customerName||r.name||'Verified customer')}</span></div>`).join(''):'<div class="empty">No approved reviews for this astrologer yet.</div>';
         loaded=true;
       }catch(err){console.error('Directory review load failed:',err);reviewBox.innerHTML='<div class="empty error">Reviews are temporarily unavailable.</div>';}
     };

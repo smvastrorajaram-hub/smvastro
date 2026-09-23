@@ -9484,7 +9484,7 @@ html body[data-smv-workspace="open"] #smv-dashboard-page{padding-top:12px!import
     flex:0 0 44px!important;
   }
   #astrologer-directory #astroCards .smv-astro-directory-head h3{
-    font-size:15px!important;
+    font-size:17px!important;
     line-height:1.1!important;
     margin:0 0 1px!important;
   }
@@ -9601,9 +9601,9 @@ html body[data-smv-workspace="open"] #smv-dashboard-page{padding-top:12px!import
     flex:0 0 44px!important;
   }
   #private-consultation .smv-private-consult-meta h3{
-    font-size:15px!important;
-    line-height:1.05!important;
-    margin:0 0 2px!important;
+    font-size:17px!important;
+    line-height:1.1!important;
+    margin:0 0 1px!important;
   }
   #private-consultation .smv-private-consult-meta .small{
     font-size:10px!important;
@@ -9623,9 +9623,9 @@ html body[data-smv-workspace="open"] #smv-dashboard-page{padding-top:12px!import
     width:auto!important;
     min-height:0!important;
     margin:5px 0 0!important;
-    padding:4px 7px!important;
-    font-size:10px!important;
-    line-height:1.15!important;
+    padding:3px 6px!important;
+    font-size:8px!important;
+    line-height:1.10!important;
   }
 }
 
@@ -10384,3 +10384,79 @@ html body.smv-sitemap-page.smv-sitemap-v2 nav.smv-sitemap-links>a strong{display
 html body.smv-sitemap-page.smv-sitemap-v2 nav.smv-sitemap-links>a span{display:block!important;color:#675b5e!important;font-size:13px!important;font-weight:500!important;line-height:1.45!important;}
 html body.smv-sitemap-page.smv-sitemap-v2 nav.smv-sitemap-links>a:hover,html body.smv-sitemap-page.smv-sitemap-v2 nav.smv-sitemap-links>a:focus{background:#fff4ea!important;border-color:#cda99f!important;color:#7d1722!important;box-shadow:none!important;transform:none!important;text-decoration:none!important;}
 @media(max-width:680px){html body.smv-sitemap-page.smv-sitemap-v2 main{width:calc(100% - 20px)!important;margin:10px auto 24px!important;padding:24px 16px!important;border-radius:16px!important;}html body.smv-sitemap-page.smv-sitemap-v2 .smv-sitemap-intro{margin-bottom:28px!important;}html body.smv-sitemap-page.smv-sitemap-v2 .smv-sitemap-section{margin-bottom:26px!important;}html body.smv-sitemap-page.smv-sitemap-v2 nav.smv-sitemap-links{grid-template-columns:1fr!important;gap:8px!important;}html body.smv-sitemap-page.smv-sitemap-v2 nav.smv-sitemap-links>a{min-height:0!important;padding:13px 14px!important;}html body.smv-sitemap-page.smv-sitemap-v2 nav.smv-sitemap-links>a strong{font-size:14px!important;}html body.smv-sitemap-page.smv-sitemap-v2 nav.smv-sitemap-links>a span{font-size:12.5px!important;}}
+
+
+/* SMV 2026-09-23 — Public astrologer profile text matches Hero content text size.
+   Scope only: Approved Astrologers + Private Consultation. */
+#astrologer-directory #astroCards .smv-astro-speciality,
+#astrologer-directory #astroCards .smv-astro-directory-head .small,
+#astrologer-directory #astroCards .smv-astro-description,
+#private-consultation .smv-private-consult-meta .small,
+#private-consultation .smv-private-consult-description{
+  font-size:15px!important;
+  line-height:1.65!important;
+}
+
+@media (max-width:700px){
+  #astrologer-directory #astroCards .smv-astro-speciality,
+  #astrologer-directory #astroCards .smv-astro-directory-head .small,
+  #astrologer-directory #astroCards .smv-astro-description,
+  #private-consultation .smv-private-consult-meta .small,
+  #private-consultation .smv-private-consult-description{
+    font-size:15px!important;
+    line-height:1.65!important;
+  }
+}
+
+/* SMV 2026-09-23 — public astrologer aggregate ratings + half-star display. */
+.smv-astro-rating-summary,.smv-private-rating-summary{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:7px 0;font-size:15px;line-height:1.35}
+.smv-rating-stars{display:inline-flex;align-items:center;gap:2px;white-space:nowrap}
+.smv-rating-star{position:relative;display:inline-block;color:#d8d8d8;font-size:24px;line-height:1}
+.smv-rating-star::after{content:'★';position:absolute;inset:0;width:var(--fill,0%);overflow:hidden;color:#f5b400;white-space:nowrap}
+.smv-rating-count,.smv-rating-none,.smv-rating-loading{color:#666;font-size:14px}
+#astrologer-directory .smv-directory-review .small{font-weight:700;color:#555}
+#private-consultation .smv-private-rating-summary{margin:5px 0 6px}
+@media(max-width:700px){
+ .smv-astro-rating-summary,.smv-private-rating-summary{font-size:14px;gap:6px;margin:5px 0}
+ .smv-rating-star{font-size:21px}
+ .smv-rating-count,.smv-rating-none,.smv-rating-loading{font-size:13px}
+}
+
+
+/* SMV 2026-09-23 — Approved Astrologers: expertise slightly larger, matching Private Consultation emphasis. */
+#astrologer-directory #astroCards .smv-astro-speciality{
+  font-size:16px!important;
+  line-height:1.5!important;
+}
+@media (max-width:700px){
+  #astrologer-directory #astroCards .smv-astro-speciality{
+    font-size:16px!important;
+    line-height:1.5!important;
+  }
+}
+
+/* SMV 2026-09-23 — unified Expertise + Experience typography.
+   Approved Astrologers and Private Consultation use exactly the same size/weight. */
+#astrologer-directory #astroCards .smv-astro-speciality,
+#astrologer-directory #astroCards .smv-astro-speciality b,
+#astrologer-directory #astroCards .smv-astro-directory-head .small,
+#astrologer-directory #astroCards .smv-astro-directory-head .small b,
+#private-consultation .smv-private-consult-meta .small,
+#private-consultation .smv-private-consult-meta .small b {
+  font-size: 13px !important;
+  line-height: 1.45 !important;
+  font-weight: 400 !important;
+}
+
+@media (max-width:700px) {
+  #astrologer-directory #astroCards .smv-astro-speciality,
+  #astrologer-directory #astroCards .smv-astro-speciality b,
+  #astrologer-directory #astroCards .smv-astro-directory-head .small,
+  #astrologer-directory #astroCards .smv-astro-directory-head .small b,
+  #private-consultation .smv-private-consult-meta .small,
+  #private-consultation .smv-private-consult-meta .small b {
+    font-size: 14px !important;
+    line-height: 1.45 !important;
+    font-weight: 650 !important;
+  }
+}
