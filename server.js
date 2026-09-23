@@ -2368,16 +2368,20 @@ app.post("/private-consultation/verify-payment", express.json({limit:"15kb"}), a
         razorpayPaymentId:paymentId,razorpaySignature:signature,paidAt:FieldValue.serverTimestamp(),
         paymentRecordedAt:new Date().toISOString(),updatedAt:FieldValue.serverTimestamp()
       });
-      await consumeOfferAfterPayment({uid:user.uid,service:"private_consultation",referenceId:consultationId,paymentId,quote:{offerId:c.offerId||null,offerName:c.offerName||null,promoCode:c.offerPromoCode||"",originalAmount:Number(c.originalChatPrice||c.chatPrice||c.amount||0),finalAmount:Number(c.chatPrice||c.amount||0),discountAmount:Number(c.offerDiscountAmount||0)}});
-      await addAdminPrivateNotification("private_payment_received","Private Consultation Payment Received",`${c.customerName||"Customer"} paid ₹${Number(c.chatPrice||c.amount||0).toFixed(2)} for ${c.astrologerName||"the selected astrologer"}.`,consultationId,{customerId:c.customerId,astrologerId:c.astrologerId});
-      await db.collection("smv_notifications").add({
-        userId:c.customerId,type:"private_consultation_payment",title:"Private consultation payment successful",
-        message:autoAllow?`Your private consultation is now visible to ${c.astrologerName||"the selected astrologer"}.`:`Your private consultation with ${c.astrologerName||"the selected astrologer"} is waiting for Admin approval.`,
-        consultationId,createdAt:FieldValue.serverTimestamp(),read:false
-      });
+      // V41 FAST VERIFY: only the authoritative paid-state write blocks the customer response.
+      // Offer consumption + notifications are bookkeeping and run immediately after the response.
+      setImmediate(() => Promise.allSettled([
+        consumeOfferAfterPayment({uid:user.uid,service:"private_consultation",referenceId:consultationId,paymentId,quote:{offerId:c.offerId||null,offerName:c.offerName||null,promoCode:c.offerPromoCode||"",originalAmount:Number(c.originalChatPrice||c.chatPrice||c.amount||0),finalAmount:Number(c.chatPrice||c.amount||0),discountAmount:Number(c.offerDiscountAmount||0)}}),
+        addAdminPrivateNotification("private_payment_received","Private Consultation Payment Received",`${c.customerName||"Customer"} paid ₹${Number(c.chatPrice||c.amount||0).toFixed(2)} for ${c.astrologerName||"the selected astrologer"}.`,consultationId,{customerId:c.customerId,astrologerId:c.astrologerId}),
+        db.collection("smv_notifications").add({
+          userId:c.customerId,type:"private_consultation_payment",title:"Private consultation payment successful",
+          message:autoAllow?`Your private consultation is now visible to ${c.astrologerName||"the selected astrologer"}.`:`Your private consultation with ${c.astrologerName||"the selected astrologer"} is waiting for Admin approval.`,
+          consultationId,createdAt:FieldValue.serverTimestamp(),read:false
+        })
+      ]).then(results=>results.forEach(r=>{if(r.status==="rejected")console.error("Private post-payment task failed:",r.reason);})));
+      return res.json({success:true,verified:true,consultationId,status:autoAllow?"approved_for_astrologer":"pending_admin_approval",paymentStatus:"paid"});
     }
-    const finalSnap=await ref.get(),finalData=finalSnap.data()||{};
-    return res.json({success:true,verified:true,consultationId,status:String(finalData.status||"pending_admin_approval"),paymentStatus:String(finalData.paymentStatus||"paid")});
+    return res.json({success:true,verified:true,consultationId,status:String(c.status||"pending_admin_approval"),paymentStatus:"paid"});
   }catch(e){console.error("Private consultation verify-payment error:",e);return res.status(500).json({error:e?.message||"Unable to verify private consultation payment."});}
 });
 
@@ -2614,22 +2618,26 @@ async function markQuestionPaid(questionId, orderId, paymentId, signature, sourc
       paidAt: q.paidAt || FieldValue.serverTimestamp(), paymentUpdatedAt: FieldValue.serverTimestamp(), paymentConfirmedBy: source, customerPaymentId, paymentRecordedAt,
       astrologerPaymentId: FieldValue.delete(), commissionStatus: workflow.allowWithoutAdminApproval ? "open_for_claim" : "awaiting_admin_allocation"
     });
-    return { already: false, customerId: q.customerId, customerPaymentId, paymentRecordedAt };
+    return { already: false, customerId: q.customerId, customerPaymentId, paymentRecordedAt, q };
   });
   if (!result.already) {
-    await db.collection("smv_notifications").add({ userId: result.customerId, type: "payment", title: "Payment successful", message: workflow.allowWithoutAdminApproval ? `Your payment was verified. Your question is now open to approved astrologers. Payment ID: ${result.customerPaymentId || "N/A"}.` : `Your payment was verified. Your question is now waiting for Admin approval. Payment ID: ${result.customerPaymentId || "N/A"}.`, paymentId: result.customerPaymentId || null, razorpayPaymentId: paymentId || null, questionId, createdAt: FieldValue.serverTimestamp(), read: false });
-    const qSnap = await qRef.get();
-    const q = qSnap.exists ? (qSnap.data() || {}) : {};
-    await consumeOfferAfterPayment({uid:result.customerId,service:"public_question",referenceId:questionId,paymentId,quote:{offerId:q.offerId||null,offerName:q.offerName||null,promoCode:q.offerPromoCode||"",originalAmount:Number(q.originalAmount||q.amount||0),finalAmount:Number(q.amount||0),discountAmount:Number(q.offerDiscountAmount||0)}});
-    const customerEmail = String(q.customerEmail || await getUserEmail(result.customerId) || "").trim();
-    const amount = Number(q.amount || 0);
-    await sendSystemEmail({
-      to: [customerEmail, ADMIN_EMAIL],
-      subject: "SMV ASTRO — Payment Successful",
-      replyTo: ADMIN_EMAIL,
-      text: `Payment successful for SMV ASTRO.\n\nQuestion ID: ${questionId}\nCustomer Payment ID: ${result.customerPaymentId || "N/A"}\nAmount: ₹${amount.toFixed(2)}\nRazorpay Payment ID: ${paymentId}\nRazorpay Order ID: ${orderId}\n\n${workflow.allowWithoutAdminApproval ? "Your question is now open to approved astrologers." : "Your question is now waiting for Admin approval."}`
+    // V41 FAST VERIFY: notification, offer bookkeeping and emails must never delay
+    // the verified response shown to the paying customer.
+    const q = result.q || {};
+    setImmediate(async () => {
+      try {
+        const customerEmail = String(q.customerEmail || await getUserEmail(result.customerId) || "").trim();
+        const amount = Number(q.amount || 0);
+        const tasks = [
+          db.collection("smv_notifications").add({ userId: result.customerId, type: "payment", title: "Payment successful", message: workflow.allowWithoutAdminApproval ? `Your payment was verified. Your question is now open to approved astrologers. Payment ID: ${result.customerPaymentId || "N/A"}.` : `Your payment was verified. Your question is now waiting for Admin approval. Payment ID: ${result.customerPaymentId || "N/A"}.`, paymentId: result.customerPaymentId || null, razorpayPaymentId: paymentId || null, questionId, createdAt: FieldValue.serverTimestamp(), read: false }),
+          consumeOfferAfterPayment({uid:result.customerId,service:"public_question",referenceId:questionId,paymentId,quote:{offerId:q.offerId||null,offerName:q.offerName||null,promoCode:q.offerPromoCode||"",originalAmount:Number(q.originalAmount||q.amount||0),finalAmount:Number(q.amount||0),discountAmount:Number(q.offerDiscountAmount||0)}}),
+          sendSystemEmail({to:[customerEmail,ADMIN_EMAIL],subject:"SMV ASTRO — Payment Successful",replyTo:ADMIN_EMAIL,text:`Payment successful for SMV ASTRO.\n\nQuestion ID: ${questionId}\nCustomer Payment ID: ${result.customerPaymentId || "N/A"}\nAmount: ₹${amount.toFixed(2)}\nRazorpay Payment ID: ${paymentId}\nRazorpay Order ID: ${orderId}\n\n${workflow.allowWithoutAdminApproval ? "Your question is now open to approved astrologers." : "Your question is now waiting for Admin approval."}`}),
+          sendAdminTransactionEmail({eventType:"PAYMENT SUCCESS",paymentId,orderId,amount,currency:"INR",questionId,customerEmail,status:"paid"})
+        ];
+        const settled=await Promise.allSettled(tasks);
+        settled.forEach(r=>{if(r.status==="rejected")console.error("Public post-payment task failed:",r.reason);});
+      } catch(e) { console.error("Public post-payment background work failed:",e); }
     });
-    await sendAdminTransactionEmail({ eventType: "PAYMENT SUCCESS", paymentId, orderId, amount, currency: "INR", questionId, customerEmail, status: "paid" });
   }
   return result;
 }
@@ -3015,7 +3023,8 @@ app.post("/verify-payment", express.json(), async (req, res) => {
       });
     }
     const result = await markQuestionPaid(questionId, orderId, paymentId, signature, "render_checkout_verification");
-    await db.collection("razorpay_orders").doc(orderId).set({ razorpayPaymentId: paymentId, status: "verified", questionId, verifiedAt: FieldValue.serverTimestamp() }, { merge: true });
+    // V41 FAST VERIFY: audit mirror is non-critical for the customer success response.
+    setImmediate(() => db.collection("razorpay_orders").doc(orderId).set({ razorpayPaymentId: paymentId, status: "verified", questionId, verifiedAt: FieldValue.serverTimestamp() }, { merge: true }).catch(e=>console.error("Razorpay audit update failed:",e)));
     return res.json({ verified: true, questionId, alreadyProcessed: result.already, customerPaymentId: result.customerPaymentId || null, paymentRecordedAt: result.paymentRecordedAt || new Date().toISOString(), message: "Payment verified and consultation updated successfully." });
   } catch (e) {
     console.error("Payment verification error:", e);
