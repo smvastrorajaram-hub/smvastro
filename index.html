@@ -137,6 +137,7 @@ document.addEventListener('DOMContentLoaded', function(){
 </div>
 </div>
 <main class="container" id="smv-public-page">
+<div id="smvHomeOfferBanners" class="smv-home-offer-banners hidden" aria-live="polite"></div>
 <section class="feature-section hidden smv-astrologer-directory" id="astrologer-directory" aria-labelledby="astrologerDirectoryTitle">
   <div class="home-rule"><span><img alt="" aria-hidden="true" class="smv-brand-symbol" height="20" src="./assets/smv-brand-logo-v17.png" width="20"/></span><span>APPROVED ASTROLOGERS</span><span><img alt="" aria-hidden="true" class="smv-brand-symbol" height="20" src="./assets/smv-brand-logo-v17.png" width="20"/></span></div>
   <h2 id="astrologerDirectoryTitle">Approved Astrologers</h2>
@@ -3803,6 +3804,55 @@ document.addEventListener('DOMContentLoaded', function(){
 <!-- SMV V10.2.2 MOBILE HEADER + HERO TARGETED FIX -->
 
 <!-- SMV V10.3 APPROVED REFERENCE HERO VISUAL FIX -->
+
+<style id="smv-home-offer-banner-style">
+.smv-home-offer-banners{width:100%;margin:12px 0 16px;display:grid;gap:10px}
+.smv-home-offer-banners.hidden{display:none!important}
+.smv-home-offer-banner{
+  width:100%;box-sizing:border-box;text-align:center;padding:12px 16px;
+  border:1px solid #e3c36f;border-radius:12px;
+  background:linear-gradient(90deg,#fff8df,#fffdf6,#fff8df);
+  color:#7b1717;font-weight:800;line-height:1.35;
+  box-shadow:0 4px 14px rgba(90,45,0,.08)
+}
+.smv-home-offer-banner strong{display:block;font-size:1.02rem}
+.smv-home-offer-banner small{display:block;margin-top:3px;color:#5f5145;font-weight:600}
+@media(max-width:899px){
+  .smv-home-offer-banners{margin:9px 0 12px}
+  .smv-home-offer-banner{padding:10px 12px;border-radius:10px;font-size:.92rem}
+}
+</style>
+<script id="smv-home-offer-banner-loader">
+(function(){
+  const BACKEND_URL="https://smv-astro-1fco.onrender.com";
+  const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  async function loadHomeOfferBanners(){
+    const host=document.getElementById("smvHomeOfferBanners");
+    if(!host)return;
+    try{
+      const r=await fetch(BACKEND_URL+"/offers/public-banners",{cache:"no-store"});
+      const data=await r.json().catch(()=>({offers:[]}));
+      if(!r.ok)throw new Error(data.error||"Offer banner request failed");
+      const offers=Array.isArray(data.offers)?data.offers:[];
+      if(!offers.length){host.innerHTML="";host.classList.add("hidden");return;}
+      host.innerHTML=offers.map(o=>{
+        const title=esc(o.bannerText||o.name||"Special Offer");
+        const code=(!o.automatic&&o.promoCode)?`<small>Promo Code: ${esc(o.promoCode)}</small>`:"";
+        return `<div class="smv-home-offer-banner" role="status"><strong>${title}</strong>${code}</div>`;
+      }).join("");
+      host.classList.remove("hidden");
+    }catch(e){
+      console.warn("Home offer banner load failed:",e);
+      host.innerHTML="";
+      host.classList.add("hidden");
+    }
+  }
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",loadHomeOfferBanners,{once:true});
+  else loadHomeOfferBanners();
+  window.addEventListener("focus",loadHomeOfferBanners);
+})();
+</script>
+
 </body>
 <script id="smv-v172-ui-symbol-collapse-script">
 /* V172: robust UI-only symbol collapse. No data/Firebase/API/payment logic is changed. */

@@ -2150,6 +2150,43 @@ app.post("/offers/quote",express.json({limit:"10kb"}),async(req,res)=>{
     return res.json({success:true,...quote});
   }catch(e){return res.status(400).json({error:e?.message||"Unable to calculate offer."});}
 });
+
+// Public homepage offer banners. Only currently-active, enabled offers configured
+// for Home Banner (or Home + Dashboard) are exposed; payment eligibility remains
+// server-verified separately by the offer quote/order flow.
+app.get("/offers/public-banners", async (req, res) => {
+  try {
+    await ensureBuiltinWelcomeOffer();
+    const now = Date.now();
+    const snap = await db.collection(OFFER_COLLECTION).where("enabled", "==", true).get();
+    const offers = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(o => {
+        const mode = String(o.displayMode || "");
+        if (mode !== "home_banner" && mode !== "home_dashboard") return false;
+        const start = offerDateMs(o.startAt), end = offerDateMs(o.endAt);
+        if (start && now < start) return false;
+        if (end && now > end) return false;
+        return !!offerText(o.bannerText || o.name, 240);
+      })
+      .sort((a,b) => Number(b.priority || 0) - Number(a.priority || 0))
+      .map(o => ({
+        id: o.id,
+        name: offerText(o.name, 120),
+        bannerText: offerText(o.bannerText || o.name, 240),
+        promoCode: offerText(o.promoCode, 40),
+        automatic: o.automatic === true,
+        startAt: o.startAt || null,
+        endAt: o.endAt || null
+      }));
+    res.set("Cache-Control", "no-store");
+    return res.json({ success: true, offers });
+  } catch (e) {
+    console.error("Public offer banner load failed:", e);
+    return res.status(500).json({ success: false, offers: [], error: "Unable to load offers." });
+  }
+});
+
 app.get("/admin/offers",async(req,res)=>{
   const user=await requireUser(req,res);if(!user)return;if(!(await isAdminUser(user)))return res.status(403).json({error:"Admin access denied."});
   await ensureBuiltinWelcomeOffer();const s=await db.collection(OFFER_COLLECTION).get();
