@@ -1260,14 +1260,30 @@ async function refreshPrivateOfferQuote(){
     return q;
   }catch(e){console.warn('Private consultation offer quote refresh skipped:',e);return null;}
 }
-function smvSchedulePrivateOfferRefresh(){setTimeout(()=>refreshPrivateOfferQuote().catch(()=>{}),0);setTimeout(()=>refreshPrivateOfferQuote().catch(()=>{}),250);}
+// V43 quota guard: one debounced/in-flight quote only. The previous subtree observer
+// could observe the offer note that it created itself and recursively call /offers/quote,
+// rapidly consuming Firestore reads.
+let smvPrivateOfferTimer=null, smvPrivateOfferInFlight=false, smvPrivateOfferLastKey='', smvPrivateOfferLastAt=0;
+async function smvRunPrivateOfferRefresh(){
+  if(smvPrivateOfferInFlight)return;
+  const card=$("privateConsultationQuestionCard"),selected=$("privateConsultationSelected"),summary=$("privateConsultPaymentSummary");
+  if(!card||card.classList.contains('hidden'))return;
+  const original=smvMoneyFromText((selected?.textContent||'')+' '+(summary?.textContent||''));
+  const key=String(original)+'|'+String(selected?.textContent||'').trim();
+  if(!original)return;
+  if(key===smvPrivateOfferLastKey && Date.now()-smvPrivateOfferLastAt<15000)return;
+  smvPrivateOfferInFlight=true;
+  try{await refreshPrivateOfferQuote();smvPrivateOfferLastKey=key;smvPrivateOfferLastAt=Date.now();}
+  finally{smvPrivateOfferInFlight=false;}
+}
+function smvSchedulePrivateOfferRefresh(){clearTimeout(smvPrivateOfferTimer);smvPrivateOfferTimer=setTimeout(()=>smvRunPrivateOfferRefresh().catch(()=>{}),120);}
 document.addEventListener('click',e=>{
   if(e.target?.closest?.('#private-consultation,.smv-private-consult-select'))smvSchedulePrivateOfferRefresh();
 },true);
 const smvPrivateOfferObserver=new MutationObserver(muts=>{
-  if(muts.some(m=>m.target?.id==='privateConsultationSelected'||m.target?.id==='privateConsultPaymentSummary'||m.addedNodes?.length))smvSchedulePrivateOfferRefresh();
+  if(muts.some(m=>m.target?.id==='privateConsultationSelected'||m.target?.id==='privateConsultPaymentSummary'))smvSchedulePrivateOfferRefresh();
 });
-const smvPrivateOfferObserverStart=()=>{const root=$("privateConsultationQuestionCard");if(root)smvPrivateOfferObserver.observe(root,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class']});};
+const smvPrivateOfferObserverStart=()=>{const root=$("privateConsultationQuestionCard");if(root)smvPrivateOfferObserver.observe(root,{childList:true,subtree:true,characterData:true});};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',smvPrivateOfferObserverStart,{once:true});else smvPrivateOfferObserverStart();
 
 let questionPriceUnsubscribe=null;
