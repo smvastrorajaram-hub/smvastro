@@ -2117,8 +2117,10 @@ async function resolveOfferForCustomer({uid,service,originalAmount,promoCode}){
     const limit=Number(o.perCustomerLimit||0);
     if(limit>0 && await offerUsageCount(uid,d.id)>=limit)continue;
     const oCode=offerText(o.promoCode,40).toUpperCase();
-    if(oCode){ if(!code||code!==oCode)continue; }
-    else if(o.automatic===false)continue;
+    // Automatic offers never require a promo code. A stale code saved on an
+    // older automatic offer is ignored. Manual offers always require an exact code.
+    if(o.automatic===true){ /* eligible automatically */ }
+    else { if(!oCode || !code || code!==oCode) continue; }
     const final=computeOfferPrice(original,o);if(final==null||final>=original)continue;
     candidates.push({...o,finalAmount:final,discountAmount:Math.round((original-final)*100)/100});
   }
@@ -2186,7 +2188,8 @@ app.get("/offers/public-banners", async (req, res) => {
       .map(o => ({
         id:o.id,name:offerText(o.name,120),
         bannerText:offerText(o.bannerText||o.name,240),
-        promoCode:offerText(o.promoCode,40),
+        promoCode:o.automatic===true?"":offerText(o.promoCode,40),
+        bannerTheme:offerText(o.bannerTheme||"auto",30),
         discountType:offerText(o.discountType,24),
         offerPrice:Number(o.offerPrice||0),
         discountValue:Number(o.discountValue||0),
@@ -2213,7 +2216,11 @@ app.post("/admin/offers/save",express.json({limit:"30kb"}),async(req,res)=>{
     const promo=offerText(b.promoCode,40).toUpperCase().replace(/[^A-Z0-9_-]/g,"");
     const discountType=["fixed_price","percentage","flat"].includes(String(b.discountType))?String(b.discountType):"fixed_price";
     const applies=Array.isArray(b.appliesTo)?b.appliesTo.filter(x=>["public_question","private_consultation","all"].includes(String(x))):["public_question"];
-    const data={name:offerText(b.name,120)||"Promotion",kind:builtIn?"welcome":offerText(b.kind,30)||"promotion",enabled:b.enabled===true,automatic:builtIn?true:b.automatic===true,promoCode:builtIn?"":promo,discountType,offerPrice:offerMoney(b.offerPrice),discountValue:offerMoney(b.discountValue)||0,eligibility:["new_customer","existing_customer","all"].includes(String(b.eligibility))?String(b.eligibility):"all",appliesTo:applies.length?applies:["public_question"],usageRule:offerText(b.usageRule,30)||"one_per_customer",perCustomerLimit:Math.max(0,Math.floor(Number(b.perCustomerLimit||0))),totalUsageLimit:Math.max(0,Math.floor(Number(b.totalUsageLimit||0))),minimumAmount:Math.max(0,Number(b.minimumAmount||0)),displayMode:["hidden","home_banner","customer_dashboard","payment_only","home_dashboard"].includes(String(b.displayMode))?String(b.displayMode):"payment_only",bannerText:offerText(b.bannerText,240),startAt:b.startAt?String(b.startAt):null,endAt:b.endAt?String(b.endAt):null,priority:Number(b.priority||0),builtIn,updatedAt:FieldValue.serverTimestamp(),updatedBy:user.uid};
+    const automatic=builtIn?true:b.automatic===true;
+    if(!builtIn && !automatic && !promo)return res.status(400).json({error:"Promo Code is required when Automatic Offer is NO."});
+    const allowedThemes=["auto","generic","pongal","diwali","navaratri","dasara","ayudha_pooja","shivaratri","tamil_new_year"];
+    const bannerTheme=allowedThemes.includes(String(b.bannerTheme||"auto"))?String(b.bannerTheme||"auto"):"auto";
+    const data={name:offerText(b.name,120)||"Promotion",kind:builtIn?"welcome":offerText(b.kind,30)||"promotion",enabled:b.enabled===true,automatic,promoCode:(builtIn||automatic)?"":promo,bannerTheme,discountType,offerPrice:offerMoney(b.offerPrice),discountValue:offerMoney(b.discountValue)||0,eligibility:["new_customer","existing_customer","all"].includes(String(b.eligibility))?String(b.eligibility):"all",appliesTo:applies.length?applies:["public_question"],usageRule:offerText(b.usageRule,30)||"one_per_customer",perCustomerLimit:Math.max(0,Math.floor(Number(b.perCustomerLimit||0))),totalUsageLimit:Math.max(0,Math.floor(Number(b.totalUsageLimit||0))),minimumAmount:Math.max(0,Number(b.minimumAmount||0)),displayMode:["hidden","home_banner","customer_dashboard","payment_only","home_dashboard"].includes(String(b.displayMode))?String(b.displayMode):"payment_only",bannerText:offerText(b.bannerText,240),startAt:b.startAt?String(b.startAt):null,endAt:b.endAt?String(b.endAt):null,priority:Number(b.priority||0),builtIn,updatedAt:FieldValue.serverTimestamp(),updatedBy:user.uid};
     if(discountType==="fixed_price"&&(!Number.isFinite(data.offerPrice)||data.offerPrice<1))return res.status(400).json({error:"Fixed offer price must be at least ₹1."});
     const ref=db.collection(OFFER_COLLECTION).doc(id);
     const before=await ref.get();

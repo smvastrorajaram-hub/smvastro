@@ -3875,9 +3875,14 @@ document.addEventListener('DOMContentLoaded', function(){
       if(!offers.length){host.innerHTML="";host.classList.add("hidden");return;}
       host.innerHTML=offers.map(o=>{
         const title=esc(o.bannerText||o.name||"Special Offer"),name=esc(o.name||"SMV ASTRO Offer"),summary=esc(offerSummary(o));
-        const code=o.promoCode?`<span class="smv-offer-code">${o.automatic?"Code":"Promo"}: ${esc(o.promoCode)}</span>`:"";
+        const code=(!o.automatic&&o.promoCode)?`<span class="smv-offer-code">Promo: ${esc(o.promoCode)}</span>`:"";
         const countdown=o.endAt?`<span class="smv-offer-countdown" data-offer-end="${esc(o.endAt)}"></span>`:"";
-        return `<div class="smv-home-offer-banner" role="button" tabindex="0" aria-label="${title}. Ask a Question" data-smv-offer-open-ask="1"><span class="smv-offer-art" aria-hidden="true"><img src="assets/offer-festive-mark.svg" alt="" loading="lazy"></span><span class="smv-offer-copy"><span class="smv-offer-kicker"><span class="smv-offer-badge">${summary}</span><span class="smv-offer-name">${name}</span></span><strong class="smv-offer-title">${title}</strong><span class="smv-offer-meta">${code}${countdown}</span></span><span class="smv-offer-cta"><span>ASK NOW</span> →</span></div>`;
+        const rawTheme=String(o.bannerTheme||"auto").toLowerCase();
+        const hay=(String(o.name||"")+" "+String(o.bannerText||"")).toLowerCase();
+        const detected=/pongal/.test(hay)?"pongal":/(diwali|deepavali)/.test(hay)?"diwali":/(navaratri|navarathri)/.test(hay)?"navaratri":/(dasara|dussehra|vijayadashami)/.test(hay)?"dasara":/(ayudha|ayutha)/.test(hay)?"ayudha_pooja":/(shivaratri|sivarathri|maha shiva)/.test(hay)?"shivaratri":/(tamil new year|puthandu)/.test(hay)?"tamil_new_year":"generic";
+        const theme=rawTheme==="auto"?detected:rawTheme;
+        const safeTheme=["generic","pongal","diwali","navaratri","dasara","ayudha_pooja","shivaratri","tamil_new_year"].includes(theme)?theme:"generic";
+        return `<div class="smv-home-offer-banner smv-offer-theme-${safeTheme}" role="button" tabindex="0" aria-label="${title}. Ask a Question" data-smv-offer-open-ask="1"><span class="smv-offer-art" aria-hidden="true"><img src="assets/offers/${safeTheme}.svg" alt="" loading="lazy"></span><span class="smv-offer-copy"><span class="smv-offer-kicker"><span class="smv-offer-badge">${summary}</span><span class="smv-offer-name">${name}</span></span><strong class="smv-offer-title">${title}</strong><span class="smv-offer-meta">${code}${countdown}</span></span><span class="smv-offer-cta"><span>ASK NOW</span> →</span></div>`;
       }).join("");
       host.classList.remove("hidden"); bindCountdowns();
       host.querySelectorAll("[data-smv-offer-open-ask]").forEach(el=>{
