@@ -2260,25 +2260,29 @@ app.post("/admin/offers/delete",express.json({limit:"10kb"}),async(req,res)=>{
 app.post("/private-consultation/create-order", express.json({limit:"30kb"}), async (req,res)=>{
   const user=await requireUser(req,res);if(!user)return;
   try{
-    const customerProfileSnap=await db.collection("smv_users").doc(user.uid).get();
+    const astrologerId=String(req.body?.astrologerId||"").trim();
+    const [customerProfileSnap,aSnap]=await Promise.all([
+      db.collection("smv_users").doc(user.uid).get(),
+      astrologerId ? db.collection("smv_astrologers").doc(astrologerId).get() : Promise.resolve(null)
+    ]);
     const customerRole=String(customerProfileSnap.exists?(customerProfileSnap.data()?.role||"customer"):"customer").toLowerCase();
     if(customerRole!=="customer")return res.status(403).json({error:"Customer Login Required — Please login with a Customer account to start a private consultation."});
-    const astrologerId=String(req.body?.astrologerId||"").trim();
     const customerName=String(req.body?.customerName||req.body?.birthDetails?.name||"").trim();
     const question=String(req.body?.question||"").trim();
     const birth=req.body?.birthDetails||{};
     if(!astrologerId||!customerName||!question||!birth.birthDate||!birth.birthTime||!String(birth.birthPlace||"").trim())
       return res.status(400).json({error:"Complete astrologer, birth details and question are required."});
-    const aSnap=await db.collection("smv_astrologers").doc(astrologerId).get();
-    if(!aSnap.exists)return res.status(404).json({error:"Selected astrologer was not found."});
+    if(!aSnap||!aSnap.exists)return res.status(404).json({error:"Selected astrologer was not found."});
     const a=aSnap.data()||{};
     if(!["approved","active"].includes(String(a.status||"").toLowerCase()))
       return res.status(409).json({error:"Selected astrologer is not currently approved."});
     const originalChatPrice=Number(a.pricePerQuestion||0);
     if(!Number.isFinite(originalChatPrice)||originalChatPrice<1)return res.status(409).json({error:"This astrologer's Chat Price is not available."});
-    const offerQuote=await resolveOfferForCustomer({uid:user.uid,service:"private_consultation",originalAmount:originalChatPrice,promoCode:req.body?.promoCode});
+    const [offerQuote,privateCommission]=await Promise.all([
+      resolveOfferForCustomer({uid:user.uid,service:"private_consultation",originalAmount:originalChatPrice,promoCode:req.body?.promoCode}),
+      getPrivateCommissionSettings()
+    ]);
     const chatPrice=offerQuote.finalAmount;
-    const privateCommission=await getPrivateCommissionSettings();
     const commissionSnapshot=privateCommissionSnapshot(chatPrice,privateCommission);
     const {privateAstrologerCommissionRate,privateAdminCommissionRate,astrologerAmount,adminAmount}=commissionSnapshot;
     const ref=db.collection("smv_private_consultations").doc();
@@ -2296,11 +2300,13 @@ app.post("/private-consultation/create-order", express.json({limit:"30kb"}), asy
       birthDetails:{name:customerName,birthDate:String(birth.birthDate),birthTime:String(birth.birthTime),birthPlace:String(birth.birthPlace).trim(),birthGender:String(birth.birthGender||""),timezone:"Asia/Kolkata",utcOffsetMinutes:330},
       razorpayOrderId:order.id,paymentCurrency:"INR",createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()
     });
-    await db.collection("razorpay_orders").doc(order.id).set({
+    // FAST CHECKOUT: the consultation already contains the authoritative Razorpay order.
+    // The mirror/audit document is useful, but must not hold the customer's checkout open.
+    db.collection("razorpay_orders").doc(order.id).set({
       razorpayOrderId:order.id,consultationId,amount:order.amount,currency:order.currency,
       firebaseUid:user.uid,customerEmail:user.email||null,astrologerId,serviceName:"Private Astrology Consultation",
       status:"created",createdAt:FieldValue.serverTimestamp()
-    });
+    }).catch(e=>console.error("Private Razorpay order mirror write failed:",e));
     return res.json({success:true,consultationId,orderId:order.id,keyId:RAZORPAY_KEY_ID,amount:order.amount,currency:order.currency,originalAmount:offerQuote.originalAmount,offerId:offerQuote.offerId||null,offerName:offerQuote.offerName||null,promoCode:offerQuote.promoCode||"",discountAmount:offerQuote.discountAmount||0,offerBannerText:offerQuote.bannerText||""});
   }catch(e){console.error("Private consultation create-order error:",e);return res.status(500).json({error:e?.error?.description||e?.message||"Unable to create private consultation payment."});}
 });
@@ -2554,14 +2560,21 @@ app.post("/create-order", express.json(), async (req, res) => {
       return res.status(502).json({ error: "Razorpay order was created without a valid order ID." });
     }
 
-    const answerSettings = await db.collection("smv_settings").doc("answer").get();
-    const minimumWords = Math.max(1, Math.min(10000, Math.floor(Number(answerSettings.data()?.minimumWords || 150))));
-    await qRef.set({ paymentMode:"live", razorpayOrderId: order.id, paymentCurrency: "INR", paymentStatus: "order_created", answerMinWords: minimumWords, paymentUpdatedAt: FieldValue.serverTimestamp() }, { merge: true });
-    await db.collection("razorpay_orders").doc(order.id).set({
-      razorpayOrderId: order.id, questionId, amount: order.amount, currency: order.currency,
-      firebaseUid: user.uid, customerEmail: user.email || null, astrologerId: String(q.astrologerId || ""),
-      serviceName: req.body?.serviceName || "Public Astrology Question", status: "created", createdAt: FieldValue.serverTimestamp()
-    });
+    // FAST CHECKOUT: only the payment-critical order lock is awaited before replying.
+    // Answer settings and the audit mirror do not affect Razorpay opening, so do them
+    // after the response path instead of adding extra Firestore round trips to Pay click.
+    await qRef.set({ paymentMode:"live", razorpayOrderId: order.id, paymentCurrency: "INR", paymentStatus: "order_created", paymentUpdatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    Promise.allSettled([
+      db.collection("smv_settings").doc("answer").get().then(answerSettings=>{
+        const minimumWords=Math.max(1,Math.min(10000,Math.floor(Number(answerSettings.data()?.minimumWords||150))));
+        return qRef.set({answerMinWords:minimumWords},{merge:true});
+      }),
+      db.collection("razorpay_orders").doc(order.id).set({
+        razorpayOrderId: order.id, questionId, amount: order.amount, currency: order.currency,
+        firebaseUid: user.uid, customerEmail: user.email || null, astrologerId: String(q.astrologerId || ""),
+        serviceName: req.body?.serviceName || "Public Astrology Question", status: "created", createdAt: FieldValue.serverTimestamp()
+      })
+    ]).then(results=>results.forEach(r=>{if(r.status==="rejected")console.error("Post-order background write failed:",r.reason);}));
     return res.json({ success: true, questionId, orderId: order.id, keyId: RAZORPAY_KEY_ID, amount: order.amount, currency: order.currency, originalAmount:Number(q.originalAmount||q.amount||0), offerId:q.offerId||null, offerName:q.offerName||null, promoCode:q.offerPromoCode||"", discountAmount:Number(q.offerDiscountAmount||0), offerBannerText:q.offerBannerText||"" });
   } catch (e) {
     console.error("Create order error:", e);
