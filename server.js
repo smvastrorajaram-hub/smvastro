@@ -2151,39 +2151,50 @@ app.post("/offers/quote",express.json({limit:"10kb"}),async(req,res)=>{
   }catch(e){return res.status(400).json({error:e?.message||"Unable to calculate offer."});}
 });
 
-// Public homepage offer banners. Only currently-active, enabled offers configured
-// for Home Banner (or Home + Dashboard) are exposed; payment eligibility remains
-// server-verified separately by the offer quote/order flow.
+// Public homepage offer banners.
+// Payment eligibility/final amount remain server-verified separately.
 app.get("/offers/public-banners", async (req, res) => {
   try {
     await ensureBuiltinWelcomeOffer();
     const now = Date.now();
-    const snap = await db.collection(OFFER_COLLECTION).where("enabled", "==", true).get();
+    const bannerDateMs = (v) => {
+      if (!v) return null;
+      if (typeof v.toMillis === "function") return v.toMillis();
+      const raw = String(v).trim();
+      if (!raw) return null;
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(raw)) {
+        const n = Date.parse(raw + "+05:30");
+        return Number.isFinite(n) ? n : null;
+      }
+      const n = Date.parse(raw);
+      return Number.isFinite(n) ? n : null;
+    };
+    const snap = await db.collection(OFFER_COLLECTION).get();
     const offers = snap.docs
       .map(d => ({ id: d.id, ...d.data() }))
       .filter(o => {
-        const mode = String(o.displayMode || "");
-        if (mode !== "home_banner" && mode !== "home_dashboard") return false;
-        const start = offerDateMs(o.startAt), end = offerDateMs(o.endAt);
-        if (start && now < start) return false;
-        if (end && now > end) return false;
+        const enabled = o.enabled === true || String(o.enabled).toLowerCase() === "true";
+        if (!enabled) return false;
+        const mode = String(o.displayMode || "").trim().toLowerCase().replace(/[\s+-]+/g, "_");
+        if (!["home_banner","home_dashboard"].includes(mode)) return false;
+        const start = bannerDateMs(o.startAt), end = bannerDateMs(o.endAt);
+        if (start !== null && now < start) return false;
+        if (end !== null && now > end) return false;
         return !!offerText(o.bannerText || o.name, 240);
       })
       .sort((a,b) => Number(b.priority || 0) - Number(a.priority || 0))
       .map(o => ({
-        id: o.id,
-        name: offerText(o.name, 120),
-        bannerText: offerText(o.bannerText || o.name, 240),
-        promoCode: offerText(o.promoCode, 40),
-        automatic: o.automatic === true,
-        startAt: o.startAt || null,
-        endAt: o.endAt || null
+        id:o.id,name:offerText(o.name,120),
+        bannerText:offerText(o.bannerText||o.name,240),
+        promoCode:offerText(o.promoCode,40),
+        automatic:o.automatic===true,startAt:o.startAt||null,endAt:o.endAt||null
       }));
-    res.set("Cache-Control", "no-store");
-    return res.json({ success: true, offers });
-  } catch (e) {
-    console.error("Public offer banner load failed:", e);
-    return res.status(500).json({ success: false, offers: [], error: "Unable to load offers." });
+    res.set("Cache-Control","no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.set("Pragma","no-cache"); res.set("Expires","0");
+    return res.json({success:true,offers});
+  } catch(e) {
+    console.error("Public offer banner load failed:",e);
+    return res.status(500).json({success:false,offers:[],error:"Unable to load offers."});
   }
 });
 

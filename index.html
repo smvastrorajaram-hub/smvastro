@@ -137,13 +137,14 @@ document.addEventListener('DOMContentLoaded', function(){
 </div>
 </div>
 <main class="container" id="smv-public-page">
-<div id="smvHomeOfferBanners" class="smv-home-offer-banners hidden" aria-live="polite"></div>
+
 <section class="feature-section hidden smv-astrologer-directory" id="astrologer-directory" aria-labelledby="astrologerDirectoryTitle">
   <div class="home-rule"><span><img alt="" aria-hidden="true" class="smv-brand-symbol" height="20" src="./assets/smv-brand-logo-v17.png" width="20"/></span><span>APPROVED ASTROLOGERS</span><span><img alt="" aria-hidden="true" class="smv-brand-symbol" height="20" src="./assets/smv-brand-logo-v17.png" width="20"/></span></div>
   <h2 id="astrologerDirectoryTitle">Approved Astrologers</h2>
   <p class="small smv-astrologer-directory-intro">View approved astrologer profiles. Reviews &amp; Ratings open only when you choose to view them.</p>
   <div id="astroCards"><div class="empty">Loading approved astrologers...</div></div>
 </section>
+<div id="smvHomeOfferBanners" class="smv-home-offer-banners hidden" aria-live="polite"></div>
 <div id="home" class="smv33-hero"><div class="smv33-scene"><img class="smv33-photo" src="assets/smv-veerayah-family-mobile-v14.webp" width="1681" height="936" alt="Sri Madurai Veerayah with his consorts" fetchpriority="high"/><div class="smv33-copy"><div class="smv33-mobile-head">
 <div class="smv33-kicker">Sri Madurai Veerayah Astro Services</div>
 <h1>Traditional Wisdom.<br/><span>Personal Guidance.</span></h1>
@@ -3824,13 +3825,13 @@ document.addEventListener('DOMContentLoaded', function(){
 </style>
 <script id="smv-home-offer-banner-loader">
 (function(){
-  const BACKEND_URL="https://smv-astro-1fco.onrender.com";
+  const BACKEND_URL=String(window.SMV_BACKEND_URL||"https://smv-astro-1fco.onrender.com").replace(/\/$/,"");
   const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   async function loadHomeOfferBanners(){
     const host=document.getElementById("smvHomeOfferBanners");
     if(!host)return;
     try{
-      const r=await fetch(BACKEND_URL+"/offers/public-banners",{cache:"no-store"});
+      const r=await fetch(BACKEND_URL+"/offers/public-banners?t="+Date.now(),{cache:"no-store",headers:{"Accept":"application/json"}});
       const data=await r.json().catch(()=>({offers:[]}));
       if(!r.ok)throw new Error(data.error||"Offer banner request failed");
       const offers=Array.isArray(data.offers)?data.offers:[];
