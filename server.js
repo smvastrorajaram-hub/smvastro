@@ -2130,7 +2130,7 @@ async function resolveOfferForCustomer({uid,service,originalAmount,promoCode}){
     return rank(b)-rank(a) || a.finalAmount-b.finalAmount;
   });
   const best=candidates[0]||null;
-  return best?{originalAmount:original,finalAmount:best.finalAmount,discountAmount:best.discountAmount,offerId:best.id,offerName:best.name||"Offer",promoCode:offerText(best.promoCode,40).toUpperCase(),displayMode:best.displayMode||"payment_only",bannerText:best.bannerText||"Offer applied",kind:best.kind||"promotion"}:{originalAmount:original,finalAmount:original,discountAmount:0,offerId:null,offerName:null,promoCode:code||"",displayMode:"hidden",bannerText:"",kind:null};
+  return best?{originalAmount:original,finalAmount:best.finalAmount,discountAmount:best.discountAmount,offerId:best.id,offerName:best.name||"Offer",automatic:best.automatic===true,promoCode:best.automatic===true?"":offerText(best.promoCode,40).toUpperCase(),displayMode:best.displayMode||"payment_only",bannerText:best.bannerText||"Offer applied",kind:best.kind||"promotion"}:{originalAmount:original,finalAmount:original,discountAmount:0,offerId:null,offerName:null,automatic:false,promoCode:code||"",displayMode:"hidden",bannerText:"",kind:null};
 }
 async function consumeOfferAfterPayment({uid,service,referenceId,paymentId,quote}){
   if(!quote?.offerId)return;

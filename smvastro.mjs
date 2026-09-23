@@ -1125,7 +1125,25 @@ async function smvLoadAstroCards(){
       summaryBox.innerHTML=summary.count?`${ratingStars(summary.avg)} <strong>${summary.avg.toFixed(1)} / 5</strong> <span class="smv-rating-count">(${summary.count} review${summary.count===1?'':'s'})</span>`:`<span class="smv-rating-none">No ratings yet</span>`;
       addPrivateRating(a,summary);
       const host=$('privateConsultationAstrologers');
-      if(host&&!host.__smvRatingObserver){host.__smvRatingObserver=new MutationObserver(()=>items.forEach(x=>{if(x.__smvSummary)addPrivateRating(x,x.__smvSummary);}));host.__smvRatingObserver.observe(host,{childList:true,subtree:true});}
+      /* V123: Observe only actual consultation-row insertion. The previous observer
+         watched the whole subtree and addPrivateRating() changed that same subtree,
+         which could recursively trigger itself and freeze Consult an Astrologer. */
+      if(host&&!host.__smvRatingObserver){
+        let ratingSyncTimer=0;
+        const syncPrivateRatings=()=>{
+          clearTimeout(ratingSyncTimer);
+          ratingSyncTimer=setTimeout(()=>{
+            const obs=host.__smvRatingObserver;
+            try{obs?.disconnect();}catch(_e){}
+            items.forEach(x=>{if(x.__smvSummary)addPrivateRating(x,x.__smvSummary);});
+            try{obs?.observe(host,{childList:true});}catch(_e){}
+          },0);
+        };
+        host.__smvRatingObserver=new MutationObserver(mutations=>{
+          if(mutations.some(m=>[...m.addedNodes].some(n=>n.nodeType===1))) syncPrivateRatings();
+        });
+        host.__smvRatingObserver.observe(host,{childList:true});
+      }
       a.__smvSummary=summary;
     }).catch(err=>{console.warn('Rating summary load failed:',err);summaryBox.innerHTML='<span class="smv-rating-none">Ratings unavailable</span>';});
     btn.onclick=async()=>{
@@ -1148,11 +1166,19 @@ window.__smvReloadAstrologers=loadAstroCards;
 window.dispatchEvent(new Event('smv:app-ready'));
 let smvOfferQuote=null;
 function ensureOfferControls(){
-  const rateBox=$("askRate"); if(!rateBox||$("smvPromoCode"))return;
+  const rateBox=$("askRate"); if(!rateBox||$("smvOfferControls"))return;
   const wrap=document.createElement("div");wrap.id="smvOfferControls";wrap.className="action-row";wrap.style.margin="8px 0";
   wrap.innerHTML='<input id="smvPromoCode" maxlength="40" autocomplete="off" placeholder="Promotion code (optional)" style="max-width:220px"><button class="btn" type="button" id="smvApplyPromo">APPLY</button><span class="small" id="smvOfferMsg"></span>';
   rateBox.insertAdjacentElement("afterend",wrap);
   $("smvApplyPromo").onclick=()=>refreshOfferQuote(true);
+}
+function setPromoControlsForQuote(q){
+  const wrap=$("smvOfferControls"); if(!wrap)return;
+  const automatic=!!(q?.offerId && q?.automatic===true);
+  wrap.classList.toggle('hidden',automatic);
+  if(automatic){
+    const input=$("smvPromoCode"); if(input)input.value='';
+  }
 }
 async function refreshOfferQuote(showInvalid=false){
   ensureOfferControls(); if(!currentUser||!questionServicePrice)return null;
@@ -1160,7 +1186,8 @@ async function refreshOfferQuote(showInvalid=false){
   try{
     const q=await renderApi("/offers/quote",{method:"POST",body:JSON.stringify({service:"public_question",originalAmount:questionServicePrice,promoCode:code})});
     smvOfferQuote=q; const rate=$("askRate"),msg=$("smvOfferMsg");
-    if(q.offerId){if(rate)rate.innerHTML=`<b><s>₹${Number(q.originalAmount).toFixed(2)}</s> ₹${Number(q.finalAmount).toFixed(2)} per Question</b>`;if(msg)msg.innerHTML=`<span class="success">${escapeHtml(q.bannerText||q.offerName||'Offer applied')}</span>`;}
+    setPromoControlsForQuote(q);
+    if(q.offerId){if(rate)rate.innerHTML=`<b><s>₹${Number(q.originalAmount).toFixed(2)}</s> ₹${Number(q.finalAmount).toFixed(2)} per Question</b>${q.automatic===true?`<br><span class="small success">Automatic offer applied — no promo code required.</span>`:''}`;if(msg)msg.innerHTML=`<span class="success">${escapeHtml(q.bannerText||q.offerName||'Offer applied')}</span>`;}
     else{if(rate)rate.innerHTML=`<b>₹${Number(q.finalAmount||questionServicePrice).toFixed(2)} per Question</b>`;if(msg)msg.innerHTML=code&&showInvalid?'<span class="error">Promotion code is not valid or not eligible for this account.</span>':'';}
     return q;
   }catch(e){if($("smvOfferMsg")&&showInvalid)$("smvOfferMsg").innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';return null;}
