@@ -2037,7 +2037,18 @@ function offerMoney(v){ const n=Number(v); return Number.isFinite(n) ? Math.roun
 function offerDateMs(v){
   if(!v) return null;
   if(typeof v.toMillis === "function") return v.toMillis();
-  const n=Date.parse(String(v)); return Number.isFinite(n)?n:null;
+  const raw=String(v).trim();
+  if(!raw) return null;
+  // Admin uses <input type="datetime-local">, so saved values have no timezone.
+  // SMV ASTRO offer schedules are India-local times. Parse the same way as the
+  // public offer-banner endpoint so banner eligibility and payment eligibility
+  // become active at the exact same instant.
+  if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(raw)){
+    const n=Date.parse(raw+"+05:30");
+    return Number.isFinite(n)?n:null;
+  }
+  const n=Date.parse(raw);
+  return Number.isFinite(n)?n:null;
 }
 async function ensureBuiltinWelcomeOffer(){
   const ref=db.collection(OFFER_COLLECTION).doc(BUILTIN_WELCOME_ID), snap=await ref.get();
@@ -2171,6 +2182,10 @@ app.get("/offers/public-banners", async (req, res) => {
       const n = Date.parse(raw);
       return Number.isFinite(n) ? n : null;
     };
+    const bannerDateIso = (v) => {
+      const ms = bannerDateMs(v);
+      return ms === null ? null : new Date(ms).toISOString();
+    };
     const snap = await db.collection(OFFER_COLLECTION).get();
     const offers = snap.docs
       .map(d => ({ id: d.id, ...d.data() }))
@@ -2193,7 +2208,7 @@ app.get("/offers/public-banners", async (req, res) => {
         discountType:offerText(o.discountType,24),
         offerPrice:Number(o.offerPrice||0),
         discountValue:Number(o.discountValue||0),
-        automatic:o.automatic===true,startAt:o.startAt||null,endAt:o.endAt||null
+        automatic:o.automatic===true,startAt:bannerDateIso(o.startAt),endAt:bannerDateIso(o.endAt)
       }));
     res.set("Cache-Control","no-store, no-cache, must-revalidate, proxy-revalidate");
     res.set("Pragma","no-cache"); res.set("Expires","0");
