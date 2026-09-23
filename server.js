@@ -2187,6 +2187,9 @@ app.get("/offers/public-banners", async (req, res) => {
         id:o.id,name:offerText(o.name,120),
         bannerText:offerText(o.bannerText||o.name,240),
         promoCode:offerText(o.promoCode,40),
+        discountType:offerText(o.discountType,24),
+        offerPrice:Number(o.offerPrice||0),
+        discountValue:Number(o.discountValue||0),
         automatic:o.automatic===true,startAt:o.startAt||null,endAt:o.endAt||null
       }));
     res.set("Cache-Control","no-store, no-cache, must-revalidate, proxy-revalidate");

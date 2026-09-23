@@ -3807,49 +3807,86 @@ document.addEventListener('DOMContentLoaded', function(){
 <!-- SMV V10.3 APPROVED REFERENCE HERO VISUAL FIX -->
 
 <style id="smv-home-offer-banner-style">
-.smv-home-offer-banners{width:100%;margin:12px 0 16px;display:grid;gap:10px}
+.smv-home-offer-banners{width:100%;margin:10px 0 16px;display:grid;gap:10px;position:relative;z-index:4}
 .smv-home-offer-banners.hidden{display:none!important}
-.smv-home-offer-banner{
-  width:100%;box-sizing:border-box;text-align:center;padding:12px 16px;
-  border:1px solid #e3c36f;border-radius:12px;
-  background:linear-gradient(90deg,#fff8df,#fffdf6,#fff8df);
-  color:#7b1717;font-weight:800;line-height:1.35;
-  box-shadow:0 4px 14px rgba(90,45,0,.08)
-}
-.smv-home-offer-banner strong{display:block;font-size:1.02rem}
-.smv-home-offer-banner small{display:block;margin-top:3px;color:#5f5145;font-weight:600}
+.smv-home-offer-banner{position:relative;isolation:isolate;overflow:hidden;width:100%;box-sizing:border-box;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:16px;min-height:82px;padding:11px 16px 11px 13px;border:1px solid rgba(221,178,71,.82);border-radius:16px;background:linear-gradient(112deg,#4d0712 0%,#7e1021 36%,#3b092a 72%,#180916 100%);color:#fff;box-shadow:0 8px 24px rgba(72,9,23,.18),inset 0 1px 0 rgba(255,255,255,.16);cursor:pointer;text-decoration:none;transform:translateZ(0)}
+.smv-home-offer-banner::before{content:"";position:absolute;z-index:-1;inset:-70% auto -70% -18%;width:32%;transform:rotate(18deg);background:linear-gradient(90deg,transparent,rgba(255,230,151,.20),transparent);animation:smvOfferShine 5.2s ease-in-out infinite}
+.smv-home-offer-banner::after{content:"";position:absolute;z-index:-2;inset:0;background:radial-gradient(circle at 83% 35%,rgba(255,191,58,.18),transparent 25%),radial-gradient(circle at 9% 70%,rgba(255,221,125,.11),transparent 24%);pointer-events:none}
+@keyframes smvOfferShine{0%,55%{left:-30%}80%,100%{left:125%}}
+.smv-offer-art{width:58px;height:58px;display:grid;place-items:center;flex:none;filter:drop-shadow(0 3px 7px rgba(0,0,0,.28))}
+.smv-offer-art img{width:100%;height:100%;object-fit:contain;display:block}
+.smv-offer-copy{min-width:0;text-align:left}
+.smv-offer-kicker{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:3px}
+.smv-offer-badge{display:inline-flex;align-items:center;min-height:22px;padding:2px 8px;border-radius:999px;background:linear-gradient(180deg,#ffe69a,#e7b73e);color:#5b1017;font-size:.68rem;font-weight:900;letter-spacing:.075em;text-transform:uppercase;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.smv-offer-name{font-size:.72rem;color:#f7d987;font-weight:800;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:42ch}
+.smv-offer-title{display:block;color:#fff;font-size:clamp(1rem,1.55vw,1.28rem);font-weight:900;line-height:1.18;text-shadow:0 1px 2px rgba(0,0,0,.24)}
+.smv-offer-meta{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:5px;color:#f9e9c1;font-size:.76rem;font-weight:700}
+.smv-offer-code{padding:2px 7px;border:1px dashed rgba(255,226,143,.68);border-radius:6px;background:rgba(255,255,255,.07);letter-spacing:.05em}
+.smv-offer-countdown{font-variant-numeric:tabular-nums;color:#fff3c4}
+.smv-offer-cta{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-width:116px;min-height:42px;padding:8px 14px;border-radius:11px;background:linear-gradient(180deg,#ffd968,#e7ad26);color:#541019;font-size:.82rem;font-weight:950;letter-spacing:.025em;box-shadow:0 5px 14px rgba(0,0,0,.24),inset 0 1px 0 rgba(255,255,255,.55);transition:transform .18s ease,filter .18s ease}
+.smv-home-offer-banner:hover .smv-offer-cta,.smv-home-offer-banner:focus-visible .smv-offer-cta{transform:translateY(-1px);filter:brightness(1.05)}
+.smv-home-offer-banner:focus-visible{outline:3px solid #f4c650;outline-offset:2px}
 @media(max-width:899px){
-  .smv-home-offer-banners{margin:9px 0 12px}
-  .smv-home-offer-banner{padding:10px 12px;border-radius:10px;font-size:.92rem}
+ .smv-home-offer-banners{margin:8px 0 11px}
+ .smv-home-offer-banner{grid-template-columns:42px minmax(0,1fr) auto;gap:9px;min-height:68px;padding:8px 9px 8px 8px;border-radius:12px}
+ .smv-offer-art{width:42px;height:42px}
+ .smv-offer-kicker{gap:5px;margin-bottom:2px}.smv-offer-badge{font-size:.56rem;min-height:18px;padding:1px 6px}.smv-offer-name{font-size:.6rem;max-width:21ch}
+ .smv-offer-title{font-size:.86rem;line-height:1.15}.smv-offer-meta{gap:5px;margin-top:3px;font-size:.61rem}.smv-offer-cta{min-width:auto;min-height:34px;padding:6px 9px;font-size:.68rem;border-radius:9px}.smv-offer-cta span{display:none}
 }
+@media(max-width:430px){.smv-offer-name{display:none}.smv-offer-countdown{display:none}.smv-home-offer-banner{grid-template-columns:38px minmax(0,1fr) auto}.smv-offer-art{width:38px;height:38px}.smv-offer-title{font-size:.8rem}}
+@media(prefers-reduced-motion:reduce){.smv-home-offer-banner::before{animation:none}.smv-offer-cta{transition:none}}
 </style>
 <script id="smv-home-offer-banner-loader">
 (function(){
   const BACKEND_URL=String(window.SMV_BACKEND_URL||"https://smv-astro-1fco.onrender.com").replace(/\/$/,"");
   const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const money=n=>Number.isFinite(Number(n))?`₹${Number(n).toLocaleString("en-IN",{maximumFractionDigits:2})}`:"";
+  function offerSummary(o){
+    const type=String(o.discountType||"");
+    if(type==="fixed_price"&&Number(o.offerPrice)>0)return `${money(o.offerPrice)} SPECIAL`;
+    if(type==="percentage"&&Number(o.discountValue)>0)return `${Number(o.discountValue)}% OFF`;
+    if(type==="flat"&&Number(o.discountValue)>0)return `${money(o.discountValue)} OFF`;
+    return "SPECIAL OFFER";
+  }
+  function openAskNow(){
+    const section=document.getElementById("askNowSection");
+    if(section)section.scrollIntoView({behavior:"smooth",block:"center"});
+    window.setTimeout(()=>{
+      const fn=window.__smvOpenQuestionService;
+      if(typeof fn==="function") Promise.resolve(fn()).catch(e=>console.error("Offer ASK NOW failed:",e));
+      else document.getElementById("askNowButton")?.click();
+    },260);
+  }
+  function bindCountdowns(){
+    const tick=()=>document.querySelectorAll("[data-offer-end]").forEach(el=>{
+      const end=Date.parse(el.dataset.offerEnd||""); if(!Number.isFinite(end))return;
+      const d=end-Date.now(); if(d<=0){el.textContent="Ending now";return;}
+      const h=Math.floor(d/36e5),m=Math.floor((d%36e5)/6e4);
+      el.textContent=h>=24?`${Math.floor(h/24)}d ${h%24}h left`:`${h}h ${m}m left`;
+    });
+    tick(); window.clearInterval(window.__smvOfferCountdownTimer); window.__smvOfferCountdownTimer=window.setInterval(tick,60000);
+  }
   async function loadHomeOfferBanners(){
-    const host=document.getElementById("smvHomeOfferBanners");
-    if(!host)return;
+    const host=document.getElementById("smvHomeOfferBanners"); if(!host)return;
     try{
       const r=await fetch(BACKEND_URL+"/offers/public-banners?t="+Date.now(),{cache:"no-store",headers:{"Accept":"application/json"}});
-      const data=await r.json().catch(()=>({offers:[]}));
-      if(!r.ok)throw new Error(data.error||"Offer banner request failed");
+      const data=await r.json().catch(()=>({offers:[]})); if(!r.ok)throw new Error(data.error||"Offer banner request failed");
       const offers=Array.isArray(data.offers)?data.offers:[];
       if(!offers.length){host.innerHTML="";host.classList.add("hidden");return;}
       host.innerHTML=offers.map(o=>{
-        const title=esc(o.bannerText||o.name||"Special Offer");
-        const code=(!o.automatic&&o.promoCode)?`<small>Promo Code: ${esc(o.promoCode)}</small>`:"";
-        return `<div class="smv-home-offer-banner" role="status"><strong>${title}</strong>${code}</div>`;
+        const title=esc(o.bannerText||o.name||"Special Offer"),name=esc(o.name||"SMV ASTRO Offer"),summary=esc(offerSummary(o));
+        const code=o.promoCode?`<span class="smv-offer-code">${o.automatic?"Code":"Promo"}: ${esc(o.promoCode)}</span>`:"";
+        const countdown=o.endAt?`<span class="smv-offer-countdown" data-offer-end="${esc(o.endAt)}"></span>`:"";
+        return `<div class="smv-home-offer-banner" role="button" tabindex="0" aria-label="${title}. Ask a Question" data-smv-offer-open-ask="1"><span class="smv-offer-art" aria-hidden="true"><img src="assets/offer-festive-mark.svg" alt="" loading="lazy"></span><span class="smv-offer-copy"><span class="smv-offer-kicker"><span class="smv-offer-badge">${summary}</span><span class="smv-offer-name">${name}</span></span><strong class="smv-offer-title">${title}</strong><span class="smv-offer-meta">${code}${countdown}</span></span><span class="smv-offer-cta"><span>ASK NOW</span> →</span></div>`;
       }).join("");
-      host.classList.remove("hidden");
-    }catch(e){
-      console.warn("Home offer banner load failed:",e);
-      host.innerHTML="";
-      host.classList.add("hidden");
-    }
+      host.classList.remove("hidden"); bindCountdowns();
+      host.querySelectorAll("[data-smv-offer-open-ask]").forEach(el=>{
+        el.addEventListener("click",openAskNow);
+        el.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();openAskNow();}});
+      });
+    }catch(e){console.warn("Home offer banner load failed:",e);host.innerHTML="";host.classList.add("hidden");}
   }
-  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",loadHomeOfferBanners,{once:true});
-  else loadHomeOfferBanners();
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",loadHomeOfferBanners,{once:true}); else loadHomeOfferBanners();
   window.addEventListener("focus",loadHomeOfferBanners);
 })();
 </script>
