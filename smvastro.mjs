@@ -78,7 +78,12 @@ function renderAdminWorkflows({data, api, refresh, lang, escape: esc, date}) {
     }
     return `<article class="card smv-workflow-card" data-question="${esc(id)}">${details}${controls}<p data-workflow-message role="status" aria-live="polite"></p></article>`;
   }
-  const lists=[['adminPendingQuestions',rows.filter(q=>open(q)&&!String(q.answer||'').trim()),'question'],['adminAnswers',rows.filter(q=>open(q)&&String(q.answer||'').trim()),'answer'],['adminRefunds',rows.filter(rejected),'refund'],['adminQuestions',rows.slice(0,50),'history']];
+  // Public Question Approval must contain only questions that genuinely still need
+  // Admin question approval. Auto-approved/open questions and already allocated or
+  // claimed questions belong to the live/history views, not the approval queue.
+  const needsQuestionApproval=q=>q.paymentStatus==='paid' && q.adminApprovalBypassed!==true && ['pending_admin_approval','paid'].includes(String(q.status||'')) && !String(q.answer||'').trim();
+  const needsAnswerApproval=q=>q.adminApprovalBypassed!==true && ['processing','admin_review','answer_draft','revision_required'].includes(String(q.status||'')) && !!String(q.answer||'').trim();
+  const lists=[['adminPendingQuestions',rows.filter(needsQuestionApproval),'question'],['adminAnswers',rows.filter(needsAnswerApproval),'answer'],['adminRefunds',rows.filter(rejected),'refund'],['adminQuestions',rows.slice(0,50),'history']];
   for(const [id,items,mode] of lists){
     const box=document.getElementById(id);if(!box)continue;
     box.innerHTML=items.length?items.map(q=>card(q,mode)).join(''):`<div class="empty">${t('No items in this list.','இந்தப் பட்டியலில் பதிவுகள் இல்லை.')}</div>`;
