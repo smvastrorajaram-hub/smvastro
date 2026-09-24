@@ -2317,7 +2317,7 @@ app.get("/offers/public-banners", async (req, res) => {
         const enabled = o.enabled === true || String(o.enabled).toLowerCase() === "true";
         if (!enabled) return false;
         const mode = String(o.displayMode || "").trim().toLowerCase().replace(/[\s+-]+/g, "_");
-        if (!["home_banner","home_dashboard"].includes(mode)) return false;
+        if (["hidden","off","none","disabled"].includes(mode)) return false;
         const start = bannerDateMs(o.startAt), end = bannerDateMs(o.endAt);
         if (start !== null && now < start) return false;
         if (end !== null && now > end) return false;

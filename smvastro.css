@@ -8268,7 +8268,7 @@ main.container{max-width:none!important;margin:0!important;padding:0!important}
 .smv-master-trust{display:flex;flex-wrap:wrap;gap:22px;color:#333c4b;font-size:.77rem;font-weight:700}
 .smv-master-trust span{display:flex;align-items:center;gap:7px}
 .smv-master-trust b{font-size:1.08rem;color:var(--smv-red)}
-.smv-master-art{position:relative;min-height:520px;background:linear-gradient(90deg,rgba(255,249,242,.2),transparent 20%),url("assets/smv-premium-desktop-v20.png") center 24%/cover no-repeat}
+.smv-master-art{position:relative;min-height:520px;background:linear-gradient(90deg,rgba(255,249,242,.2),transparent 20%),url("assets/smv-desktop-hero-rooted-final.jpg") center 24%/cover no-repeat}
 .smv-master-art:after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(255,249,242,.30),transparent 24%),linear-gradient(0deg,rgba(68,28,17,.08),transparent 28%)}
 .smv-master-services{max-width:1260px;margin:0 auto;padding:16px 24px 18px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px}
 .smv-master-service{min-height:166px;padding:22px 18px;border:1px solid var(--smv-line);border-radius:15px;text-align:center;text-decoration:none!important;color:var(--smv-navy)!important;box-shadow:var(--smv-shadow);transition:.2s ease}
@@ -8451,7 +8451,7 @@ header nav .smv-demo-active:after{
   min-height:535px!important;
   background:
     linear-gradient(90deg,#fffaf5 0%,rgba(255,250,245,.20) 14%,transparent 32%),
-    url("assets/smv-premium-desktop-v20.png") center 22%/cover no-repeat!important;
+    url("assets/smv-desktop-hero-rooted-final.jpg") center 22%/cover no-repeat!important;
 }
 .smv-master-art:after{
   background:
@@ -8655,7 +8655,7 @@ header nav .smv-demo-active{color:#e40849!important}
   min-height:430px!important;
   background:
     linear-gradient(90deg,#fff9ef 0%,rgba(255,249,239,.04) 20%),
-    url("assets/smv-v6-veerayah.webp") center/cover no-repeat!important;
+    url("assets/smv-desktop-hero-rooted-final.jpg") center/cover no-repeat!important;
 }
 
 #askNowSection .smv-new-asknow-kicker{color:#ff0870!important;opacity:1!important}
@@ -8670,7 +8670,7 @@ header nav .smv-demo-active{color:#e40849!important}
   content:"";position:absolute;right:0;top:0;bottom:0;width:35%;
   background:
     linear-gradient(90deg,#850b14 0%,rgba(133,11,20,.18) 38%,rgba(133,11,20,.02)),
-    url("assets/smv-v6-footer-gopuram.webp") center/cover no-repeat;
+    url("assets/footer-v24.png") center/cover no-repeat;
   opacity:.92;pointer-events:none;
 }
 .smv-master-footer-in{position:relative;z-index:2}
@@ -8682,13 +8682,13 @@ header nav .smv-demo-active{color:#e40849!important}
     min-height:330px!important;
     background:
       linear-gradient(90deg,rgba(255,246,232,.06),transparent 20%),
-      url("assets/smv-v6-veerayah.webp") center/cover no-repeat!important;
+      url("assets/smv-desktop-hero-rooted-final.jpg") center/cover no-repeat!important;
   }
 .smv-master-footer:after{
     top:auto!important;bottom:0!important;width:100%!important;height:150px!important;
     background:
       linear-gradient(180deg,#790c12 0%,rgba(121,12,18,.28) 35%,rgba(121,12,18,.05)),
-      url("assets/smv-v6-footer-gopuram.webp") center/cover no-repeat!important;
+      url("assets/footer-v24.png") center/cover no-repeat!important;
     opacity:.75!important;
   }
 .smv-master-footer-in{padding-bottom:165px!important}}
@@ -8717,7 +8717,7 @@ header nav .smv-demo-active{color:#e60748!important}
  min-height:430px!important;
  background:
  linear-gradient(90deg,#fff7e8 0%,rgba(255,247,232,.03) 18%),
- url("assets/smv-v6-veerayah.webp") center/cover no-repeat!important;
+ url("assets/smv-desktop-hero-rooted-final.jpg") center/cover no-repeat!important;
 }
 .smv-master-art:after{display:none!important}
 .smv-master-services{max-width:1100px!important;padding:10px 18px 16px!important;gap:12px!important}
@@ -8752,7 +8752,7 @@ header nav .smv-demo-active{color:#e60748!important}
  content:"";position:absolute;right:0;top:0;bottom:0;width:34%;
  background:
  linear-gradient(90deg,#850916 0%,rgba(133,9,22,.12) 42%,rgba(133,9,22,.02)),
- url("assets/smv-v6-footer-gopuram.webp") center/cover no-repeat!important;
+ url("assets/footer-v24.png") center/cover no-repeat!important;
  opacity:.95!important;pointer-events:none!important;
 }
 .smv-master-footer-in{max-width:1320px!important;grid-template-columns:1.25fr .75fr .8fr 1.15fr!important;gap:26px!important;padding:34px 24px 28px!important;position:relative!important;z-index:2!important}
