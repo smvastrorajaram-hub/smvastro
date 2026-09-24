@@ -235,6 +235,54 @@ app.use((req, res, next) => {
   next();
 });
 
+// V48 DASHBOARD READ HARDENING
+// Admin realtime uses one tiny version document instead of listening to entire
+// collections. Bump it only after a successful mutating API response and do the
+// write after the response has finished so it never delays Razorpay/payment or
+// any other request's critical path.
+const DASHBOARD_SIGNAL_PATHS=new Set([
+  '/register-customer-profile','/register-astrologer-profile','/astrologer/edit-answer','/submit-answer',
+  '/customer/submit-review','/admin/appointment-status','/admin/approve-question','/admin/reallocate-question','/admin/reject-question','/admin/retry-refund','/admin/sync-refund',
+  '/admin/edit-question','/admin/takeover-answer','/astrologer/change-payout','/admin/payout-change-status',
+  '/admin/set-open-workflow','/customer/mark-answer-viewed','/admin/astrologer-quiz/load-defaults',
+  '/admin/astrologer-quiz/questions','/admin/astrologer-quiz/questions/delete','/admin/astrologer-auto-approval/settings',
+  '/webhooks/google-form/astrologer-qualification','/admin/private-consultation/set-commission',
+  '/admin/private-consultation/set-word-count','/admin/private-consultation/set-workflow',
+  '/admin/private-consultation/approve-question','/admin/private-consultation/reject-question',
+  '/admin/private-consultation/retry-refund','/admin/private-consultation/sync-refund',
+  '/astrologer/private-consultation/submit-answer','/admin/private-consultation/approve-answer',
+  '/admin/private-consultation/reject-answer','/admin/offers/save','/admin/offers/delete',
+  '/private-consultation/recover-payment','/private-consultation/verify-payment','/admin/credit-commission',
+  '/admin/reject-answer','/admin/approve-answer','/customer/private-consultation/mark-viewed','/verify-payment',
+  '/astrologer/withdrawal-request','/admin/withdrawal-mark-paid','/razorpay/webhook'
+]);
+function dashboardSignalCategory(path=''){
+  const p=String(path||'');
+  if(p.startsWith('/admin/offers/'))return 'offers';
+  if(p.includes('/private-consultation/'))return 'private_consultations';
+  if(p.includes('/withdrawal')||p.includes('/payout'))return 'withdrawals_payouts';
+  if(p.includes('/review'))return 'reviews';
+  if(p.includes('/astrologer-quiz/')||p.includes('/astrologer-auto-approval/'))return 'astrologer_settings';
+  if(p.includes('/set-open-workflow')||p.includes('/set-commission')||p.includes('/set-word-count')||p.includes('/set-workflow'))return 'settings';
+  if(p.includes('/approve-question')||p.includes('/reallocate-question')||p.includes('/reject-question')||p.includes('/retry-refund')||p.includes('/sync-refund')||p.includes('/edit-question')||p.includes('/takeover-answer')||p.includes('/approve-answer')||p.includes('/reject-answer')||p.includes('/submit-answer')||p.includes('/mark-answer-viewed'))return 'questions';
+  if(p.includes('/register-astrologer-profile')||p.includes('/google-form/astrologer-qualification'))return 'astrologers';
+  if(p.includes('/verify-payment')||p.includes('/recover-payment')||p.includes('/razorpay/webhook')||p.includes('/credit-commission'))return 'financial';
+  return 'unknown';
+}
+
+app.use((req,res,next)=>{
+  if(DASHBOARD_SIGNAL_PATHS.has(req.path)){
+    res.once('finish',()=>{
+      if(res.statusCode>=200 && res.statusCode<300){
+        setImmediate(()=>db.collection('smv_settings').doc('dashboardChange').set({
+          version:FieldValue.increment(1),updatedAt:FieldValue.serverTimestamp(),path:req.path,category:dashboardSignalCategory(req.path)
+        },{merge:true}).catch(e=>console.warn('Dashboard change signal skipped:',e?.message||e)));
+      }
+    });
+  }
+  next();
+});
+
 async function requireUser(req, res) {
   const header = String(req.get("Authorization") || "");
   if (!header.startsWith("Bearer ")) {
@@ -943,14 +991,25 @@ app.get("/public/astrologers", async (req, res) => {
     return res.json({success:true,astrologers});
   }catch(e){console.error("Public astrologers load failed:",e);return res.status(500).json({error:e?.message||"Unable to load approved astrologers."});}
 });
+const publicReviewsCache=new Map();
 app.get("/public/astrologers/:astrologerId/reviews", async(req,res)=>{
   try{
     const astrologerId=String(req.params?.astrologerId||"").trim();
     if(!astrologerId) return res.status(400).json({error:"Astrologer ID is required."});
-    const astroSnap=await db.collection("smv_astrologers").doc(astrologerId).get();
-    if(!astroSnap.exists || String(astroSnap.data()?.status||"").toLowerCase()!=="approved") return res.status(404).json({error:"Approved astrologer not found."});
-    const snap=await db.collection("smv_reviews").where("astrologerId","==",astrologerId).limit(100).get();
-    const reviews=snap.docs.map(d=>({id:d.id,...d.data()})).filter(r=>r.approved===true || String(r.status||"").toLowerCase()==="approved");
+    const now=Date.now(),cached=publicReviewsCache.get(astrologerId);
+    if(cached&&cached.expiresAt>now){
+      res.set("Cache-Control","public, max-age=30, stale-while-revalidate=60");
+      return res.json({success:true,astrologerId,reviews:cached.reviews,cached:true});
+    }
+    // V46: one targeted Firestore query only. No full-review scan and no extra
+    // astrologer-document read. The public directory itself exposes approved astrologers.
+    const snap=await db.collection("smv_reviews")
+      .where("astrologerId","==",astrologerId)
+      .where("approved","==",true)
+      .limit(100).get();
+    const reviews=snap.docs.map(d=>({id:d.id,...d.data()}));
+    publicReviewsCache.set(astrologerId,{expiresAt:now+60000,reviews});
+    res.set("Cache-Control","public, max-age=30, stale-while-revalidate=60");
     return res.json({success:true,astrologerId,reviews});
   }catch(e){console.error("Public astrologer reviews load failed:",e);return res.status(500).json({error:e?.message||"Unable to load astrologer reviews."});}
 });
@@ -1730,6 +1789,113 @@ app.post("/webhooks/google-form/astrologer-qualification",express.json({limit:"2
     return res.json({success:true,passed,autoApproved,score,maxScore,passMark:cfg.passMark});
   }catch(e){console.error("Google Form astrologer qualification webhook failed:",e);return res.status(500).json({error:e.message||"Unable to process qualification result."});}
 });
+app.get("/admin/private-consultations-data", async (req, res) => {
+  const user=await requireUser(req,res); if(!user)return;
+  if(!(await isAdminUser(user)))return res.status(403).json({error:"Admin access denied."});
+  try{
+    const [consultSnap,usersSnap,astrologersSnap,privateCommissionSnap,privateWorkflowSnap]=await Promise.all([
+      db.collection("smv_private_consultations").get(),
+      db.collection("smv_users").get(),
+      db.collection("smv_astrologers").get(),
+      db.collection("smv_settings").doc("privateCommission").get(),
+      db.collection("smv_settings").doc("privateConsultationWorkflow").get()
+    ]);
+    return res.json({
+      success:true,
+      privateConsultations:consultSnap.docs.map(d=>({id:d.id,...d.data()})),
+      users:usersSnap.docs.map(d=>({id:d.id,...d.data()})),
+      astrologers:astrologersSnap.docs.map(d=>({id:d.id,...d.data()})),
+      settings:{
+        privateCommission:privateCommissionSnap.exists?privateCommissionSnap.data():null,
+        privateConsultationWorkflow:privateWorkflowSnap.exists?privateWorkflowSnap.data():null
+      }
+    });
+  }catch(e){
+    console.error("Admin private consultations targeted load failed:",e);
+    return res.status(500).json({error:e?.message||"Unable to load Admin private consultations."});
+  }
+});
+
+app.get("/admin/settings-data", async (req, res) => {
+  const user=await requireUser(req,res); if(!user)return;
+  if(!(await isAdminUser(user)))return res.status(403).json({error:"Admin access denied."});
+  try{
+    const [commissionSnap,questionSnap,workflowSnap,privateCommissionSnap,privateWorkflowSnap,autoApprovalSnap]=await Promise.all([
+      db.collection("smv_settings").doc("commission").get(),
+      db.collection("smv_settings").doc("question").get(),
+      db.collection("smv_settings").doc("workflow").get(),
+      db.collection("smv_settings").doc("privateCommission").get(),
+      db.collection("smv_settings").doc("privateConsultationWorkflow").get(),
+      db.collection("smv_settings").doc("astrologerAutoApproval").get()
+    ]);
+    const val=snap=>snap.exists?snap.data():null;
+    return res.json({success:true,settings:{
+      commission:val(commissionSnap),question:val(questionSnap),workflow:val(workflowSnap),
+      privateCommission:val(privateCommissionSnap),privateConsultationWorkflow:val(privateWorkflowSnap),
+      astrologerAutoApproval:val(autoApprovalSnap)
+    }});
+  }catch(e){
+    console.error("Admin settings targeted load failed:",e);
+    return res.status(500).json({error:e?.message||"Unable to load Admin settings."});
+  }
+});
+
+app.get("/admin/withdrawals-data", async (req, res) => {
+  const user=await requireUser(req,res); if(!user)return;
+  if(!(await isAdminUser(user)))return res.status(403).json({error:"Admin access denied."});
+  try{
+    const snap=await db.collection("smv_withdrawals").get();
+    return res.json({success:true,withdrawals:snap.docs.map(d=>({id:d.id,...d.data()}))});
+  }catch(e){
+    console.error("Admin withdrawals targeted load failed:",e);
+    return res.status(500).json({error:e?.message||"Unable to load Admin withdrawal data."});
+  }
+});
+
+app.get("/admin/astrologers-data", async (req, res) => {
+  const user=await requireUser(req,res); if(!user)return;
+  if(!(await isAdminUser(user)))return res.status(403).json({error:"Admin access denied."});
+  try{
+    const [usersSnap,astrologersSnap]=await Promise.all([
+      db.collection("smv_users").get(),
+      db.collection("smv_astrologers").get()
+    ]);
+    return res.json({
+      success:true,
+      users:usersSnap.docs.map(d=>({id:d.id,...d.data()})),
+      astrologers:astrologersSnap.docs.map(d=>({id:d.id,...d.data()}))
+    });
+  }catch(e){
+    console.error("Admin astrologers targeted load failed:",e);
+    return res.status(500).json({error:e?.message||"Unable to load Admin astrologer data."});
+  }
+});
+
+app.get("/admin/questions-data", async (req, res) => {
+  const user=await requireUser(req,res); if(!user)return;
+  if(!(await isAdminUser(user)))return res.status(403).json({error:"Admin access denied."});
+  try{
+    const [questionsSnap,astrologersSnap,commissionSnap,workflowSnap]=await Promise.all([
+      db.collection("smv_questions").get(),
+      db.collection("smv_astrologers").where("status","==","approved").get(),
+      db.collection("smv_settings").doc("commission").get(),
+      db.collection("smv_settings").doc("workflow").get()
+    ]);
+    return res.json({
+      success:true,
+      questions:questionsSnap.docs.map(d=>({id:d.id,...d.data()})),
+      astrologers:astrologersSnap.docs.map(d=>({id:d.id,...d.data()})),
+      settings:{
+        commission:commissionSnap.exists?commissionSnap.data():null,
+        workflow:workflowSnap.exists?workflowSnap.data():{allowWithoutAdminApproval:false}
+      }
+    });
+  }catch(e){
+    console.error("Admin questions targeted load failed:",e);
+    return res.status(500).json({error:e?.message||"Unable to load Admin question data."});
+  }
+});
+
 app.get("/admin-data", async (req, res) => {
   const user = await requireUser(req, res);
   if (!user) return;
@@ -2252,12 +2418,13 @@ app.post("/private-consultation/create-order", express.json({limit:"30kb"}), asy
       birthDetails:{name:customerName,birthDate:String(birth.birthDate),birthTime:String(birth.birthTime),birthPlace:String(birth.birthPlace).trim(),birthGender:String(birth.birthGender||""),timezone:"Asia/Kolkata",utcOffsetMinutes:330},
       razorpayOrderId:order.id,paymentCurrency:"INR",createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()
     });
-    await db.collection("razorpay_orders").doc(order.id).set({
+    res.json({success:true,consultationId,orderId:order.id,keyId:RAZORPAY_KEY_ID,amount:order.amount,currency:order.currency,originalAmount:offerQuote.originalAmount,offerId:offerQuote.offerId||null,offerName:offerQuote.offerName||null,promoCode:offerQuote.promoCode||"",discountAmount:offerQuote.discountAmount||0,offerBannerText:offerQuote.bannerText||""});
+    setImmediate(()=>db.collection("razorpay_orders").doc(order.id).set({
       razorpayOrderId:order.id,consultationId,amount:order.amount,currency:order.currency,
       firebaseUid:user.uid,customerEmail:user.email||null,astrologerId,serviceName:"Private Astrology Consultation",
       status:"created",createdAt:FieldValue.serverTimestamp()
-    });
-    return res.json({success:true,consultationId,orderId:order.id,keyId:RAZORPAY_KEY_ID,amount:order.amount,currency:order.currency,originalAmount:offerQuote.originalAmount,offerId:offerQuote.offerId||null,offerName:offerQuote.offerName||null,promoCode:offerQuote.promoCode||"",discountAmount:offerQuote.discountAmount||0,offerBannerText:offerQuote.bannerText||""});
+    }).catch(e=>console.error("Private Razorpay order audit failed:",e)));
+    return;
   }catch(e){console.error("Private consultation create-order error:",e);return res.status(500).json({error:e?.error?.description||e?.message||"Unable to create private consultation payment."});}
 });
 
@@ -2318,16 +2485,20 @@ app.post("/private-consultation/verify-payment", express.json({limit:"15kb"}), a
         razorpayPaymentId:paymentId,razorpaySignature:signature,paidAt:FieldValue.serverTimestamp(),
         paymentRecordedAt:new Date().toISOString(),updatedAt:FieldValue.serverTimestamp()
       });
-      await consumeOfferAfterPayment({uid:user.uid,service:"private_consultation",referenceId:consultationId,paymentId,quote:{offerId:c.offerId||null,offerName:c.offerName||null,promoCode:c.offerPromoCode||"",originalAmount:Number(c.originalChatPrice||c.chatPrice||c.amount||0),finalAmount:Number(c.chatPrice||c.amount||0),discountAmount:Number(c.offerDiscountAmount||0)}});
-      await addAdminPrivateNotification("private_payment_received","Private Consultation Payment Received",`${c.customerName||"Customer"} paid ₹${Number(c.chatPrice||c.amount||0).toFixed(2)} for ${c.astrologerName||"the selected astrologer"}.`,consultationId,{customerId:c.customerId,astrologerId:c.astrologerId});
-      await db.collection("smv_notifications").add({
-        userId:c.customerId,type:"private_consultation_payment",title:"Private consultation payment successful",
-        message:autoAllow?`Your private consultation is now visible to ${c.astrologerName||"the selected astrologer"}.`:`Your private consultation with ${c.astrologerName||"the selected astrologer"} is waiting for Admin approval.`,
-        consultationId,createdAt:FieldValue.serverTimestamp(),read:false
+      const finalStatus=autoAllow?"approved_for_astrologer":"pending_admin_approval";
+      res.json({success:true,verified:true,consultationId,status:finalStatus,paymentStatus:"paid"});
+      setImmediate(async()=>{
+        try{
+          await Promise.allSettled([
+            consumeOfferAfterPayment({uid:user.uid,service:"private_consultation",referenceId:consultationId,paymentId,quote:{offerId:c.offerId||null,offerName:c.offerName||null,promoCode:c.offerPromoCode||"",originalAmount:Number(c.originalChatPrice||c.chatPrice||c.amount||0),finalAmount:Number(c.chatPrice||c.amount||0),discountAmount:Number(c.offerDiscountAmount||0)}}),
+            addAdminPrivateNotification("private_payment_received","Private Consultation Payment Received",`${c.customerName||"Customer"} paid ₹${Number(c.chatPrice||c.amount||0).toFixed(2)} for ${c.astrologerName||"the selected astrologer"}.`,consultationId,{customerId:c.customerId,astrologerId:c.astrologerId}),
+            db.collection("smv_notifications").add({userId:c.customerId,type:"private_consultation_payment",title:"Private consultation payment successful",message:autoAllow?`Your private consultation is now visible to ${c.astrologerName||"the selected astrologer"}.`:`Your private consultation with ${c.astrologerName||"the selected astrologer"} is waiting for Admin approval.`,consultationId,createdAt:FieldValue.serverTimestamp(),read:false})
+          ]);
+        }catch(e){console.error("Post-verification private bookkeeping failed:",e);}
       });
+      return;
     }
-    const finalSnap=await ref.get(),finalData=finalSnap.data()||{};
-    return res.json({success:true,verified:true,consultationId,status:String(finalData.status||"pending_admin_approval"),paymentStatus:String(finalData.paymentStatus||"paid")});
+    return res.json({success:true,verified:true,consultationId,status:String(c.status||"pending_admin_approval"),paymentStatus:"paid"});
   }catch(e){console.error("Private consultation verify-payment error:",e);return res.status(500).json({error:e?.message||"Unable to verify private consultation payment."});}
 });
 
@@ -2510,15 +2681,27 @@ app.post("/create-order", express.json(), async (req, res) => {
       return res.status(502).json({ error: "Razorpay order was created without a valid order ID." });
     }
 
-    const answerSettings = await db.collection("smv_settings").doc("answer").get();
-    const minimumWords = Math.max(1, Math.min(10000, Math.floor(Number(answerSettings.data()?.minimumWords || 150))));
-    await qRef.set({ paymentMode:"live", razorpayOrderId: order.id, paymentCurrency: "INR", paymentStatus: "order_created", answerMinWords: minimumWords, paymentUpdatedAt: FieldValue.serverTimestamp() }, { merge: true });
-    await db.collection("razorpay_orders").doc(order.id).set({
-      razorpayOrderId: order.id, questionId, amount: order.amount, currency: order.currency,
-      firebaseUid: user.uid, customerEmail: user.email || null, astrologerId: String(q.astrologerId || ""),
-      serviceName: req.body?.serviceName || "Public Astrology Question", status: "created", createdAt: FieldValue.serverTimestamp()
+    // V47 payment critical path: persist only the order state required for safe
+    // verification before returning checkout details. Answer settings and the
+    // Razorpay audit mirror are secondary and must not delay Razorpay.open().
+    await qRef.set({ paymentMode:"live", razorpayOrderId: order.id, paymentCurrency: "INR", paymentStatus: "order_created", paymentUpdatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    const responsePayload={ success: true, questionId, orderId: order.id, keyId: RAZORPAY_KEY_ID, amount: order.amount, currency: order.currency, originalAmount:Number(q.originalAmount||q.amount||0), offerId:q.offerId||null, offerName:q.offerName||null, promoCode:q.offerPromoCode||"", discountAmount:Number(q.offerDiscountAmount||0), offerBannerText:q.offerBannerText||"" };
+    res.json(responsePayload);
+    setImmediate(async()=>{
+      try{
+        const answerSettings=await db.collection("smv_settings").doc("answer").get();
+        const minimumWords=Math.max(1,Math.min(10000,Math.floor(Number(answerSettings.data()?.minimumWords||150))));
+        await Promise.allSettled([
+          qRef.set({answerMinWords:minimumWords},{merge:true}),
+          db.collection("razorpay_orders").doc(order.id).set({
+            razorpayOrderId:order.id,questionId,amount:order.amount,currency:order.currency,
+            firebaseUid:user.uid,customerEmail:user.email||null,astrologerId:String(q.astrologerId||""),
+            serviceName:req.body?.serviceName||"Public Astrology Question",status:"created",createdAt:FieldValue.serverTimestamp()
+          })
+        ]);
+      }catch(e){console.error("Post-order bookkeeping failed:",e);}
     });
-    return res.json({ success: true, questionId, orderId: order.id, keyId: RAZORPAY_KEY_ID, amount: order.amount, currency: order.currency, originalAmount:Number(q.originalAmount||q.amount||0), offerId:q.offerId||null, offerName:q.offerName||null, promoCode:q.offerPromoCode||"", discountAmount:Number(q.offerDiscountAmount||0), offerBannerText:q.offerBannerText||"" });
+    return;
   } catch (e) {
     console.error("Create order error:", e);
     return res.status(500).json({ error: e?.error?.description || e?.description || e?.message || "Unable to create Razorpay order" });
@@ -2559,22 +2742,27 @@ async function markQuestionPaid(questionId, orderId, paymentId, signature, sourc
     });
     return { already: false, customerId: q.customerId, customerPaymentId, paymentRecordedAt };
   });
-  if (!result.already) {
-    await db.collection("smv_notifications").add({ userId: result.customerId, type: "payment", title: "Payment successful", message: workflow.allowWithoutAdminApproval ? `Your payment was verified. Your question is now open to approved astrologers. Payment ID: ${result.customerPaymentId || "N/A"}.` : `Your payment was verified. Your question is now waiting for Admin approval. Payment ID: ${result.customerPaymentId || "N/A"}.`, paymentId: result.customerPaymentId || null, razorpayPaymentId: paymentId || null, questionId, createdAt: FieldValue.serverTimestamp(), read: false });
-    const qSnap = await qRef.get();
-    const q = qSnap.exists ? (qSnap.data() || {}) : {};
-    await consumeOfferAfterPayment({uid:result.customerId,service:"public_question",referenceId:questionId,paymentId,quote:{offerId:q.offerId||null,offerName:q.offerName||null,promoCode:q.offerPromoCode||"",originalAmount:Number(q.originalAmount||q.amount||0),finalAmount:Number(q.amount||0),discountAmount:Number(q.offerDiscountAmount||0)}});
-    const customerEmail = String(q.customerEmail || await getUserEmail(result.customerId) || "").trim();
-    const amount = Number(q.amount || 0);
-    await sendSystemEmail({
-      to: [customerEmail, ADMIN_EMAIL],
-      subject: "SMV ASTRO — Payment Successful",
-      replyTo: ADMIN_EMAIL,
-      text: `Payment successful for SMV ASTRO.\n\nQuestion ID: ${questionId}\nCustomer Payment ID: ${result.customerPaymentId || "N/A"}\nAmount: ₹${amount.toFixed(2)}\nRazorpay Payment ID: ${paymentId}\nRazorpay Order ID: ${orderId}\n\n${workflow.allowWithoutAdminApproval ? "Your question is now open to approved astrologers." : "Your question is now waiting for Admin approval."}`
-    });
-    await sendAdminTransactionEmail({ eventType: "PAYMENT SUCCESS", paymentId, orderId, amount, currency: "INR", questionId, customerEmail, status: "paid" });
-  }
-  return result;
+  return {...result,workflow,qRef};
+}
+
+function runQuestionPaymentSideEffects({result,questionId,orderId,paymentId}){
+  if(!result||result.already)return;
+  setImmediate(async()=>{
+    try{
+      const qSnap=await result.qRef.get();
+      const q=qSnap.exists?(qSnap.data()||{}):{};
+      await Promise.allSettled([
+        db.collection("smv_notifications").add({userId:result.customerId,type:"payment",title:"Payment successful",message:result.workflow.allowWithoutAdminApproval?`Your payment was verified. Your question is now open to approved astrologers. Payment ID: ${result.customerPaymentId||"N/A"}.`:`Your payment was verified. Your question is now waiting for Admin approval. Payment ID: ${result.customerPaymentId||"N/A"}.`,paymentId:result.customerPaymentId||null,razorpayPaymentId:paymentId||null,questionId,createdAt:FieldValue.serverTimestamp(),read:false}),
+        consumeOfferAfterPayment({uid:result.customerId,service:"public_question",referenceId:questionId,paymentId,quote:{offerId:q.offerId||null,offerName:q.offerName||null,promoCode:q.offerPromoCode||"",originalAmount:Number(q.originalAmount||q.amount||0),finalAmount:Number(q.amount||0),discountAmount:Number(q.offerDiscountAmount||0)}})
+      ]);
+      const customerEmail=String(q.customerEmail||await getUserEmail(result.customerId)||"").trim();
+      const amount=Number(q.amount||0);
+      await Promise.allSettled([
+        sendSystemEmail({to:[customerEmail,ADMIN_EMAIL],subject:"SMV ASTRO — Payment Successful",replyTo:ADMIN_EMAIL,text:`Payment successful for SMV ASTRO.\n\nQuestion ID: ${questionId}\nCustomer Payment ID: ${result.customerPaymentId||"N/A"}\nAmount: ₹${amount.toFixed(2)}\nRazorpay Payment ID: ${paymentId}\nRazorpay Order ID: ${orderId}\n\n${result.workflow.allowWithoutAdminApproval?"Your question is now open to approved astrologers.":"Your question is now waiting for Admin approval."}`}),
+        sendAdminTransactionEmail({eventType:"PAYMENT SUCCESS",paymentId,orderId,amount,currency:"INR",questionId,customerEmail,status:"paid"})
+      ]);
+    }catch(e){console.error("Post-verification question bookkeeping failed:",e);}
+  });
 }
 
 
@@ -2958,8 +3146,12 @@ app.post("/verify-payment", express.json(), async (req, res) => {
       });
     }
     const result = await markQuestionPaid(questionId, orderId, paymentId, signature, "render_checkout_verification");
-    await db.collection("razorpay_orders").doc(orderId).set({ razorpayPaymentId: paymentId, status: "verified", questionId, verifiedAt: FieldValue.serverTimestamp() }, { merge: true });
-    return res.json({ verified: true, questionId, alreadyProcessed: result.already, customerPaymentId: result.customerPaymentId || null, paymentRecordedAt: result.paymentRecordedAt || new Date().toISOString(), message: "Payment verified and consultation updated successfully." });
+    // Essential paid-state commit is complete. Respond now; notifications, offer
+    // consumption, email and audit mirrors are idempotent secondary work.
+    res.json({ verified: true, questionId, alreadyProcessed: result.already, customerPaymentId: result.customerPaymentId || null, paymentRecordedAt: result.paymentRecordedAt || new Date().toISOString(), message: "Payment verified and consultation updated successfully." });
+    runQuestionPaymentSideEffects({result,questionId,orderId,paymentId});
+    setImmediate(()=>db.collection("razorpay_orders").doc(orderId).set({razorpayPaymentId:paymentId,status:"verified",questionId,verifiedAt:FieldValue.serverTimestamp()},{merge:true}).catch(e=>console.error("Razorpay verification audit update failed:",e)));
+    return;
   } catch (e) {
     console.error("Payment verification error:", e);
     return res.status(500).json({ error: e?.error?.description || e?.description || e?.message || "Payment verification failed" });

@@ -11,26 +11,36 @@ module.exports=function registerDashboardEvents(app,{db,requireUser,isAdminUser}
    const role=adminUser?'admin':String(profile.data()?.role||'customer');
    res.status(200).set({'Content-Type':'text/event-stream','Cache-Control':'no-cache, no-transform','Connection':'keep-alive','X-Accel-Buffering':'no'});
    res.flushHeaders();
-   const send=event=>{if(!stopped)res.write(`event: ${event}\ndata: {}\n\n`);};
-   const changed=()=>{clearTimeout(debounce);debounce=setTimeout(()=>send('change'),100);};
-   const refs=[db.collection('smv_users').doc(user.uid)];
+   const send=(event,data={})=>{if(!stopped)res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);};
+   const dirty=new Set();
+   const changed=kind=>{dirty.add(kind||'dashboard');clearTimeout(debounce);debounce=setTimeout(()=>{const kinds=[...dirty];dirty.clear();send('change',{kinds});},100);};
+   const refs=[{ref:db.collection('smv_users').doc(user.uid),kind:'profile'}];
    if(role==='admin'){
-    ['smv_questions','smv_astrologers','smv_users','smv_withdrawals','smv_payments','smv_payouts','smv_settings','smv_notifications','smv_reviews'].forEach(name=>refs.push(db.collection(name)));
+    // V48 READ HARDENING: never attach whole-collection listeners for Admin.
+    // All successful backend mutations bump this single lightweight document.
+    refs.push({ref:db.collection('smv_settings').doc('dashboardChange'),kind:'admin_signal'});
    }else{
-    refs.push(db.collection('smv_questions').where(role==='astrologer'?'astrologerId':'customerId','==',user.uid),db.collection('smv_notifications').where('userId','==',user.uid));
+    refs.push({ref:db.collection('smv_questions').where(role==='astrologer'?'astrologerId':'customerId','==',user.uid),kind:'questions'},{ref:db.collection('smv_notifications').where('userId','==',user.uid),kind:'notifications'});
     if(role==='astrologer'){
-     refs.push(db.collection('smv_astrologers').doc(user.uid),db.collection('smv_withdrawals').where('astrologerId','==',user.uid));
-     if(String(astro.data()?.status)==='approved')refs.push(db.collection('smv_questions').where('status','==','available_to_astrologers'),db.collection('smv_settings').doc('workflow'));
+     refs.push({ref:db.collection('smv_astrologers').doc(user.uid),kind:'profile'},{ref:db.collection('smv_withdrawals').where('astrologerId','==',user.uid),kind:'withdrawals'});
+     if(String(astro.data()?.status)==='approved')refs.push({ref:db.collection('smv_questions').where('status','==','available_to_astrologers'),kind:'open_questions'},{ref:db.collection('smv_settings').doc('workflow'),kind:'workflow'});
     }
    }
    let waiting=refs.length;
-   refs.forEach((ref,index)=>{
+   refs.forEach((entry,index)=>{
+    const ref=entry.ref,kind=entry.kind;
     let first=true;
-    unsubs.push(ref.onSnapshot(()=>{
+    unsubs.push(ref.onSnapshot(snap=>{
      if(first){first=false;if(--waiting===0)send('ready');return;}
      // Recheck access at reconnect after own role/approval changes.
-     if(index===0 || (role==='astrologer'&&index===3)){send('change');stop();return;}
-     changed();
+     if(index===0 || (role==='astrologer'&&kind==='profile')){send('change',{kinds:['profile']});stop();return;}
+     if(role==='admin'&&kind==='admin_signal'){
+      const signal=snap.data?.()||{};
+      const path=String(signal.path||''),category=String(signal.category||'');
+      send('change',{kinds:['admin_signal'],path,category});
+      return;
+     }
+     changed(kind);
     },err=>{console.warn('Dashboard stream listener failed:',err.code||err.message);stop();}));
    });
    heartbeat=setInterval(()=>{if(!stopped)res.write(': heartbeat\n\n');},20000);

@@ -27,7 +27,7 @@ function createRefreshQueue({run,canRun,onPending=()=>{},onError=()=>{},delay=12
 }
 
 // Authenticated fetch stream: only invalidations, never account data or tokens in URLs.
-function watchDashboardEvents({url,getToken,onChange,onStatus,isVisible=()=>true}){
+function watchDashboardEvents({url,getToken,onChange,onReady=()=>{},onStatus,isVisible=()=>true}){
  let stopped=false,controller=null,timer=null,retry=0;
  async function connect(){
   if(stopped)return;
@@ -44,10 +44,15 @@ function watchDashboardEvents({url,getToken,onChange,onStatus,isVisible=()=>true
     buffer+=decoder.decode(value,{stream:true});
     let end;while((end=buffer.indexOf('\n\n'))!==-1){
      const event=buffer.slice(0,end);buffer=buffer.slice(end+2);
-     if(/^event: (change|ready)$/m.test(event))onChange();
+     if(/^event: change$/m.test(event)){
+      let payload={};
+      const m=event.match(/^data:\s*(.+)$/m);
+      if(m){try{payload=JSON.parse(m[1]);}catch(_){payload={};}}
+      onChange(payload);
+     } else if(/^event: ready$/m.test(event))onReady?.();
     }
    }
-  }catch(e){if(!stopped&&e.name!=='AbortError'){onStatus('Reconnecting live updates…');onChange();}}
+  }catch(e){if(!stopped&&e.name!=='AbortError'){onStatus('Reconnecting live updates…');}}
   finally{if(!stopped){retry++;timer=setTimeout(connect,Math.min(15000,1000*2**Math.min(retry,4)));}}
  }
  connect();return ()=>{stopped=true;clearTimeout(timer);controller?.abort();};
@@ -689,12 +694,11 @@ async function smvRefreshWorkflowCards(){
  const uid=currentUser?.uid;if(!uid)return;
  if(smvBoardRequest)return smvBoardRequest;
  smvBoardRequest=(async()=>{
-  const data=await renderApi('/admin-data',{method:'GET'});
-  if(!data?.success)throw new Error(data?.error||'Admin data unavailable.');
+  const data=await renderApi('/admin/questions-data',{method:'GET'});
+  if(!data?.success)throw new Error(data?.error||'Admin question data unavailable.');
   if(currentUser?.uid!==uid)return;
   renderAdminWorkflows({data,api:renderApi,refresh:smvRefreshWorkflowCards,lang:"en",escape:escapeHtml,date:smvDateTime});
   smvRenderOpenWorkflowControl(data);
-  smvRenderPrivateConsultAdmin(data);
  })();
  try{return await smvBoardRequest;}finally{smvBoardRequest=null;}
 }
@@ -1058,6 +1062,12 @@ const authReady=new Promise(r=>authReadyResolve=r);
 function waitForAuthReady(){return authReady;}
 // ---------- Astrologer list ----------
 async function loadAstrologers(){ return loadAstroCards(); }
+// V46 strict read-safety: one browser-session cache shared by the public directory
+// and Private Consultation UI. Reviews are fetched only after an explicit user click.
+const smvReviewCache=new Map();
+const smvReviewSummaryCache=new Map();
+window.__smvReviewCache=smvReviewCache;
+window.__smvReviewSummaryCache=smvReviewSummaryCache;
 let smvAstroListRequest=null;
 function loadAstroCards(){
  if(smvAstroListRequest)return smvAstroListRequest;
@@ -1076,14 +1086,23 @@ async function smvLoadAstroCards(){
    return {avg,count:valid.length};
  };
  const getReviews=async a=>{
-   try{
-     const rr=await withTimeout(fetch(RAZORPAY_BACKEND_URL+"/public/astrologers/"+encodeURIComponent(a.id)+"/reviews",{cache:"no-store"}),10000);
-     const rd=await rr.json().catch(()=>({}));if(!rr.ok)throw new Error(rd.error||`Review service returned HTTP ${rr.status}.`);
+   const key=String(a?.id||'').trim();
+   if(!key)return [];
+   if(smvReviewCache.has(key))return smvReviewCache.get(key);
+   const request=(async()=>{
+     const rr=await withTimeout(fetch(RAZORPAY_BACKEND_URL+"/public/astrologers/"+encodeURIComponent(key)+"/reviews",{cache:"no-store"}),10000);
+     const rd=await rr.json().catch(()=>({}));
+     if(!rr.ok)throw new Error(rd.error||`Review service returned HTTP ${rr.status}.`);
      return Array.isArray(rd.reviews)?rd.reviews:[];
-   }catch(apiErr){
-     console.warn('Public review API unavailable; using Firestore fallback:',apiErr);
-     const snap=await withTimeout(getDocs(query(collection(db,'smv_reviews'),where('astrologerId','==',a.id),where('approved','==',true))),10000);
-     return snap.docs.map(d=>({id:d.id,...(d.data()||{})}));
+   })();
+   smvReviewCache.set(key,request);
+   try{
+     const reviews=await request;
+     smvReviewCache.set(key,reviews);
+     return reviews;
+   }catch(err){
+     smvReviewCache.delete(key);
+     throw err;
    }
  };
  const addPrivateRating=(a,summary)=>{
@@ -1105,9 +1124,13 @@ async function smvLoadAstroCards(){
     if(!r.ok) throw new Error(d.error||`Astrologer service returned HTTP ${r.status}.`);
     items=Array.isArray(d.astrologers)?d.astrologers:[];
   } catch(backendErr) {
-    console.warn("Public astrologer backend unavailable; using Firestore fallback:",backendErr);
-    const snap=await withTimeout(getDocs(query(collection(db,"smv_astrologers"),where("status","==","approved"))),12000);
-    items=snap.docs.map(d=>({id:d.id,...(d.data()||{})}));
+    // V47 strict quota rule: backend failure must not trigger a second direct
+    // Firestore query from the browser. Retry is explicit and backend-only.
+    console.warn("Public astrologer backend unavailable; direct Firestore fallback is disabled:",backendErr);
+    box.innerHTML='<div class="empty">Astrologer list is temporarily unavailable. <button type="button" class="btn gray" id="smvRetryAstrologersOnce">RETRY</button></div>';
+    const retry=$("smvRetryAstrologersOnce");
+    if(retry)retry.onclick=()=>loadAstroCards();
+    return;
   }
   if(!items.length){box.innerHTML='<div class="empty">No approved astrologers available yet.</div>';return;}
   box.innerHTML="";
@@ -1132,6 +1155,10 @@ async function smvLoadAstroCards(){
       try{
         const reviews=await ensureReviews();
         reviewBox.innerHTML=reviews.length?reviews.map(r=>`<div class="smv-directory-review"><div class="stars">${ratingStars(r.rating)} <strong>${clampRating(r.rating).toFixed(1)} / 5</strong></div><p>${escapeHtml(r.review||'Verified customer review')}</p><span class="small">${escapeHtml(r.customerName||r.name||'Verified customer')}</span></div>`).join(''):'<div class="empty">No approved reviews for this astrologer yet.</div>';
+        const summary=ratingSummary(reviews);
+        smvReviewSummaryCache.set(String(a.name||'').trim().toLowerCase(),summary);
+        summaryBox.innerHTML=summary.count?`${ratingStars(summary.avg)} <strong>${summary.avg.toFixed(1)} / 5</strong> <span class="smv-rating-count">(${summary.count} review${summary.count===1?'':'s'})</span>`:`<span class="smv-rating-none">No ratings yet</span>`;
+        addPrivateRating(a,summary); // DOM-only sync; never starts a read/API call.
         loaded=true;
       }catch(err){console.error('Directory review load failed:',err);reviewBox.innerHTML='<div class="empty error">Reviews are temporarily unavailable.</div>';}
     };
@@ -1139,6 +1166,19 @@ async function smvLoadAstroCards(){
   });
  }catch(e){console.error("Approved astrologers load failed:",e);box.innerHTML='<div class="empty error">Approved astrologers are temporarily unavailable.</div>';}
 }
+// Private Consultation reuses only already-loaded review summaries. This handler is
+// DOM-only: it never calls Firestore, fetch, renderApi, getDoc/getDocs, or retries.
+document.addEventListener('click',e=>{
+  if(!e.target?.closest?.('#private-consultation,#privateConsultationHomeLink'))return;
+  const host=$('privateConsultationAstrologers'); if(!host)return;
+  host.querySelectorAll('.smv-private-consult-row').forEach(row=>{
+    const name=(row.querySelector('h3')?.textContent||'').trim().toLowerCase();
+    const summary=smvReviewSummaryCache.get(name); if(!summary)return;
+    let el=row.querySelector('.smv-private-rating-summary');
+    if(!el){el=document.createElement('div');el.className='smv-private-rating-summary';const desc=row.querySelector('.smv-private-consult-description');(desc||row.querySelector('.smv-private-consult-head')||row).insertAdjacentElement(desc?'beforebegin':'afterend',el);}
+    el.innerHTML=summary.count?`${ratingStars(summary.avg)} <strong>${summary.avg.toFixed(1)} / 5</strong>`:`<span class="smv-rating-none">No ratings yet</span>`;
+  });
+},false);
 window.__smvReloadAstrologers=loadAstroCards;
 window.dispatchEvent(new Event('smv:app-ready'));
 let smvOfferQuote=null;
@@ -1157,12 +1197,17 @@ function setPromoControlsForQuote(q){
     const input=$("smvPromoCode"); if(input)input.value='';
   }
 }
-async function refreshOfferQuote(showInvalid=false){
-  ensureOfferControls(); if(!currentUser||!questionServicePrice)return null;
+async function refreshOfferQuote(showInvalid=false,allowServerPrice=false){
+  ensureOfferControls(); if(!currentUser||(!questionServicePrice&&!allowServerPrice))return null;
   const code=String($("smvPromoCode")?.value||"").trim();
   try{
     const q=await renderApi("/offers/quote",{method:"POST",body:JSON.stringify({service:"public_question",originalAmount:questionServicePrice,promoCode:code})});
     smvOfferQuote=q; const rate=$("askRate"),msg=$("smvOfferMsg");
+    const authoritativeOriginal=Number(q?.originalAmount||0);
+    if(Number.isFinite(authoritativeOriginal)&&authoritativeOriginal>=1){
+      questionServicePrice=authoritativeOriginal;
+      if($("publicQuestionPrice")) $("publicQuestionPrice").textContent=`₹${questionServicePrice.toFixed(2)}`;
+    }
     setPromoControlsForQuote(q);
     if(q.offerId){if(rate)rate.innerHTML=`<b><s>₹${Number(q.originalAmount).toFixed(2)}</s> ₹${Number(q.finalAmount).toFixed(2)} per Question</b>${q.automatic===true?`<br><span class="small success">Automatic offer applied — no promo code required.</span>`:''}`;if(msg)msg.innerHTML=`<span class="success">${escapeHtml(q.bannerText||q.offerName||'Offer applied')}</span>`;}
     else{if(rate)rate.innerHTML=`<b>₹${Number(q.finalAmount||questionServicePrice).toFixed(2)} per Question</b>`;if(msg)msg.innerHTML=code&&showInvalid?'<span class="error">Promotion code is not valid or not eligible for this account.</span>':'';}
@@ -1225,65 +1270,40 @@ async function refreshPrivateOfferQuote(){
     return q;
   }catch(e){console.warn('Private consultation offer quote refresh skipped:',e);return null;}
 }
-let smvPrivateOfferTimer=0,smvPrivateOfferInFlight=null,smvPrivateOfferLastKey="",smvPrivateOfferLastAt=0;
-function smvSchedulePrivateOfferRefresh(delay=80){
-  clearTimeout(smvPrivateOfferTimer);
-  smvPrivateOfferTimer=setTimeout(()=>{
-    const selected=$("privateConsultationSelected"),summary=$("privateConsultPaymentSummary");
-    const original=smvMoneyFromText((selected?.textContent||'')+' '+(summary?.textContent||''));
-    if(!original)return;
-    const key=String(original);
-    if(smvPrivateOfferInFlight)return;
-    if(key===smvPrivateOfferLastKey && Date.now()-smvPrivateOfferLastAt<15000)return;
-    smvPrivateOfferLastKey=key;smvPrivateOfferLastAt=Date.now();
-    smvPrivateOfferInFlight=refreshPrivateOfferQuote().finally(()=>{smvPrivateOfferInFlight=null;});
-  },delay);
+let smvPrivateOfferInFlight=null,smvPrivateOfferLastKey="",smvPrivateOfferLastAt=0;
+async function smvRefreshPrivateOfferOnce(){
+  const selected=$("privateConsultationSelected"),summary=$("privateConsultPaymentSummary");
+  const original=smvMoneyFromText((selected?.textContent||'')+' '+(summary?.textContent||''));
+  if(!original||smvPrivateOfferInFlight)return;
+  const key=String(original);
+  if(key===smvPrivateOfferLastKey && Date.now()-smvPrivateOfferLastAt<15000)return;
+  smvPrivateOfferLastKey=key;smvPrivateOfferLastAt=Date.now();
+  smvPrivateOfferInFlight=refreshPrivateOfferQuote().finally(()=>{smvPrivateOfferInFlight=null;});
+  return smvPrivateOfferInFlight;
 }
+// V46 strict rule: network work starts only from an explicit user selection/open event.
+// No MutationObserver, subtree watcher, generic section click, change watcher, or retry timer.
 document.addEventListener('click',e=>{
-  if(e.target?.closest?.('#private-consultation,.smv-private-consult-select'))smvSchedulePrivateOfferRefresh();
-},true);
-document.addEventListener('change',e=>{
-  if(e.target?.closest?.('#privateConsultationQuestionCard'))smvSchedulePrivateOfferRefresh();
-},true);
-// V45: No MutationObserver here. Offer UI updates must never recursively request another quote.
+  if(!e.target?.closest?.('.smv-private-consult-select'))return;
+  // The button's own selection handler runs at the target first; this document-level
+  // bubble handler then reads the settled selection and requests exactly one quote.
+  smvRefreshPrivateOfferOnce().catch(()=>{});
+},false);
+window.addEventListener('smv:private-consultation-open',()=>smvRefreshPrivateOfferOnce().catch(()=>{}));
 
-let questionPriceUnsubscribe=null;
+let smvQuestionQuoteInFlight=null;
 async function loadQuestionPrice(){
   const rateBox=$("askRate");
-  if(rateBox) rateBox.innerHTML='<b>Loading current question price...</b>';
-  try{
-    const snap=await withTimeout(getDoc(doc(db,"smv_settings","question")),10000);
-    if(!snap.exists()) throw new Error("Question price document is missing: smv_settings/question");
-    const v=Number(snap.data()?.price);
-    if(!Number.isFinite(v)||v<1) throw new Error("Question price is invalid in smv_settings/question");
-    questionServicePrice=v;
-    if(rateBox) rateBox.innerHTML=`<b>₹${questionServicePrice.toFixed(2)} per Question</b>`;
-    if($("publicQuestionPrice")) $("publicQuestionPrice").textContent=`₹${questionServicePrice.toFixed(2)}`;
-    ensureOfferControls();
-    refreshOfferQuote(false).catch(()=>{});
-  }catch(e){
-    console.error("QUESTION PRICE LOAD ERROR:",e);
-    const adminValue=Number($("questionPrice")?.value);
-    if(Number.isFinite(adminValue)&&adminValue>=1){
-      questionServicePrice=adminValue;
-      if(rateBox) rateBox.innerHTML=`<b>₹${questionServicePrice.toFixed(2)} per Question</b><br><span class="error small">Firebase public price read failed; payment will be rechecked by the server.</span>`;
-    }else{
-      questionServicePrice=0;
-      if(rateBox) rateBox.innerHTML='<b class="error">Question price unavailable. Firebase could not read smv_settings/question.</b>';
-    }
-  }
-  if(!questionPriceUnsubscribe){
-    questionPriceUnsubscribe=onSnapshot(doc(db,"smv_settings","question"),snap=>{
-      const v=Number(snap.data()?.price);
-      if(Number.isFinite(v)&&v>=1){
-        questionServicePrice=v;
-        if($("askRate")) $("askRate").innerHTML=`<b>₹${questionServicePrice.toFixed(2)} per Question</b>`;
-        if($("publicQuestionPrice")) $("publicQuestionPrice").textContent=`₹${questionServicePrice.toFixed(2)}`;
-        refreshOfferQuote(false).catch(()=>{});
-      }
-    },err=>console.warn("QUESTION PRICE LISTENER ERROR:",err));
-  }
+  if(rateBox) rateBox.innerHTML='<b>Checking current question price...</b>';
+  ensureOfferControls();
+  // V47: one Ask/open state -> one server display quote. The server reads the
+  // authoritative smv_settings/question price, so browser getDoc + onSnapshot
+  // cannot create duplicate initial reads/quotes.
+  if(smvQuestionQuoteInFlight)return smvQuestionQuoteInFlight;
+  smvQuestionQuoteInFlight=refreshOfferQuote(false,true).finally(()=>{smvQuestionQuoteInFlight=null;});
+  return smvQuestionQuoteInFlight;
 }
+
 function showAskFlow(a){openQuestionService();}
 // Customer dashboard retry for questions whose payment was not completed.
 // Reuses the existing server-side /create-order endpoint with the SAME questionId,
@@ -1544,7 +1564,7 @@ async function logoutToHome(reason=''){
   if(reason) alert(reason);
 }
 
-async function renderNotifications(targetId){
+async function renderNotifications(targetId,canonical={}){
   const box=$(targetId); if(!box||!currentUser)return;
   const notificationUid=currentUser.uid;
   try{
@@ -1561,20 +1581,15 @@ async function renderNotifications(targetId){
        shows the current approval state even when the old notification
        document is immutable or was created without questionId.
        ================================================================ */
-    let privateNotificationItems=[];
-    try{
-      const pr=await renderApi('/customer/private-consultations?_fresh='+Date.now(),{method:'GET'});
-      if(pr?.success&&Array.isArray(pr.consultations))privateNotificationItems=pr.consultations;
-    }catch(privateNoteErr){console.warn('Private notification reconciliation skipped:',privateNoteErr);}
+    // V48 READ HARDENING: reuse the canonical records already loaded for the
+    // customer dashboard. Notification reconciliation must not re-query the
+    // same questions/private consultations during the same dashboard render.
+    const privateNotificationItems=Array.isArray(canonical.privateConsultations)?canonical.privateConsultations:[];
     const privateById=new Map(privateNotificationItems.map(c=>[String(c.id||c.consultationId||''),c]));
 
-    let questionDocs=[];
-    try{
-      const qs=await withTimeout(getDocs(query(collection(db,'smv_questions'),where('customerId','==',currentUser.uid))),15000);
-      questionDocs=qs.docs.map(d=>({id:d.id,data:d.data()||{}}));
-    }catch(questionErr){
-      console.warn('Customer notification question reconciliation skipped:',questionErr);
-    }
+    const questionDocs=(Array.isArray(canonical.questions)?canonical.questions:[]).map(q=>({
+      id:String(q.questionId||q.id||''),data:q||{}
+    })).filter(item=>item.id);
 
     const questionByPayment=new Map();
     const questionById=new Map();
@@ -1904,9 +1919,231 @@ async function showDashboardPaymentSuccess(){
 
 let smvDashboardDirty=false;
 let smvLiveStop=null,smvLiveQueue=null,smvLiveKey=null;
+let smvLiveDirtyKinds=new Set();
+let smvAdminDirtySignals=[];
+let smvCustomerNotificationCanonical={uid:null,questions:[],privateConsultations:[]};
+let smvRefundReconcileState=new Map();
+function smvStopRefundReconciliation(){
+ for(const state of smvRefundReconcileState.values())if(state?.timer)clearTimeout(state.timer);
+ smvRefundReconcileState.clear();
+}
+function smvScheduleRefundReconciliation(items=[],uid=currentUser?.uid){
+ if(!uid||currentUser?.uid!==uid)return;
+ const pendingIds=new Set((Array.isArray(items)?items:[]).filter(item=>{
+  const st=String(item?.refundStatus||'').toLowerCase();
+  const rejected=['question_rejected','admin_rejected'].includes(String(item?.status||''));
+  return rejected&&item?.refundId&&!item?.refundRrn&&['pending','created','initiated','processing'].includes(st);
+ }).map(item=>String(item.questionId||item.id||'').trim()).filter(Boolean));
+ for(const [id,state] of smvRefundReconcileState){
+  if(state.uid!==uid||!pendingIds.has(id)){if(state.timer)clearTimeout(state.timer);smvRefundReconcileState.delete(id);}
+ }
+ const delays=[20000,40000,80000];
+ for(const id of pendingIds){
+  if(smvRefundReconcileState.has(id))continue;
+  const state={uid,attempt:0,timer:null};
+  const run=async()=>{
+   if(currentUser?.uid!==uid){smvRefundReconcileState.delete(id);return;}
+   try{await withTimeout(renderApi('/customer/sync-refund',{method:'POST',body:JSON.stringify({questionId:id})}),8000);}
+   catch(e){console.warn('Bounded refund reconciliation skipped:',e);}
+   state.attempt++;
+   if(state.attempt>=delays.length){smvRefundReconcileState.delete(id);return;}
+   state.timer=setTimeout(run,delays[state.attempt]);
+  };
+  state.timer=setTimeout(run,delays[0]);
+  smvRefundReconcileState.set(id,state);
+ }
+}
 function smvLiveStatus(text){const el=$('smvLiveStatus');if(el)el.textContent=text;}
 function smvEditing(root){return !!document.querySelector(`#${root} [data-smv-dirty],#${root} input:focus,#${root} textarea:focus,#${root} select:focus,.modal:not(.hidden) input:focus,.modal:not(.hidden) textarea:focus`);}
-function smvStopLive(){smvLiveStop?.();smvLiveQueue?.stop();smvLiveStop=null;smvLiveQueue=null;smvLiveKey=null;}
+function smvStopLive(){smvLiveStop?.();smvLiveQueue?.stop();smvLiveStop=null;smvLiveQueue=null;smvLiveKey=null;smvLiveDirtyKinds.clear();smvAdminDirtySignals=[];}
+function smvRenderAstroOpenQuestionsTarget(items=[]){
+ const host=$('astroOpenQuestions');if(!host)return false;
+ const rows=Array.isArray(items)?items:[];
+ host.innerHTML=`<h3>Open Questions</h3><p class="small">Paid questions available for you to claim are shown here. When Admin Allow is ON, the same open questions are visible to all approved astrologers until one astrologer claims them.</p>${rows.length?rows.slice(0,50).map(q=>`<div class="card smv-astro-open-question" style="margin:10px 0"><div class="smv-astro-question-text">${escapeHtml(q.question||'Question')}</div><div class="small"><b>Birth Details:</b> ${escapeHtml(q.birthName||q.birthDetails?.name||'')} · ${escapeHtml(q.birthDate||q.birthDetails?.birthDate||'')} · ${escapeHtml(q.birthTime||q.birthDetails?.birthTime||'')} · ${escapeHtml(q.birthPlace||q.birthDetails?.birthPlace||'')} · ${escapeHtml(q.birthGender||q.birthDetails?.birthGender||'')}</div><div class="small"><b>Question ID:</b> ${escapeHtml(q.id||q.questionId||'')} · <b>Date & Time:</b> ${escapeHtml(smvDateTime(q.createdAt||q.paymentRecordedAt||q.updatedAt))}</div><div class="small"><b>Question Price:</b> ₹${Number(q.astrologerCommissionAmount||0).toFixed(2)}</div><button class="btn" data-claim-question="${escapeHtml(q.id||q.questionId||'')}">CLAIM & ANSWER</button></div>`).join(''):'<div class="empty">No paid public questions are available right now.</div>'}`;
+ host.querySelectorAll('[data-claim-question]').forEach(b=>b.onclick=async()=>{
+  const questionId=b.dataset.claimQuestion;if(!questionId||!currentUser)return;
+  b.disabled=true;b.textContent='CLAIMING...';
+  try{const r=await renderApi('/astrologer/claim-question',{method:'POST',body:JSON.stringify({questionId})});if(!r?.success)throw new Error(r?.error||'Unable to claim this question.');await loadDashboard('astrologer',true);}
+  catch(e){alert(e.message||String(e));b.disabled=false;b.textContent='CLAIM & ANSWER';}
+ });
+ return true;
+}
+async function smvRefreshAstroOpenQuestionsTarget(){
+ const r=await withTimeout(renderApi('/astrologer/open-questions',{method:'GET'}),12000);
+ if(!r?.success)throw new Error(r?.error||'Open questions unavailable.');
+ smvRenderAstroOpenQuestionsTarget(Array.isArray(r.questions)?r.questions:[]);
+}
+async function smvRefreshAstroWithdrawalsTarget(uid){
+ const host=$('astroWithdrawalHistory'),summary=$('astroEarningsSummary');if(!host||!summary)return false;
+ const snap=await withTimeout(getDocs(query(collection(db,'smv_withdrawals'),where('astrologerId','==',uid))),12000);
+ const docs=snap.docs||[];let reserved=0,total=0,latest=null;
+ for(const d of docs){const w=d.data()||{},st=String(w.status||'pending').toLowerCase(),amount=Number(w.amount||0);if(['pending','processing','paid'].includes(st)){reserved+=amount;total+=amount;const raw=w.createdAt||w.requestedAt||w.paidAt||null,ms=raw?.toMillis?raw.toMillis():(raw instanceof Date?raw.getTime():Number(raw||0));if(ms&&(!latest||ms>latest))latest=ms;}}
+ const totalEarnings=Number(summary.dataset.totalEarnings||0),available=Math.max(0,Math.round((totalEarnings-reserved)*100)/100),cooldown=!!latest&&(Date.now()-latest<7*24*60*60*1000),eligible=available>=300&&!cooldown;
+ const totalEl=$('astroTotalWithdrawals'),availEl=$('astroAvailableWithdraw');if(totalEl)totalEl.textContent='₹'+total.toFixed(2);if(availEl)availEl.textContent='₹'+available.toFixed(2);
+ const state=$('astroWithdrawState');if(state)state.innerHTML=cooldown?`<p class="smv-withdraw-locked"><b>🔒 Withdrawal locked for 7 days after the last withdrawal request.</b><br><span class="small">Available again: ${escapeHtml(smvDateTime(new Date(latest+7*24*60*60*1000)))}</span></p><button class="btn smv-withdraw-btn is-red" id="withdrawBtn" disabled>WITHDRAW</button>`:eligible?'<p class="smv-withdraw-ready"><b>✓ You can withdraw</b></p><button class="btn smv-withdraw-btn is-green" id="withdrawBtn">WITHDRAW</button>':'<p class="smv-withdraw-locked"><b>Reach ₹300 to request a withdrawal.</b></p><button class="btn smv-withdraw-btn is-red" id="withdrawBtn" disabled>WITHDRAW</button>';
+ host.innerHTML=`<div class="withdrawal-history-title">Withdrawal History</div>${docs.length?docs.slice().sort((a,b)=>Number(b.data().createdAt?.seconds||0)-Number(a.data().createdAt?.seconds||0)).slice(0,20).map(d=>{const w=d.data()||{},st=String(w.status||'pending').toLowerCase(),cls=st==='paid'?'success':st==='rejected'?'error':'small',label=st==='paid'?'Paid':st==='processing'?'Processing':st==='rejected'?'Rejected':'Pending';return `<div class="smv-history-row smv-withdrawal-row" style="padding:10px 0;border-bottom:1px solid #eee"><div class="smv-history-amount"><b>₹${Number(w.amount||0).toFixed(2)}</b> · <span class="${cls}">${label}</span></div><div class="smv-history-detail"><b>Withdrawal ID:</b> ${escapeHtml(w.withdrawalId||'—')}</div>${st==='paid'&&/^SMV-PMT-/.test(String(w.adminPaymentId||''))?'<div class="small"><b>Admin Payment ID:</b> '+escapeHtml(w.adminPaymentId)+'</div>':''}<div class="small"><b>Requested:</b> ${escapeHtml(smvDateTime(w.createdAt||w.requestedAt))}${st==='paid'&&w.paidAt?'<br><b>Paid Date & Time:</b> '+escapeHtml(smvDateTime(w.paidAt)):''}</div></div>`}).join(''):'<div class="small">No withdrawal requests yet.</div>'}`;
+ // The withdrawal button's original click handler is installed during canonical render.
+ // If its enabled/disabled state changed, keep correctness by asking for one explicit user refresh before action.
+ const wb=$('withdrawBtn');if(wb&&!wb.disabled)wb.onclick=()=>loadDashboard('astrologer',true);
+ return true;
+}
+
+function smvAstroQuestionQueueHtml(questionDocs=[]){
+ const docs=Array.isArray(questionDocs)?questionDocs:[];
+ const rows=docs.filter(d=>{const q=d.data()||{};return q.astrologerId===currentUser?.uid&&((String(q.status||'')==='admin_approved'&&String(q.allocationStatus||'')==='claimed_by_astrologer')||['revision_required','processing','admin_review'].includes(String(q.status||'')));});
+ return `<h3>Questions — Unanswered Queue</h3><p class="small">Claimed questions waiting for your answer are kept here. Claiming another question will not hide previous questions.</p>${rows.length?rows.map(d=>{const q=d.data()||{},minWords=Number(q.answerMinWords||150),birthName=q.birthName||q.birthDetails?.name||'',birthDate=q.birthDate||q.birthDetails?.birthDate||'',birthTime=q.birthTime||q.birthDetails?.birthTime||'',birthPlace=q.birthPlace||q.birthDetails?.birthPlace||'',birthGender=q.birthGender||q.birthDetails?.birthGender||'',questionPrice=Number(q.astrologerCommissionAmount||0),revision=q.status==='revision_required',waiting=q.status==='processing'||q.status==='admin_review',badge=waiting?'WAITING FOR ADMIN APPROVAL':(revision?'REVISION REQUIRED':'UNANSWERED'),buttonLabel=waiting?'EDIT & RESUBMIT':(revision?'RESUBMIT FOR ADMIN APPROVAL':'SUBMIT FOR ADMIN APPROVAL');return `<div class="card astro-question-item ${waiting?'pending-approval':''}" style="margin:10px 0" data-question-card="${escapeHtml(d.id)}"><div class="badge">${badge}</div>${waiting?'<div class="small pending-note" style="margin-top:6px">Your answer remains here and can be edited until Admin approval.</div>':''}<div class="smv-astro-question-text" style="margin-top:8px">${escapeHtml(q.question||'Question')}</div><div class="small"><b>Birth Details:</b> ${escapeHtml(birthName)} · ${escapeHtml(birthDate)} · ${escapeHtml(birthTime)} · ${escapeHtml(birthPlace)} · ${escapeHtml(birthGender)}</div><div class="small"><b>Question ID:</b> ${escapeHtml(d.id)} · <b>Date & Time:</b> ${escapeHtml(smvDateTime(q.updatedAt||q.adminQuestionApprovedAt||q.createdAt))} · <b>Question Price:</b> ₹${questionPrice.toFixed(2)} · <b>Minimum:</b> ${minWords} words</div><textarea id="ans_${d.id}" data-answer-protected="true" placeholder="${revision?'Revise with':'Write'} at least ${minWords} words...">${escapeHtml(q.answer||'')}</textarea><div class="small" id="count_${d.id}">${q.answer?Number(String(q.answer).trim().split(/\s+/).filter(Boolean).length):0} / ${minWords} words</div><button class="btn" data-answer="${d.id}">${buttonLabel}</button></div>`;}).join(''):'<div class="empty">No unanswered questions waiting.</div>'}`;
+}
+function smvAstroAnsweredHtml(questionDocs=[]){
+ const docs=Array.isArray(questionDocs)?questionDocs:[];
+ const rows=docs.filter(d=>{const q=d.data()||{};return q.astrologerId===currentUser?.uid&&!!q.answer&&['admin_review','answered'].includes(String(q.status||''));});
+ return `<h3>Answers — Answered Questions</h3><p class="small">Submitted answers stay here and are marked with their current approval status.</p>${rows.length?rows.map(d=>{const q=d.data()||{},status=q.status==='answered'?'ANSWERED':'SUBMITTED — WAITING FOR ADMIN APPROVAL',canEdit=q.status==='answered'&&q.adminApprovalBypassed===true&&!q.customerAnswerViewedAt,birthName=q.birthName||q.birthDetails?.name||'',birthDate=q.birthDate||q.birthDetails?.birthDate||'',birthTime=q.birthTime||q.birthDetails?.birthTime||'',birthPlace=q.birthPlace||q.birthDetails?.birthPlace||'',birthGender=q.birthGender||q.birthDetails?.birthGender||'';return `<div class="card astro-answer-item" style="margin:10px 0"><div class="badge">${status}</div><div class="smv-astro-question-text" style="margin-top:8px">${escapeHtml(q.question||'Question')}</div><div class="small"><b>Birth Details:</b> ${escapeHtml(birthName)} · ${escapeHtml(birthDate)} · ${escapeHtml(birthTime)} · ${escapeHtml(birthPlace)} · ${escapeHtml(birthGender)}</div><div class="small"><b>Question ID:</b> ${escapeHtml(d.id)} · <b>Date & Time:</b> ${escapeHtml(smvDateTime(q.answerApprovedAt||q.updatedAt||q.answerSubmittedAt||q.createdAt))}</div><div class="smv-astro-answer-text" style="margin-top:10px;white-space:pre-wrap;line-height:1.65">${escapeHtml(q.answer||'')}</div><div class="small" style="margin-top:8px"><b>Status:</b> ${escapeHtml(status)}</div>${canEdit?`<button class="btn gray" data-edit-final-answer="${escapeHtml(d.id)}" type="button">EDIT ANSWER</button>`:''}</div>`;}).join(''):'<div class="empty">No answered questions yet.</div>'}`;
+}
+function smvBindAstroTargetQuestionHandlers(questionDocs=[]){
+ const docs=Array.isArray(questionDocs)?questionDocs:[];
+ document.querySelectorAll('#astroAnsweredBox [data-edit-final-answer]').forEach(b=>b.onclick=async()=>{const questionId=b.dataset.editFinalAnswer;b.disabled=true;b.textContent='OPENING...';try{const r=await renderApi('/astrologer/edit-answer',{method:'POST',body:JSON.stringify({questionId})});if(!r?.success)throw new Error(r?.error||'Unable to edit this answer.');await smvRefreshAstroQuestionsTarget(currentUser.uid);requestAnimationFrame(()=>setTimeout(()=>{const ta=$('ans_'+questionId);(ta||$('astroQuestionQueue'))?.scrollIntoView({behavior:'smooth',block:'center'});ta?.focus();},100));}catch(e){alert(e.message||String(e));b.disabled=false;b.textContent='EDIT ANSWER';}});
+ document.querySelectorAll('#astroQuestionQueue [data-answer]').forEach(b=>{const questionId=b.dataset.answer,textarea=$('ans_'+questionId);b.onclick=async()=>{const answer=textarea?.value.trim();if(!answer){alert('Please write an answer.');return;}b.disabled=true;b.textContent='SUBMITTING...';try{const questionRef=doc(db,'smv_questions',questionId),snap=await withTimeout(getDoc(questionRef),15000);if(!snap.exists())throw new Error('Question not found.');const q=snap.data();if(!currentUser)throw new Error('Please login again.');if(q.astrologerId!==currentUser.uid)throw new Error('This question is not assigned to you.');if(!['admin_approved','revision_required','processing','admin_review'].includes(String(q.status||'')))throw new Error('This answer can no longer be edited.');const minWords=Number(q.answerMinWords||150),wordCount=answer.split(/\s+/).filter(Boolean).length;if(wordCount<minWords)throw new Error(`Please write at least ${minWords} words.`);const result=await renderApi('/submit-answer',{method:'POST',body:JSON.stringify({questionId,answer})});if(!result?.ok)throw new Error(result?.error||'Unable to submit answer.');try{const latestSnap=await withTimeout(getDoc(questionRef),15000),latestQ=latestSnap.exists()?(latestSnap.data()||{}):q,customerId=String(latestQ.customerId||q.customerId||'').trim();if(customerId){const astroName=String(latestQ.astrologerName||q.astrologerName||'Astrologer'),answerSubmittedAt=latestQ.answerSubmittedAt||latestQ.updatedAt||serverTimestamp();await setDoc(doc(db,'smv_notifications',customerId+'_answer_submitted_'+questionId),{userId:customerId,type:'astrologer_answer_submitted',title:'Astrologer Answer Submitted',message:'Astro '+astroName.replace(/^Astro\s+/i,'')+' has submitted an answer to your question. It is now waiting for Admin approval.',questionId,customerPaymentId:latestQ.customerPaymentId||q.customerPaymentId||'',astrologerId:latestQ.astrologerId||q.astrologerId||'',astrologerName:astroName,createdAt:answerSubmittedAt,updatedAt:serverTimestamp(),read:false},{merge:true});}}catch(customerNotificationError){console.warn('Customer answer-submitted notification write skipped:',customerNotificationError);}alert('Answer submitted successfully, Waiting for Approval');await smvRefreshAstroQuestionsTarget(currentUser.uid);requestAnimationFrame(()=>setTimeout(()=>$('astroAnsweredBox')?.scrollIntoView({behavior:'smooth',block:'start'}),120));}catch(e){console.error('Answer submission error:',e);alert(e.message||String(e));b.disabled=false;b.textContent='EDIT & RESUBMIT';}};});
+ document.querySelectorAll('#astroQuestionQueue [id^="ans_"]').forEach(t=>{const id=t.id.slice(4),btn=document.querySelector(`#astroQuestionQueue [data-answer="${id}"]`),counter=$('count_'+id),q=docs.find(x=>x.id===id)?.data()||{},min=Number(q.answerMinWords||150),updateCount=()=>{const n=t.value.trim()?t.value.trim().split(/\s+/).filter(Boolean).length:0;if(counter)counter.textContent=`${n} / ${min} words`;if(btn)btn.disabled=n<min;};t.addEventListener('input',updateCount);updateCount();});
+}
+async function smvRefreshAstroQuestionsTarget(uid){
+ const queue=$('astroQuestionQueue'),answered=$('astroAnsweredBox');if(!queue||!answered)return false;
+ const ep=await withTimeout(renderApi('/astrologer/earnings',{method:'GET'}),12000);if(!ep?.success)throw new Error(ep?.error||'Astrologer question data unavailable.');
+ const own=Array.isArray(ep.questions)?ep.questions:[],docs=own.map(q=>({id:String(q.id||q.questionId||''),data:()=>q})).filter(d=>d.id);
+ queue.innerHTML=smvAstroQuestionQueueHtml(docs);answered.innerHTML=smvAstroAnsweredHtml(docs);smvBindAstroTargetQuestionHandlers(docs);
+ const summary=$('astroEarningsSummary');if(summary){summary.dataset.totalEarnings=String(Number(ep.totalEarnings||0));const total=summary.querySelector('.smv-earnings-total');if(total){total.textContent='₹'+Number(ep.totalEarnings||0).toFixed(2);total.classList.toggle('is-green',Number(ep.totalEarnings||0)>=300);}}
+ const ledger=$('astroEarningsLedger');if(ledger)ledger.innerHTML=Array.isArray(ep.ledger)&&ep.ledger.length?ep.ledger.slice(0,50).map(x=>`<div class="smv-history-row" style="padding:10px 0;border-bottom:1px solid #eee"><div class="smv-history-amount"><b>₹${Number(x.commission||0).toFixed(2)}</b> · <span class="success">Earning Credited</span></div><div class="smv-history-content">${escapeHtml(x.question||'Consultation')}</div><div class="smv-history-detail"><b>Date & Time:</b> ${escapeHtml(smvDateTime(x.date))}</div><div class="smv-history-detail"><b>Question ID:</b> ${escapeHtml(x.id||'')}</div></div>`).join(''):'<div class="empty">No credited earnings yet.</div>';
+ await smvRefreshAstroWithdrawalsTarget(uid);
+ return true;
+}
+function smvAdminSignalCategory(path=''){
+ const p=String(path||'');
+ if(p.startsWith('/admin/offers/'))return 'offers';
+ if(p.includes('/private-consultation/'))return 'private_consultations';
+ if(p.includes('/withdrawal')||p.includes('/payout'))return 'withdrawals_payouts';
+ if(p.includes('/review'))return 'reviews';
+ if(p.includes('/astrologer-quiz/')||p.includes('/astrologer-auto-approval/'))return 'astrologer_settings';
+ if(p.includes('/set-open-workflow')||p.includes('/set-commission')||p.includes('/set-word-count')||p.includes('/set-workflow'))return 'settings';
+ if(p.includes('/approve-question')||p.includes('/reallocate-question')||p.includes('/reject-question')||p.includes('/retry-refund')||p.includes('/sync-refund')||p.includes('/edit-question')||p.includes('/takeover-answer')||p.includes('/approve-answer')||p.includes('/reject-answer')||p.includes('/submit-answer')||p.includes('/mark-answer-viewed'))return 'questions';
+ if(p.includes('/register-astrologer-profile')||p.includes('/google-form/astrologer-qualification'))return 'astrologers';
+ if(p.includes('/verify-payment')||p.includes('/recover-payment')||p.includes('/razorpay/webhook')||p.includes('/credit-commission'))return 'financial';
+ return 'unknown';
+}
+
+async function smvRefreshAdminReviewsTargeted(){
+ const host=$('adminReviews'); if(!host)return;
+ const snap=await withTimeout(getDocs(collection(db,'smv_reviews')),12000);
+ const docs=snap.docs.slice(-50).reverse();
+ host.innerHTML=docs.length?docs.map(d=>{
+  const r=d.data()||{};
+  return `<div style="padding:10px;border-bottom:1px solid #eee"><div>⭐ <b>${Number(r.rating||0)}/5</b></div><div style="margin-top:5px">${escapeHtml(r.review||'')}</div><div class="small" style="margin-top:5px">Verified customer · Astrologer: ${escapeHtml(r.astrologerId||'')} · Status: <b>${r.approved===true?'Approved':'Pending'}</b></div><div class="action-row"><button class="btn" data-review-edit="${d.id}">EDIT REVIEW</button>${r.approved===true?'':`<button class="btn" data-review-approve="${d.id}">APPROVE REVIEW</button><button class="btn gray" data-review-reject="${d.id}">REJECT REVIEW</button>`}</div></div>`;
+ }).join(''):'<div class="empty">No reviews yet.</div>';
+ host.querySelectorAll('[data-review-approve]').forEach(b=>b.onclick=async()=>{
+  b.disabled=true; try{
+   await withTimeout(updateDoc(doc(db,'smv_reviews',b.dataset.reviewApprove),{approved:true,status:'approved',approvedAt:serverTimestamp(),approvedBy:currentUser.uid}),15000);
+   await smvRefreshAdminReviewsTargeted();
+  }catch(e){alert(e.message||String(e));b.disabled=false;}
+ });
+ host.querySelectorAll('[data-review-reject]').forEach(b=>b.onclick=async()=>{
+  const ok=await smvConfirm('Reject Customer Review','This review will be permanently deleted.\n\nChoose Reject & Delete to continue.','REJECT & DELETE','CANCEL',true);
+  if(!ok)return; b.disabled=true;
+  try{await withTimeout(deleteDoc(doc(db,'smv_reviews',b.dataset.reviewReject)),15000);smvNotice('Review Deleted','The customer review was rejected and deleted successfully.','✓');await smvRefreshAdminReviewsTargeted();}
+  catch(e){smvNotice('Unable to Reject Review',e.message||String(e),'!');b.disabled=false;}
+ });
+ host.querySelectorAll('[data-review-edit]').forEach(b=>b.onclick=async()=>{
+  try{
+   const ref=doc(db,'smv_reviews',b.dataset.reviewEdit),rs=await withTimeout(getDoc(ref),15000);
+   if(!rs.exists())throw new Error('Review not found.'); const r=rs.data()||{};
+   openModal(`<h2>Edit Customer Review</h2><label>Rating</label><select id="editReviewRating">${[5,4,3,2,1].map(n=>`<option value="${n}" ${Number(r.rating)===n?'selected':''}>${'★'.repeat(n)}${'☆'.repeat(5-n)} — ${n}</option>`).join('')}</select><label style="display:block;margin-top:10px">Review</label><textarea id="editReviewText" style="width:100%;min-height:120px">${escapeHtml(r.review||'')}</textarea><button class="btn" id="saveEditedReview" style="margin-top:10px">SAVE CHANGES</button><div id="editReviewMsg" class="small" style="margin-top:8px"></div>`);
+   $('saveEditedReview').onclick=async()=>{const btn=$('saveEditedReview'),msg=$('editReviewMsg'),rating=Number($('editReviewRating').value),review=$('editReviewText').value.trim();if(!review){msg.innerHTML='<span class="error">Review cannot be empty.</span>';return;}btn.disabled=true;try{await withTimeout(updateDoc(ref,{rating,review,updatedAt:serverTimestamp(),updatedBy:currentUser.uid}),15000);closeModal();await smvRefreshAdminReviewsTargeted();}catch(e){msg.innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';btn.disabled=false;}};
+  }catch(e){alert(e.message||String(e));}
+ });
+}
+
+
+let smvAdminSettingsRequest=null;
+async function smvRefreshAdminSettingsTargeted(){
+ if(smvAdminSettingsRequest)return smvAdminSettingsRequest;
+ smvAdminSettingsRequest=(async()=>{
+  const data=await renderApi('/admin/settings-data',{method:'GET'});
+  if(!data?.success)throw new Error(data?.error||'Admin settings data unavailable.');
+  const settings=data.settings||{};
+  // Reuse the existing controls; do not rebuild unrelated Admin sections.
+  const commission=Number(settings.commission?.percent ?? settings.commission?.astrologerPercent ?? 20);
+  const qPrice=Number(settings.question?.price ?? settings.question?.amount ?? 0);
+  const privateCommission=Number(settings.privateCommission?.percent ?? settings.privateCommission?.astrologerPercent ?? 20);
+  const setValue=(id,val)=>{const el=$(id);if(el&&document.activeElement!==el)el.value=String(val??'');};
+  setValue('commissionPercent',commission);
+  setValue('questionPrice',qPrice);
+  setValue('privateCommissionPercent',privateCommission);
+  smvRenderOpenWorkflowControl({settings});
+  if(typeof smvRenderPrivateWorkflowControl==='function')smvRenderPrivateWorkflowControl({settings});
+  if(typeof smvRenderAutoApprovalControl==='function')smvRenderAutoApprovalControl({settings});
+ })();
+ try{return await smvAdminSettingsRequest;}finally{smvAdminSettingsRequest=null;}
+}
+
+
+let smvAdminPrivateConsultRequest=null;
+async function smvRefreshAdminPrivateConsultationsTargeted(){
+ if(smvAdminPrivateConsultRequest)return smvAdminPrivateConsultRequest;
+ smvAdminPrivateConsultRequest=(async()=>{
+  const data=await renderApi('/admin/private-consultations-data',{method:'GET'});
+  if(!data?.success)throw new Error(data?.error||'Admin private consultation data unavailable.');
+  // Existing renderer owns all private-consultation buttons/status handlers.
+  smvRenderPrivateConsultAdmin(data);
+ })();
+ try{return await smvAdminPrivateConsultRequest;}finally{smvAdminPrivateConsultRequest=null;}
+}
+
+async function smvRunAdminTargetedSignals(){
+ const signals=smvAdminDirtySignals.splice(0);
+ const categories=new Set(signals.map(x=>String(x.category||smvAdminSignalCategory(x.path))));
+ if(!categories.size)categories.add('unknown');
+ const supported=new Set(['offers','reviews','questions','astrologers','withdrawals_payouts','settings','astrologer_settings','private_consultations']);
+ if([...categories].every(c=>supported.has(c))){
+  if(categories.has('offers'))await renderAdminOffers();
+  if(categories.has('reviews'))await smvRefreshAdminReviewsTargeted();
+  if(categories.has('questions'))await smvRefreshWorkflowCards();
+  if(categories.has('astrologers'))await smvRefreshAdminAstrologersTargeted();
+  if(categories.has('withdrawals_payouts'))await smvRefreshAdminWithdrawalsTargeted();
+  if(categories.has('settings')||categories.has('astrologer_settings'))await smvRefreshAdminSettingsTargeted();
+  if(categories.has('private_consultations'))await smvRefreshAdminPrivateConsultationsTargeted();
+  smvLiveStatus('Admin targeted sections updated just now');
+  return true;
+ }
+ return false;
+}
+
+async function smvRunTargetedLiveRefresh(role,uid){
+ const kinds=[...smvLiveDirtyKinds];smvLiveDirtyKinds.clear();
+ // Notifications are independent of the main dashboard. Refresh only that
+ // section and reuse V49 canonical customer data; do not reload consultations,
+ // questions, earnings, withdrawals or Admin data for a notification-only event.
+ if(kinds.length===1&&kinds[0]==='notifications'){
+  const canonical=(role==='customer'&&smvCustomerNotificationCanonical.uid===uid)?smvCustomerNotificationCanonical:{};
+  await renderNotifications('userNotifications',canonical);
+  smvLiveStatus('Updated just now');
+  return;
+ }
+ if(role==='astrologer'&&kinds.length&&kinds.every(k=>['questions','withdrawals','open_questions','workflow','notifications'].includes(k))){
+  const hasQuestions=kinds.includes('questions');
+  if(hasQuestions)await smvRefreshAstroQuestionsTarget(uid);
+  else if(kinds.includes('withdrawals'))await smvRefreshAstroWithdrawalsTarget(uid);
+  if(kinds.includes('open_questions')||kinds.includes('workflow'))await smvRefreshAstroOpenQuestionsTarget();
+  if(kinds.includes('notifications'))await renderNotifications('userNotifications',{});
+  smvLiveStatus('Astrologer dashboard sections updated just now');return;
+ }
+ // All normal Astrologer SSE datasets above are section-targeted. Profile/role
+ // changes intentionally fall through to one canonical refresh because they can
+ // change approval, permissions and listener topology.
+ // Profile/role, question and Admin signals
+ // affect multiple rendered sections. Keep one coalesced canonical refresh for
+ // those dependencies rather than risking partial/stale financial/workflow UI.
+ if(role==='admin'&&kinds.includes('admin_signal')){
+  if(await smvRunAdminTargetedSignals())return;
+ }
+ smvProfiles.delete(uid);
+ if(role==='admin')await loadAdminPanel(true);else await loadDashboard(role,true,true);
+}
 function smvStartLive(role){
  const uid=currentUser?.uid,key=uid+':'+role;if(!uid||key===smvLiveKey)return;
  smvStopLive();smvLiveKey=key;
@@ -1915,15 +2152,13 @@ function smvStartLive(role){
   canRun:()=>currentUser?.uid===uid&&!document.hidden&&!$(root)?.classList.contains('hidden')&&!smvEditing(root),
   onPending:()=>{if(currentUser?.uid===uid&&smvEditing(root))smvLiveStatus('New activity ready — finish your edit, then Refresh.');},
   onError:()=>smvLiveStatus('Could not update. Your previous information is still shown.'),
-  run:async()=>{
-   smvProfiles.delete(uid);
-   if(role==='admin')await loadAdminPanel(true);else await loadDashboard(role,true,true);
-  }
+  run:async()=>{await smvRunTargetedLiveRefresh(role,uid);}
  });
  smvLiveStop=watchDashboardEvents({url:BACKEND+'/dashboard/events',
   getToken:()=>{if(auth?.currentUser?.uid!==uid)throw new Error('Session changed');return auth.currentUser.getIdToken();},
   isVisible:()=>!document.hidden&&currentUser?.uid===uid,
-  onChange:()=>{if(currentUser?.uid!==uid)return;smvDashboardDirty=true;dashboardReadyAt=0;smvLiveQueue?.request();},
+  onChange:(payload={})=>{if(currentUser?.uid!==uid)return;const kinds=Array.isArray(payload.kinds)&&payload.kinds.length?payload.kinds:['dashboard'];for(const kind of kinds)smvLiveDirtyKinds.add(String(kind||'dashboard'));if(role==='admin'&&kinds.includes('admin_signal'))smvAdminDirtySignals.push({path:String(payload.path||''),category:String(payload.category||'')});smvDashboardDirty=true;dashboardReadyAt=0;smvLiveQueue?.request();},
+  onReady:()=>{if(currentUser?.uid===uid)smvLiveStatus('Live updates connected');},
   onStatus:smvLiveStatus
  });
 }
@@ -1936,7 +2171,7 @@ window.__smvRefreshDashboard=()=>{
 };
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)smvLiveQueue?.resume();});
 document.addEventListener('focusout',()=>setTimeout(()=>smvLiveQueue?.resume(),0));
-window.addEventListener('smv:logged-out',()=>{smvStopLive();dashboardReadyUid=null;dashboardReadyRole=null;dashboardReadyAt=0;smvProfiles.clear();});
+window.addEventListener('smv:logged-out',()=>{smvStopLive();smvStopRefundReconciliation();dashboardReadyUid=null;dashboardReadyRole=null;dashboardReadyAt=0;smvProfiles.clear();});
 async function loadDashboard(expectedRole=null,force=false,background=false){
  const box=$('dashboardContent');
  if(!currentUser){ if(box) box.innerHTML='<div class="card">Please login to continue.</div>'; return; }
@@ -1978,6 +2213,7 @@ async function loadDashboard(expectedRole=null,force=false,background=false){
    let preloadedAstro={};
    if(!expectedRole && role!=='astrologer'){try{const a0=await withTimeout(getDoc(doc(db,'smv_astrologers',loadUid)),10000);if(!active()) return;if(a0.exists()){preloadedAstro=a0.data()||{};role='astrologer';}}catch(_e){}}
    if(role!=='customer' && role!=='astrologer') role='customer';
+   let notificationCanonical={};
    if(!active()) return;
    // Keep one stable dashboard heading during loading and after role resolution.
    // The role is already shown by the role badge/content; changing the heading
@@ -2064,28 +2300,32 @@ const userStatus=String(
   dashboardReadyUid=loadUid;dashboardReadyRole=role;dashboardReadyAt=Date.now();smvWatchQuestions(role);
   return;
 }
+   // V49 READ HARDENING: /astrologer/earnings already reads the astrologer's
+   // own questions for the canonical/legacy earnings ledger. Reuse those same
+   // records for dashboard rendering instead of issuing an identical client
+   // Firestore getDocs(astrologerId == uid) query.
    const astroReads=await Promise.allSettled([
-    withTimeout(getDocs(query(collection(db,'smv_questions'),where('astrologerId','==',loadUid))),12000),
     withTimeout(renderApi('/astrologer/open-questions',{method:'GET'}),12000),
     renderApi('/astrologer/earnings',{method:'GET'}),
     withTimeout(getDocs(query(collection(db,'smv_withdrawals'),where('astrologerId','==',loadUid))),12000)
    ]);
    if(!active())return;
    const readAstro=i=>{if(astroReads[i].status==='rejected')throw astroReads[i].reason;return astroReads[i].value;};
-   let inboxSnap={docs:[]}, qs={docs:[]};
+   let qs={docs:[]};
+   let earningsResult=null;
    try{
-     inboxSnap=readAstro(0);
-   }catch(e){ console.warn('Astrologer available-questions query skipped:',e); }
-   let availableQuestions=inboxSnap.docs.filter(d=>{const q=d.data()||{};return q.astrologerId===currentUser.uid&&!!q.adminQuestionApprovedAt&&['assigned_to_astrologer','available_to_astrologers','reallocated'].includes(String(q.allocationStatus||''))&&['admin_approved','paid'].includes(String(q.status||''));}).map(d=>({id:d.id,...d.data()}));
+     earningsResult=readAstro(1);
+     const ownQuestions=Array.isArray(earningsResult?.questions)?earningsResult.questions:[];
+     qs={docs:ownQuestions.map(q=>({id:String(q.id||q.questionId||''),data:()=>q})).filter(d=>d.id)};
+   }catch(e){ console.warn('Astrologer own questions from earnings endpoint unavailable:',e); }
+   let availableQuestions=qs.docs.filter(d=>{const q=d.data()||{};return q.astrologerId===currentUser.uid&&!!q.adminQuestionApprovedAt&&['assigned_to_astrologer','available_to_astrologers','reallocated'].includes(String(q.allocationStatus||''))&&['admin_approved','paid'].includes(String(q.status||''));}).map(d=>({id:d.id,...d.data()}));
    try{
-     const openResult=readAstro(1);
+     const openResult=readAstro(0);
      if(openResult?.success && Array.isArray(openResult.questions) && openResult.questions.length){
        const seen=new Set(availableQuestions.map(q=>String(q.id||q.questionId||'')));
        for(const q of openResult.questions){const id=String(q.id||q.questionId||'');if(id&&!seen.has(id)){availableQuestions.push(q);seen.add(id);}}
      }
    }catch(e){console.warn('Open questions load skipped:',e);}
-
-   qs=inboxSnap;
    const activeQuestions=qs.docs.filter(d=>['paid','admin_review','answer_draft','revision_required'].includes(d.data().status));
    const approved=ad.status==='approved';
   // Canonical earnings ledger comes from the trusted Render backend. This
@@ -2094,7 +2334,7 @@ const userStatus=String(
   let totalEarnings = 0;
   let ledger = [];
   try {
-    const epRemote = readAstro(2);
+    const epRemote = earningsResult || readAstro(1);
     totalEarnings = Number(epRemote?.totalEarnings || 0);
     ledger = Array.isArray(epRemote?.ledger) ? epRemote.ledger : [];
   } catch (earningsErr) {
@@ -2112,7 +2352,7 @@ const userStatus=String(
 
   let withdrawalSnap={docs:[]};
   try{
-   withdrawalSnap = readAstro(3);
+   withdrawalSnap = readAstro(2);
   }catch(e){ console.warn('Astrologer withdrawals query skipped:',e); }
 
   let reservedWithdrawals = 0;
@@ -2163,7 +2403,7 @@ const userStatus=String(
 ${ad.status === 'rejected' && ad.rejectionReason
   ? `<p class="error"><b>Rejection Reason:</b> ${escapeHtml(ad.rejectionReason)}</p>`
   : ''}</div>
-    <div class="card"><h3>Total Earnings</h3><p style="font-size:28px"><span class="smv-earnings-total ${Number(ep.totalEarnings||0)>=300?'is-green':''}">₹${Number(ep.totalEarnings||0).toFixed(2)}</span></p><p><span class="smv-summary-label">Total Withdrawal:</span> <span class="smv-summary-value">₹${Number(ep.totalWithdrawals||0).toFixed(2)}</span></p><p><span class="smv-summary-label">Available to Withdraw:</span> <span class="smv-summary-value">₹${Number(ep.availableToWithdraw||0).toFixed(2)}</span></p><p><span class="smv-summary-label">Minimum withdrawal:</span> <span class="smv-summary-value">₹${Number(ep.minimumWithdrawal||300).toFixed(2)}</span></p>${ep.withdrawalCooldownActive ? `<p class="smv-withdraw-locked"><b>🔒 Withdrawal locked for 7 days after the last withdrawal request.</b><br><span class="small">Available again: ${escapeHtml(smvDateTime(new Date(ep.withdrawalCooldownEndsAt)))}</span></p><button class="btn smv-withdraw-btn is-red" id="withdrawBtn" disabled>WITHDRAW</button>` : ep.withdrawalEligible ? '<p class="smv-withdraw-ready"><b>✓ You can withdraw</b></p><button class="btn smv-withdraw-btn is-green" id="withdrawBtn">WITHDRAW</button>' : '<p class="smv-withdraw-locked"><b>Reach ₹300 to request a withdrawal.</b></p><button class="btn smv-withdraw-btn is-red" id="withdrawBtn" disabled>WITHDRAW</button>'}</div>
+    <div class="card" id="astroEarningsSummary" data-total-earnings="${Number(ep.totalEarnings||0)}"><h3>Total Earnings</h3><p style="font-size:28px"><span class="smv-earnings-total ${Number(ep.totalEarnings||0)>=300?'is-green':''}">₹${Number(ep.totalEarnings||0).toFixed(2)}</span></p><p><span class="smv-summary-label">Total Withdrawal:</span> <span class="smv-summary-value" id="astroTotalWithdrawals">₹${Number(ep.totalWithdrawals||0).toFixed(2)}</span></p><p><span class="smv-summary-label">Available to Withdraw:</span> <span class="smv-summary-value" id="astroAvailableWithdraw">₹${Number(ep.availableToWithdraw||0).toFixed(2)}</span></p><p><span class="smv-summary-label">Minimum withdrawal:</span> <span class="smv-summary-value">₹${Number(ep.minimumWithdrawal||300).toFixed(2)}</span></p><div id="astroWithdrawState">${ep.withdrawalCooldownActive ? `<p class="smv-withdraw-locked"><b>🔒 Withdrawal locked for 7 days after the last withdrawal request.</b><br><span class="small">Available again: ${escapeHtml(smvDateTime(new Date(ep.withdrawalCooldownEndsAt)))}</span></p><button class="btn smv-withdraw-btn is-red" id="withdrawBtn" disabled>WITHDRAW</button>` : ep.withdrawalEligible ? '<p class="smv-withdraw-ready"><b>✓ You can withdraw</b></p><button class="btn smv-withdraw-btn is-green" id="withdrawBtn">WITHDRAW</button>' : '<p class="smv-withdraw-locked"><b>Reach ₹300 to request a withdrawal.</b></p><button class="btn smv-withdraw-btn is-red" id="withdrawBtn" disabled>WITHDRAW</button>'}</div></div>
    </div>
    <div class="card" id="astroProfileDescriptionCard" style="margin-top:16px">
      <h3>Profile Description</h3>
@@ -2177,7 +2417,7 @@ ${ad.status === 'rejected' && ad.rejectionReason
           <div id="astroProfileDescriptionMsg" class="small"></div>`
        : `<div class="empty smv-profile-edit-disabled">Profile description editing is currently disabled by Admin.</div>`}
    </div>
-   <div class="card" style="margin-top:16px"><h3>Open Questions</h3><p class="small">Paid questions available for you to claim are shown here. When Admin Allow is ON, the same open questions are visible to all approved astrologers until one astrologer claims them.</p>${!approved?'<div class="empty">Your astrologer profile must be approved by Admin before you can claim questions.</div>':availableQuestions.length?availableQuestions.slice(0,50).map(q=>`<div class="card smv-astro-open-question" style="margin:10px 0"><div class="smv-astro-question-text">${escapeHtml(q.question||'Question')}</div><div class="small"><b>Birth Details:</b> ${escapeHtml(q.birthName||q.birthDetails?.name||'')} · ${escapeHtml(q.birthDate||q.birthDetails?.birthDate||'')} · ${escapeHtml(q.birthTime||q.birthDetails?.birthTime||'')} · ${escapeHtml(q.birthPlace||q.birthDetails?.birthPlace||'')} · ${escapeHtml(q.birthGender||q.birthDetails?.birthGender||'')}</div><div class="small"><b>Question ID:</b> ${escapeHtml(q.id||'')} · <b>Date & Time:</b> ${escapeHtml(smvDateTime(q.createdAt||q.paymentRecordedAt||q.updatedAt))}</div><div class="small"><b>Question Price:</b> ₹${Number(q.astrologerCommissionAmount||0).toFixed(2)}</div><button class="btn" data-claim-question="${q.id}">CLAIM & ANSWER</button></div>`).join(''):'<div class="empty">No paid public questions are available right now.</div>'}</div>
+   <div class="card" id="astroOpenQuestions" style="margin-top:16px"><h3>Open Questions</h3><p class="small">Paid questions available for you to claim are shown here. When Admin Allow is ON, the same open questions are visible to all approved astrologers until one astrologer claims them.</p>${!approved?'<div class="empty">Your astrologer profile must be approved by Admin before you can claim questions.</div>':availableQuestions.length?availableQuestions.slice(0,50).map(q=>`<div class="card smv-astro-open-question" style="margin:10px 0"><div class="smv-astro-question-text">${escapeHtml(q.question||'Question')}</div><div class="small"><b>Birth Details:</b> ${escapeHtml(q.birthName||q.birthDetails?.name||'')} · ${escapeHtml(q.birthDate||q.birthDetails?.birthDate||'')} · ${escapeHtml(q.birthTime||q.birthDetails?.birthTime||'')} · ${escapeHtml(q.birthPlace||q.birthDetails?.birthPlace||'')} · ${escapeHtml(q.birthGender||q.birthDetails?.birthGender||'')}</div><div class="small"><b>Question ID:</b> ${escapeHtml(q.id||'')} · <b>Date & Time:</b> ${escapeHtml(smvDateTime(q.createdAt||q.paymentRecordedAt||q.updatedAt))}</div><div class="small"><b>Question Price:</b> ₹${Number(q.astrologerCommissionAmount||0).toFixed(2)}</div><button class="btn" data-claim-question="${q.id}">CLAIM & ANSWER</button></div>`).join(''):'<div class="empty">No paid public questions are available right now.</div>'}</div>
 <div class="card" id="astroQuestionQueue" style="margin-top:16px">
   <h3>Questions — Unanswered Queue</h3>
   <p class="small">Claimed questions waiting for your answer are kept here. Claiming another question will not hide previous questions.</p>
@@ -2188,7 +2428,7 @@ ${ad.status === 'rejected' && ad.rejectionReason
   <p class="small">Submitted answers stay here and are marked with their current approval status.</p>
   ${qs.docs.filter(d=>{const q=d.data()||{};return q.astrologerId===currentUser.uid && !!q.answer && ['admin_review','answered'].includes(String(q.status||''));}).length ? qs.docs.filter(d=>{const q=d.data()||{};return q.astrologerId===currentUser.uid && !!q.answer && ['admin_review','answered'].includes(String(q.status||''));}).map(d=>{const q=d.data()||{};const status=q.status==='answered'?'ANSWERED':'SUBMITTED — WAITING FOR ADMIN APPROVAL';const canEdit=q.status==='answered'&&q.adminApprovalBypassed===true&&!q.customerAnswerViewedAt;const birthName=q.birthName||q.birthDetails?.name||'';const birthDate=q.birthDate||q.birthDetails?.birthDate||'';const birthTime=q.birthTime||q.birthDetails?.birthTime||'';const birthPlace=q.birthPlace||q.birthDetails?.birthPlace||'';const birthGender=q.birthGender||q.birthDetails?.birthGender||'';return `<div class="card astro-answer-item" style="margin:10px 0"><div class="badge">${status}</div><div class="smv-astro-question-text" style="margin-top:8px">${escapeHtml(q.question||'Question')}</div><div class="small"><b>Birth Details:</b> ${escapeHtml(birthName)} · ${escapeHtml(birthDate)} · ${escapeHtml(birthTime)} · ${escapeHtml(birthPlace)} · ${escapeHtml(birthGender)}</div><div class="small"><b>Question ID:</b> ${escapeHtml(d.id)} · <b>Date & Time:</b> ${escapeHtml(smvDateTime(q.answerApprovedAt||q.updatedAt||q.answerSubmittedAt||q.createdAt))}</div><div class="smv-astro-answer-text" style="margin-top:10px;white-space:pre-wrap;line-height:1.65">${escapeHtml(q.answer||'')}</div><div class="small" style="margin-top:8px"><b>Status:</b> ${escapeHtml(status)}</div>${canEdit?`<button class="btn gray" data-edit-final-answer="${escapeHtml(d.id)}" type="button">EDIT ANSWER</button>`:''}</div>`;}).join('') : '<div class="empty">No answered questions yet.</div>'}
 </div>
-<div class="card" style="margin-top:16px"><h3>Earnings History</h3>${ep.ledger?.length?ep.ledger.slice(0,50).map(x=>`<div class="smv-history-row" style="padding:10px 0;border-bottom:1px solid #eee"><div class="smv-history-amount"><b>₹${Number(x.commission||0).toFixed(2)}</b> · <span class="success">Earning Credited</span></div><div class="smv-history-content">${escapeHtml(x.question||'Consultation')}</div><div class="smv-history-detail"><b>Date & Time:</b> ${escapeHtml(smvDateTime(x.date))}</div><div class="smv-history-detail"><b>Question ID:</b> ${escapeHtml(x.id||'')}</div></div>`).join(''):'<div class="empty">No credited earnings yet.</div>'}<div class="withdrawal-history-section" style="margin-top:14px;padding-top:10px;border-top:1px solid #eee"><div class="withdrawal-history-title">Withdrawal History</div>${withdrawalSnap?.docs?.length?withdrawalSnap.docs.slice().sort((a,b)=>Number(b.data().createdAt?.seconds||0)-Number(a.data().createdAt?.seconds||0)).slice(0,20).map(d=>{const w=d.data()||{};const st=String(w.status||'pending').toLowerCase();const cls=st==='paid'?'success':st==='rejected'?'error':st==='processing'?'small':'small';const label=st==='paid'?'Paid':st==='processing'?'Processing':st==='rejected'?'Rejected':'Pending';return `<div class="smv-history-row smv-withdrawal-row" style="padding:10px 0;border-bottom:1px solid #eee"><div class="smv-history-amount"><b>₹${Number(w.amount||0).toFixed(2)}</b> · <span class="${cls}">${label}</span></div><div class="smv-history-detail"><b>Withdrawal ID:</b> ${escapeHtml(w.withdrawalId||'—')}</div>${st==='paid' && /^SMV-PMT-/.test(String(w.adminPaymentId||'')) ? '<div class="small"><b>Admin Payment ID:</b> '+escapeHtml(w.adminPaymentId)+'</div>' : ''}<div class="small"><b>Requested:</b> ${escapeHtml(smvDateTime(w.createdAt||w.requestedAt))}${st==='paid' && w.paidAt ? '<br><b>Paid Date & Time:</b> '+escapeHtml(smvDateTime(w.paidAt)) : ''}</div></div>`}).join(''):'<div class="small">No withdrawal requests yet.</div>'}</div></div>
+<div class="card" id="astroEarningsHistoryCard" style="margin-top:16px"><h3>Earnings History</h3><div id="astroEarningsLedger">${ep.ledger?.length?ep.ledger.slice(0,50).map(x=>`<div class="smv-history-row" style="padding:10px 0;border-bottom:1px solid #eee"><div class="smv-history-amount"><b>₹${Number(x.commission||0).toFixed(2)}</b> · <span class="success">Earning Credited</span></div><div class="smv-history-content">${escapeHtml(x.question||'Consultation')}</div><div class="smv-history-detail"><b>Date & Time:</b> ${escapeHtml(smvDateTime(x.date))}</div><div class="smv-history-detail"><b>Question ID:</b> ${escapeHtml(x.id||'')}</div></div>`).join(''):'<div class="empty">No credited earnings yet.</div>'}</div><div class="withdrawal-history-section" id="astroWithdrawalHistory" style="margin-top:14px;padding-top:10px;border-top:1px solid #eee"><div class="withdrawal-history-title">Withdrawal History</div>${withdrawalSnap?.docs?.length?withdrawalSnap.docs.slice().sort((a,b)=>Number(b.data().createdAt?.seconds||0)-Number(a.data().createdAt?.seconds||0)).slice(0,20).map(d=>{const w=d.data()||{};const st=String(w.status||'pending').toLowerCase();const cls=st==='paid'?'success':st==='rejected'?'error':st==='processing'?'small':'small';const label=st==='paid'?'Paid':st==='processing'?'Processing':st==='rejected'?'Rejected':'Pending';return `<div class="smv-history-row smv-withdrawal-row" style="padding:10px 0;border-bottom:1px solid #eee"><div class="smv-history-amount"><b>₹${Number(w.amount||0).toFixed(2)}</b> · <span class="${cls}">${label}</span></div><div class="smv-history-detail"><b>Withdrawal ID:</b> ${escapeHtml(w.withdrawalId||'—')}</div>${st==='paid' && /^SMV-PMT-/.test(String(w.adminPaymentId||'')) ? '<div class="small"><b>Admin Payment ID:</b> '+escapeHtml(w.adminPaymentId)+'</div>' : ''}<div class="small"><b>Requested:</b> ${escapeHtml(smvDateTime(w.createdAt||w.requestedAt))}${st==='paid' && w.paidAt ? '<br><b>Paid Date & Time:</b> '+escapeHtml(smvDateTime(w.paidAt)) : ''}</div></div>`}).join(''):'<div class="small">No withdrawal requests yet.</div>'}</div></div>
 <div class="card" style="margin-top:16px"><h3>Payment Method</h3><p class="small">Your bank/UPI details are private. Full details are not displayed again.</p><button class="btn gray" id="changePayoutBtn2">Change Payment Method</button></div></div>`;
   const profileDescriptionSubmit=$('astroSubmitProfileDescription');
   if(profileDescriptionSubmit){
@@ -2772,7 +3012,9 @@ ${ad.status === 'rejected' && ad.rejectionReason
    if(!active())return;
    const consultationItems=cr.questions.slice().sort((a,b)=>Date.parse(b.createdAt||'')-Date.parse(a.createdAt||''));
    const privateConsultationItems=privateCr?.success&&Array.isArray(privateCr.consultations)?privateCr.consultations.slice().sort((a,b)=>Date.parse(b.createdAt||'')-Date.parse(a.createdAt||'')):[];
-   const hasPendingRefund=false;
+   notificationCanonical={questions:consultationItems,privateConsultations:privateConsultationItems};
+   smvCustomerNotificationCanonical={uid:loadUid,...notificationCanonical};
+   smvScheduleRefundReconciliation(consultationItems,loadUid);
    const paid=consultationItems.filter(q=>q.status!=='awaiting_payment').length;
    const qCount=consultationItems.length;
    if(!active()) return;
@@ -2785,7 +3027,7 @@ ${ad.status === 'rejected' && ad.rejectionReason
    document.querySelectorAll('[data-private-retry]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{const r=await renderApi('/private-consultation/retry-payment',{method:'POST',body:JSON.stringify({consultationId:b.dataset.privateRetry})});if(!window.Razorpay)throw new Error('Razorpay is not available. Please refresh and try again.');const rz=new Razorpay({key:r.keyId,amount:r.amount,currency:r.currency,name:'SMV ASTRO',description:'Private Astrology Consultation',order_id:r.orderId,handler:async p=>{await renderApi('/private-consultation/verify-payment',{method:'POST',body:JSON.stringify({consultationId:r.consultationId,...p})});await loadDashboard('customer',true);},modal:{ondismiss:()=>{renderApi('/private-consultation/cancel-payment',{method:'POST',body:JSON.stringify({consultationId:r.consultationId})}).catch(()=>{});b.disabled=false;}}});rz.on('payment.failed',()=>{b.disabled=false;});rz.open();}catch(e){alert(e.message||String(e));b.disabled=false;}});
    document.querySelectorAll('[data-private-view]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{await renderApi('/customer/private-consultation/mark-viewed',{method:'POST',body:JSON.stringify({consultationId:b.dataset.privateView})});await loadDashboard('customer',true);}catch(e){alert(e.message||String(e));b.disabled=false;}});
    document.querySelectorAll('[data-retry-payment]').forEach(b=>b.onclick=()=>retryCustomerPayment(b.dataset.retryPayment,b));
-   document.querySelectorAll('[data-review]').forEach(b=>b.onclick=()=>openReview(b.dataset.review,b.dataset.astro)); if(window.__smvRefundRefreshTimer){clearTimeout(window.__smvRefundRefreshTimer);window.__smvRefundRefreshTimer=null;} if(hasPendingRefund){window.__smvRefundRefreshTimer=setTimeout(()=>{if(currentUser&&document.getElementById('dashboard')&&!document.getElementById('dashboard').classList.contains('hidden'))loadDashboard().catch(()=>{});},20000);}
+   document.querySelectorAll('[data-review]').forEach(b=>b.onclick=()=>openReview(b.dataset.review,b.dataset.astro));
 
    const viewableAnswers=consultationItems.filter(q=>q.status==='answered'&&q.adminApprovalBypassed===true&&!q.customerAnswerViewedAt);
    for(const q of viewableAnswers){const qid=String(q.questionId||q.id||'');if(qid)renderApi('/customer/mark-answer-viewed',{method:'POST',body:JSON.stringify({questionId:qid})}).catch(e=>console.warn('Answer viewed marker skipped:',e));}
@@ -2795,7 +3037,7 @@ ${ad.status === 'rejected' && ad.rejectionReason
   // Notifications are supplementary. A Firestore permission/timeout issue in
   // this optional section must never turn a successfully loaded dashboard into
   // a false "Unable to load dashboard" state.
-  try{ renderNotifications('userNotifications').catch(e=>console.warn('Notifications unavailable:',e)); }
+  try{ renderNotifications('userNotifications',notificationCanonical).catch(e=>console.warn('Notifications unavailable:',e)); }
   catch(notificationErr){
     console.warn('Dashboard notifications skipped:',notificationErr);
     const nb=$('userNotifications');
@@ -3138,87 +3380,16 @@ async function loadAdminPanel(background=false){
  const task=loadAdminPanelData(background);smvAdminLoad=task;
  try{return await task;}finally{if(smvAdminLoad===task)smvAdminLoad=null;}
 }
-async function loadAdminPanelData(background=false){
- if(!currentUser || !(await isCurrentAdmin())){hide('admin');hide('adminLink');return;}
-  if(!background)loadAdminContent().catch(e=>console.warn('Admin content unavailable:',e));
- if(!background){hidePrimarySections('admin');show('smv-dashboard-page');show('admin');}
- setTimeout(()=>window.__smvRefreshAdminSections?.(),0);
- try{
-  const adminLoadUid=currentUser.uid;
-  const adminReads=await Promise.allSettled([
-   withTimeout(renderApi('/admin-data',{method:'GET'}),20000),
-   withTimeout(getDoc(doc(db,'smv_settings','commission'))),withTimeout(getDoc(doc(db,'smv_settings','question'))),withTimeout(getDoc(doc(db,'smv_settings','answer')))
-  ]);
-  const adminRead=i=>{if(adminReads[i].status==='rejected')throw adminReads[i].reason;return adminReads[i].value;};
-  const adminData=adminRead(0);
-  if(currentUser?.uid!==adminLoadUid)return;
-  if(background&&($('admin')?.classList.contains('hidden')||smvEditing('admin'))){smvLiveQueue?.request();return;}
-
-  if(!adminData?.success) throw new Error(adminData?.error||'Admin data could not be loaded.');
-  const toDocs=(arr)=>({docs:(arr||[]).map(x=>({id:x.id,data:()=>x})),size:(arr||[]).length,empty:!(arr||[]).length});
-  const users=toDocs(adminData.users), astros=toDocs(adminData.astrologers), questions=toDocs(adminData.questions), payments=toDocs(adminData.payments);
-  if(!currentUser || currentUser.uid!==adminLoadUid || currentUser.uid!==auth?.currentUser?.uid) return;
-  renderAdminWorkflows({data:adminData,api:renderApi,refresh:smvRefreshWorkflowCards,lang:"en",escape:escapeHtml,date:smvDateTime});
-  smvRenderOpenWorkflowControl(adminData);
-  smvRenderPrivateConsultAdmin(adminData);
-  smvWatchAdminQuestions();
-  const adminReadErrors=adminData.errors||{};
-  const readErrorText=Object.entries(adminReadErrors).filter(([,v])=>v).map(([k,v])=>k+': '+v).join(' | ');
-  $('adminDataLoadMsg') && ($('adminDataLoadMsg').innerHTML=readErrorText?'<div class="empty error">Some Admin data could not be loaded: '+escapeHtml(readErrorText)+'</div>':'');
-  const customers=(adminData.customers||[]).length, pendingDocs=astros.docs.filter(d=>d.data().status==='pending');
-  const userMap=new Map(users.docs.map(d=>[d.id,d.data()]));
-  $('adminSummary').innerHTML=`<div class="stat">Customers <b>${customers}</b></div><div class="stat">Astrologers <b>${astros.size}</b></div><div class="stat">Pending <b>${pendingDocs.length}</b></div><div class="stat">Questions <b>${questions.size}</b></div>`;
-  const apmt=$('adminAstrologerProfileManagementToggle'),apmb=$('adminAstrologerProfileManagementBody');
-  if(apmt&&apmb&&!apmt.dataset.smvBound){apmt.dataset.smvBound='1';apmt.onclick=()=>{const hidden=apmb.classList.toggle('hidden');apmt.textContent=hidden?'▶':'▼';apmt.title=hidden?'Expand':'Collapse';apmt.setAttribute('aria-label',(hidden?'Expand':'Collapse')+' Astrologer Profile Management');};}
-
-  let aqCard=$('astrologerAutoApprovalCard');
-  if(!aqCard){aqCard=document.createElement('div');aqCard.id='astrologerAutoApprovalCard';aqCard.className='card';$('adminSummary')?.insertAdjacentElement('afterend',aqCard);}
-  const aq=adminData.settings?.astrologerAutoApproval||{enabled:false,formUrl:'',passMark:20,defaultChatPrice:25,webhookSecret:''};
-  aqCard.innerHTML=`<h3>Astrologer Auto Approval — Google Form Qualification</h3><div class="grid"><label><b>Auto Approval</b><select id="astroAutoApprovalEnabled"><option value="false">OFF — Manual Admin Approval</option><option value="true">ON — Auto Approve Passed Test</option></select></label><label><b>Pass Mark / 25</b><input id="astroAutoPassMark" type="number" min="1" max="25" step="1"></label><label><b>Default Private Chat Price ₹</b><input id="astroAutoChatPrice" type="number" min="1" step="0.01"></label><label><b>Published Google Form URL</b><input id="astroAutoFormUrl" type="url" placeholder="https://docs.google.com/forms/..."></label><label><b>Apps Script Web App URL</b><input id="astroQuizSyncWebAppUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec"></label></div><p class="small">When enabled: registered pending Astrologer → 25-question Google Form quiz → verified score reaches this backend → pass mark reached → account auto approved. When OFF, existing Admin manual approval continues unchanged.</p><div class="small"><b>Webhook Secret:</b> <code id="astroQuizWebhookSecret">${escapeHtml(aq.webhookSecret||'Not generated yet')}</code></div><div class="action-row"><button class="btn" id="saveAstroAutoApproval">SAVE AUTO APPROVAL</button><button class="btn gray" id="rotateAstroQuizSecret">ROTATE WEBHOOK SECRET</button></div><div class="small" id="astroAutoApprovalMsg"></div>`;
-  $('astroAutoApprovalEnabled').value=String(aq.enabled===true);$('astroAutoPassMark').value=Number(aq.passMark||20);$('astroAutoChatPrice').value=Number(aq.defaultChatPrice||25);$('astroAutoFormUrl').value=aq.formUrl||'';$('astroQuizSyncWebAppUrl').value=aq.syncWebAppUrl||'';
-  const saveAQ=async rotate=>{const b=rotate?$('rotateAstroQuizSecret'):$('saveAstroAutoApproval');b.disabled=true;try{const r=await renderApi('/admin/astrologer-auto-approval/settings',{method:'POST',body:JSON.stringify({enabled:$('astroAutoApprovalEnabled').value==='true',passMark:Number($('astroAutoPassMark').value),defaultChatPrice:Number($('astroAutoChatPrice').value),formUrl:$('astroAutoFormUrl').value.trim(),syncWebAppUrl:$('astroQuizSyncWebAppUrl').value.trim(),rotateSecret:rotate})});$('astroQuizWebhookSecret').textContent=r.webhookSecret;$('astroAutoApprovalMsg').innerHTML='<span class="success">Astrologer Auto Approval settings saved.</span>';}catch(e){$('astroAutoApprovalMsg').innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';}finally{b.disabled=false;}};
-  $('saveAstroAutoApproval').onclick=()=>saveAQ(false);$('rotateAstroQuizSecret').onclick=()=>saveAQ(true);
-  let qm=$('astrologerQuizQuestionManager');
-  if(!qm){qm=document.createElement('div');qm.id='astrologerQuizQuestionManager';qm.className='card';aqCard.insertAdjacentElement('afterend',qm);}
-  const renderQuizManager=async()=>{
-    try{
-      const r=await renderApi('/admin/astrologer-quiz/questions',{method:'GET'}),qs=r.questions||[];
-      qm.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><h3 style="margin:0;color:#e60000;font-weight:900">Astrologer Qualification Test — Question Manager</h3><button type="button" id="astrologerQuizQuestionManagerToggle" class="smv-v170-collapse-btn" aria-label="Collapse 25 Question Section" title="Collapse">▼</button></div><div id="astrologerQuizQuestionManagerBody"><p class="small">Edit Tamil + English question, four choices, correct answer, order and Enable/Disable. Only enabled questions are sent to Google Form. Pass Mark is controlled above.</p><div class="action-row"><button class="btn" id="quizLoadDefaults">LOAD DEFAULT 25 QUESTIONS</button><button class="btn" id="quizAddQuestion">ADD QUESTION</button><button class="btn" id="quizSyncGoogleForm">SYNC GOOGLE FORM</button></div><div id="quizManagerMsg" class="small"></div><div id="quizQuestionList"></div></div>`;
-      const qmt=$('astrologerQuizQuestionManagerToggle'),qmb=$('astrologerQuizQuestionManagerBody');
-      if(qmt&&qmb)qmt.onclick=()=>{const hidden=qmb.classList.toggle('hidden');qmt.textContent=hidden?'▶':'▼';qmt.title=hidden?'Expand':'Collapse';qmt.setAttribute('aria-label',(hidden?'Expand':'Collapse')+' 25 Question Section');};
-      const list=$('quizQuestionList');
-      const editor=q=>`<div class="card" data-qcard="${escapeHtml(q.id||'new')}" style="margin:10px 0"><div class="grid"><label><b>Order</b><input data-f="order" type="number" min="1" value="${escapeHtml(String(q.order||qs.length+1))}"></label><label><b>Status</b><select data-f="enabled"><option value="true">Enabled</option><option value="false">Disabled</option></select></label></div><label><b>Tamil Question</b><textarea data-f="questionTa">${escapeHtml(q.questionTa||'')}</textarea></label><label><b>English Question</b><textarea data-f="questionEn">${escapeHtml(q.questionEn||'')}</textarea></label>${[0,1,2,3].map(i=>`<div class="grid"><label><b>Choice ${i+1} — Tamil</b><input data-ta="${i}" value="${escapeHtml(q.choicesTa?.[i]||'')}"></label><label><b>Choice ${i+1} — English</b><input data-en="${i}" value="${escapeHtml(q.choicesEn?.[i]||'')}"></label></div>`).join('')}<label><b>Correct Answer</b><select data-f="correctIndex">${[0,1,2,3].map(i=>`<option value="${i}">Choice ${i+1}</option>`).join('')}</select></label><div class="action-row"><button class="btn" data-qsave="${escapeHtml(q.id||'')}">SAVE</button>${q.id?`<button class="btn gray" data-qdelete="${escapeHtml(q.id)}">DELETE</button>`:''}</div></div>`;
-      list.innerHTML=qs.length?qs.map(editor).join(''):'<div class="empty">No saved questions yet. Use ADD QUESTION to create the Question Bank.</div>';
-      qs.forEach((q,i)=>{const c=list.children[i];c.querySelector('[data-f="enabled"]').value=String(q.enabled!==false);c.querySelector('[data-f="correctIndex"]').value=String(Number(q.correctIndex||0));});
-      const bind=()=>{
-        list.querySelectorAll('[data-qsave]').forEach(b=>b.onclick=async()=>{const c=b.closest('[data-qcard]'),payload={id:b.dataset.qsave||undefined,order:Number(c.querySelector('[data-f="order"]').value),enabled:c.querySelector('[data-f="enabled"]').value==='true',questionTa:c.querySelector('[data-f="questionTa"]').value.trim(),questionEn:c.querySelector('[data-f="questionEn"]').value.trim(),choicesTa:[...c.querySelectorAll('[data-ta]')].map(x=>x.value.trim()),choicesEn:[...c.querySelectorAll('[data-en]')].map(x=>x.value.trim()),correctIndex:Number(c.querySelector('[data-f="correctIndex"]').value)};b.disabled=true;try{await renderApi('/admin/astrologer-quiz/questions',{method:'POST',body:JSON.stringify(payload)});await renderQuizManager();}catch(e){$('quizManagerMsg').innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';b.disabled=false;}});
-        list.querySelectorAll('[data-qdelete]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this qualification question?'))return;await renderApi('/admin/astrologer-quiz/questions/delete',{method:'POST',body:JSON.stringify({id:b.dataset.qdelete})});await renderQuizManager();});
-      };bind();
-      $('quizLoadDefaults').onclick=async()=>{const b=$('quizLoadDefaults');b.disabled=true;try{const r=await renderApi('/admin/astrologer-quiz/load-defaults',{method:'POST',body:JSON.stringify({fillMissing:false})});$('quizManagerMsg').innerHTML='<span class="success">Default professional Vedic Astrology questions loaded: '+escapeHtml(String(r.created))+'/25.</span>';await renderQuizManager();}catch(e){$('quizManagerMsg').innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';b.disabled=false;}};
-      $('quizAddQuestion').onclick=()=>{list.insertAdjacentHTML('afterbegin',editor({id:'',order:qs.length+1,enabled:true,choicesTa:['','','',''],choicesEn:['','','',''],correctIndex:0}));const c=list.firstElementChild;c.querySelector('[data-f="enabled"]').value='true';c.querySelector('[data-f="correctIndex"]').value='0';bind();};
-      $('quizSyncGoogleForm').onclick=async()=>{const b=$('quizSyncGoogleForm');b.disabled=true;b.textContent='SYNCING...';$('quizManagerMsg').textContent='';try{const r=await renderApi('/admin/astrologer-quiz/sync-google-form',{method:'POST',body:JSON.stringify({}),timeoutMs:95000});$('quizManagerMsg').innerHTML='<span class="success">Google Form synced successfully. Enabled Questions: '+escapeHtml(String(r.enabledQuestions||0))+' · Pass Mark: '+escapeHtml(String(r.passMark||''))+'</span>';}catch(e){$('quizManagerMsg').innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';}finally{b.disabled=false;b.textContent='SYNC GOOGLE FORM';}};
-    }catch(e){qm.innerHTML='<h3>Astrologer Qualification Test — Question Manager</h3><div class="error">'+escapeHtml(e.message||String(e))+'</div>';}
-  };
-  renderQuizManager();
-
-
-  let settings={astroPercent:20,adminPercent:80}; try{const ss=adminRead(1);if(ss.exists())settings=ss.data();}catch(e){}
-  let questionSettings={price:5}; try{const qps=adminRead(2);if(qps.exists())questionSettings=qps.data();}catch(e){}
-  $('questionPrice').value=Number(questionSettings.price||5);
-  renderAdminOffers().catch(e=>console.error('Offers manager load failed:',e));
-  $('saveQuestionPrice').onclick=async()=>{const price=Math.round(Number($('questionPrice').value)*100)/100;if(!Number.isFinite(price)||price<1){$('questionPriceMsg').innerHTML='<span class="error">Enter a valid price of at least ₹1.</span>';return;}const b=$('saveQuestionPrice');b.disabled=true;b.textContent='SAVING...';try{await setDoc(doc(db,'smv_settings','question'),{price,updatedAt:serverTimestamp(),updatedBy:currentUser.uid});questionServicePrice=price;if($('askRate'))$('askRate').innerHTML=`<b>₹${price.toFixed(2)} per Question</b>`;if($('publicQuestionPrice'))$('publicQuestionPrice').textContent=`₹${price.toFixed(2)}`;$('questionPriceMsg').innerHTML='<span class="success">Current public question price saved: ₹'+price.toFixed(2)+'</span>';}catch(e){$('questionPriceMsg').innerHTML='<span class="error">Unable to save price: '+escapeHtml(e.message||String(e))+'</span>';}finally{b.disabled=false;b.textContent='SAVE PRICE';}};
-  $('astroCommission').value=settings.astroPercent??20;$('adminCommission').value=settings.adminPercent??80;
-  $('saveCommission').onclick=async()=>{const a=Number($('astroCommission').value),ad=Number($('adminCommission').value);if(a<0||ad<0||Math.abs(a+ad-100)>0.001){$('commissionMsg').innerHTML='<span class="error">Astrologer % + Admin % must equal 100%.</span>';return;}await setDoc(doc(db,'smv_settings','commission'),{astroPercent:a,adminPercent:ad,updatedAt:serverTimestamp(),updatedBy:currentUser.uid});$('commissionMsg').innerHTML='<span class="success">Commission settings saved.</span>';};
-  let answerSettings={minimumWords:150}; try{const aw=adminRead(3);if(aw.exists())answerSettings=aw.data();}catch(e){}
-  $('minimumAnswerWords').value=Number(answerSettings.minimumWords||150);
-  $('saveAnswerWords').onclick=async()=>{const n=Math.floor(Number($('minimumAnswerWords').value));if(!Number.isFinite(n)||n<1||n>10000){$('answerWordsMsg').innerHTML='<span class="error">Enter a minimum between 1 and 10000 words.</span>';return;}await setDoc(doc(db,'smv_settings','answer'),{minimumWords:n,updatedAt:serverTimestamp(),updatedBy:currentUser.uid});$('answerWordsMsg').innerHTML='<span class="success">Minimum answer length saved: '+n+' words. It applies to new paid questions.</span>';};
-  $('testRazorpayBtn').onclick=async()=>{const b=$('testRazorpayBtn');b.disabled=true;b.textContent='TESTING...';try{const r=await withTimeout(renderApi('/test-razorpay',{method:'GET'}),60000);$('razorpayTestMsg').innerHTML='<span class="success"><b>Razorpay connection OK.</b> '+escapeHtml(r?.message||'Render payment server and Razorpay API are working.')+'</span>';}catch(e){$('razorpayTestMsg').innerHTML='<span class="error"><b>Razorpay test failed:</b> '+escapeHtml(e.message||String(e))+'</span>';}b.disabled=false;b.textContent='TEST RAZORPAY CONNECTION';};
-
-  const box=$('pendingAstros');
+async function smvRenderAdminAstrologersTargeted(data){
+ const toDocs=(arr)=>({docs:(arr||[]).map(x=>({id:x.id,data:()=>x})),size:(arr||[]).length,empty:!(arr||[]).length});
+ const users=toDocs(data.users),astros=toDocs(data.astrologers);
+ const pendingDocs=astros.docs.filter(d=>d.data().status==='pending');
+ const userMap=new Map(users.docs.map(d=>[d.id,d.data()]));
+ const box=$('pendingAstros');
   box.innerHTML=pendingDocs.length?pendingDocs.map(d=>{const a=d.data();return `<div class="card" style="margin:10px 0">${a.photoData?`<img src="${a.photoData}" style="width:100px;height:100px;border-radius:50%;object-fit:cover">`:''}<h3>${escapeHtml(a.name||'Astrologer')}</h3><p><b>Email:</b> ${escapeHtml(userMap.get(d.id)?.email||'')}</p><p><b>Mobile:</b> ${escapeHtml(userMap.get(d.id)?.mobile||userMap.get(d.id)?.phone||'')}</p><p><b>Expertise:</b> ${escapeHtml(a.expertise||a.specialization||'')}</p><p><b>Experience:</b> ${escapeHtml(a.experience||0)} years</p><p><b>Bio:</b> ${escapeHtml(a.bio||a.about||'')}</p><div id="payout_${d.id}" class="small">Loading private payout details...</div><div class="action-row"><input id="price_${d.id}" type="number" min="1" step="0.01" placeholder="Private Consultation Chat Price ₹"><button class="btn" data-approve="${d.id}">APPROVE</button><button class="btn gray" data-reject="${d.id}">REJECT</button></div><input id="reject_${d.id}" placeholder="Rejection reason (required if rejecting)"></div>`}).join(''):'<div class="empty">No pending astrologer applications.</div>';
   for(const d of pendingDocs){try{const ps=await getDoc(doc(db,'smv_payouts',d.id));if(ps.exists()){const p=ps.data();$('payout_'+d.id).innerHTML=`<b>PRIVATE BANK/UPI:</b> Bank: ${escapeHtml(p.bankName||'')} · Holder: ${escapeHtml(p.accountName||'')} · Account: ${escapeHtml(p.accountNumber||'')} · IFSC: ${escapeHtml(p.ifsc||'')} · UPI: ${escapeHtml(p.upi||'')} · Status: ${escapeHtml(p.status||'')}`;}}catch(e){$('payout_'+d.id).textContent='Payout details unavailable.';}}
-  box.querySelectorAll('[data-approve]').forEach(b=>b.onclick=async()=>{const id=b.dataset.approve,price=Number($('price_'+id).value);if(!price||price<1){alert('Admin must set the Private Consultation Chat Price before approval.');return;}await updateDoc(doc(db,'smv_astrologers',id),{status:'approved',pricePerQuestion:price,approvedAt:serverTimestamp(),approvedBy:currentUser.uid});await updateDoc(doc(db,'smv_users',id),{status:'active'});await setDoc(doc(db,'smv_notifications',id+'_approval_'+Date.now()),{userId:id,type:'approval',title:'Astrologer application approved',message:'Your profile has been approved by Admin.',createdAt:serverTimestamp(),read:false});loadAdminPanel();});
-  box.querySelectorAll('[data-reject]').forEach(b=>b.onclick=async()=>{const id=b.dataset.reject,reason=$('reject_'+id).value.trim();if(!reason){alert('Enter rejection reason.');return;}await updateDoc(doc(db,'smv_astrologers',id),{status:'rejected',rejectionReason:reason,rejectedAt:serverTimestamp(),rejectedBy:currentUser.uid});await updateDoc(doc(db,'smv_users',id),{status:'rejected'});await setDoc(doc(db,'smv_notifications',id+'_reject_'+Date.now()),{userId:id,type:'rejection',title:'Astrologer application requires changes',message:reason,createdAt:serverTimestamp(),read:false});loadAdminPanel();});
+  box.querySelectorAll('[data-approve]').forEach(b=>b.onclick=async()=>{const id=b.dataset.approve,price=Number($('price_'+id).value);if(!price||price<1){alert('Admin must set the Private Consultation Chat Price before approval.');return;}await updateDoc(doc(db,'smv_astrologers',id),{status:'approved',pricePerQuestion:price,approvedAt:serverTimestamp(),approvedBy:currentUser.uid});await updateDoc(doc(db,'smv_users',id),{status:'active'});await setDoc(doc(db,'smv_notifications',id+'_approval_'+Date.now()),{userId:id,type:'approval',title:'Astrologer application approved',message:'Your profile has been approved by Admin.',createdAt:serverTimestamp(),read:false});smvRefreshAdminAstrologersTargeted();});
+  box.querySelectorAll('[data-reject]').forEach(b=>b.onclick=async()=>{const id=b.dataset.reject,reason=$('reject_'+id).value.trim();if(!reason){alert('Enter rejection reason.');return;}await updateDoc(doc(db,'smv_astrologers',id),{status:'rejected',rejectionReason:reason,rejectedAt:serverTimestamp(),rejectedBy:currentUser.uid});await updateDoc(doc(db,'smv_users',id),{status:'rejected'});await setDoc(doc(db,'smv_notifications',id+'_reject_'+Date.now()),{userId:id,type:'rejection',title:'Astrologer application requires changes',message:reason,createdAt:serverTimestamp(),read:false});smvRefreshAdminAstrologersTargeted();});
 
   // STEP 4 — Approved astrologer profile-description administration.
   const profileBox=$('adminAstrologerProfiles');
@@ -3272,7 +3443,7 @@ async function loadAdminPanelData(background=false){
       b.disabled=true;
       try{
         await updateDoc(doc(db,'smv_astrologers',id),{profileEditAllowed:allow,profileEditPermissionUpdatedAt:serverTimestamp(),profileEditPermissionUpdatedBy:currentUser.uid});
-        await loadAdminPanel();
+        await smvRefreshAdminAstrologersTargeted();
       }catch(e){alert(e.message||String(e));b.disabled=false;}
     });
 
@@ -3305,7 +3476,7 @@ async function loadAdminPanelData(background=false){
           profileDescriptionApprovedBy:currentUser.uid
         });
         await setDoc(doc(db,'smv_notifications',id+'_profile_approved_'+Date.now()),{userId:id,type:'profile_description',title:'Profile description approved',message:'Your updated profile description has been approved by Admin.',createdAt:serverTimestamp(),read:false});
-        await loadAdminPanel();
+        await smvRefreshAdminAstrologersTargeted();
         loadAstroCards().catch(()=>{});
       }catch(e){alert(e.message||String(e));b.disabled=false;}
     });
@@ -3318,7 +3489,7 @@ async function loadAdminPanelData(background=false){
       try{
         await updateDoc(doc(db,'smv_astrologers',id),{profileDescriptionPending:'',profileDescriptionStatus:'rejected',profileDescriptionRejectedAt:serverTimestamp(),profileDescriptionRejectedBy:currentUser.uid});
         await setDoc(doc(db,'smv_notifications',id+'_profile_rejected_'+Date.now()),{userId:id,type:'profile_description',title:'Profile description not approved',message:'Your submitted profile description was not approved by Admin. Your existing public description remains unchanged.',createdAt:serverTimestamp(),read:false});
-        await loadAdminPanel();
+        await smvRefreshAdminAstrologersTargeted();
       }catch(e){alert(e.message||String(e));b.disabled=false;}
     });
   }
@@ -3329,13 +3500,25 @@ async function loadAdminPanelData(background=false){
     const payoutSnap=await withTimeout(getDocs(query(collection(db,'smv_payouts'),where('status','==','pending_admin_review'))),12000);
     const pendingPayouts=payoutSnap.docs.filter(d=>{const a=astros.docs.find(x=>x.id===d.id)?.data()||{};return String(a.status||'').toLowerCase()==='approved';});
     payoutBox.innerHTML=pendingPayouts.length?pendingPayouts.map(d=>{const p=d.data()||{};const a=astros.docs.find(x=>x.id===d.id)?.data()||{};return `<div class="card" style="margin:10px 0"><h3>${escapeHtml(a.name||d.id)}</h3><div class="small"><b>Astrologer ID:</b> ${escapeHtml(d.id)} · <b>Submitted:</b> ${escapeHtml(smvDateTime(p.requestedAt||p.updatedAt))}</div><div class="small" style="margin-top:8px"><b>PRIVATE PAYMENT DETAILS:</b> Bank: ${escapeHtml(p.bankName||'')} · Holder: ${escapeHtml(p.accountName||'')} · Account: ${escapeHtml(p.accountNumber||'')} · IFSC: ${escapeHtml(p.ifsc||'')} · UPI: ${escapeHtml(p.upi||'—')}</div><div class="action-row" style="margin-top:10px"><button class="btn" data-payout-approve="${escapeHtml(d.id)}">APPROVE</button><button class="btn gray" data-payout-reject="${escapeHtml(d.id)}">REJECT</button></div><input id="payoutReject_${escapeHtml(d.id)}" placeholder="Rejection reason (required if rejecting)"></div>`;}).join(''):'<div class="empty">No payment method changes waiting for Admin approval.</div>';
-    payoutBox.querySelectorAll('[data-payout-approve]').forEach(b=>b.onclick=async()=>{const id=b.dataset.payoutApprove;b.disabled=true;try{const r=await withTimeout(renderApi('/admin/payout-change-status',{method:'POST',body:JSON.stringify({astrologerId:id,status:'approved'})}),15000);if(!r?.success)throw new Error(r?.error||'Unable to approve payment method.');alert('Payment method approved.');await loadAdminPanel();}catch(e){alert(e.message||String(e));b.disabled=false;}});
-    payoutBox.querySelectorAll('[data-payout-reject]').forEach(b=>b.onclick=async()=>{const id=b.dataset.payoutReject,reason=$('payoutReject_'+id)?.value.trim()||'';if(!reason){alert('Enter rejection reason.');return;}b.disabled=true;try{const r=await withTimeout(renderApi('/admin/payout-change-status',{method:'POST',body:JSON.stringify({astrologerId:id,status:'rejected',reason})}),15000);if(!r?.success)throw new Error(r?.error||'Unable to reject payment method.');alert('Payment method rejected.');await loadAdminPanel();}catch(e){alert(e.message||String(e));b.disabled=false;}});
+    payoutBox.querySelectorAll('[data-payout-approve]').forEach(b=>b.onclick=async()=>{const id=b.dataset.payoutApprove;b.disabled=true;try{const r=await withTimeout(renderApi('/admin/payout-change-status',{method:'POST',body:JSON.stringify({astrologerId:id,status:'approved'})}),15000);if(!r?.success)throw new Error(r?.error||'Unable to approve payment method.');alert('Payment method approved.');await smvRefreshAdminAstrologersTargeted();}catch(e){alert(e.message||String(e));b.disabled=false;}});
+    payoutBox.querySelectorAll('[data-payout-reject]').forEach(b=>b.onclick=async()=>{const id=b.dataset.payoutReject,reason=$('payoutReject_'+id)?.value.trim()||'';if(!reason){alert('Enter rejection reason.');return;}b.disabled=true;try{const r=await withTimeout(renderApi('/admin/payout-change-status',{method:'POST',body:JSON.stringify({astrologerId:id,status:'rejected',reason})}),15000);if(!r?.success)throw new Error(r?.error||'Unable to reject payment method.');alert('Payment method rejected.');await smvRefreshAdminAstrologersTargeted();}catch(e){alert(e.message||String(e));b.disabled=false;}});
   }catch(e){payoutBox.innerHTML='<div class="empty error">Payment method approval list could not be loaded right now.</div>';console.warn('Admin payout changes load skipped:',e);}
 
-  // Public Question Admin Approval: Admin selects exactly one approved astrologer and commission rate.
-  const withdrawalSnap=await getDocs(collection(db,'smv_withdrawals'));
-  const withdrawalDocs=withdrawalSnap.docs.slice().sort((a,b)=>Number(b.data().createdAt?.seconds||0)-Number(a.data().createdAt?.seconds||0)).slice(0,50);
+
+}
+let smvAdminAstrologersRequest=null;
+async function smvRefreshAdminAstrologersTargeted(){
+ if(smvAdminAstrologersRequest)return smvAdminAstrologersRequest;
+ smvAdminAstrologersRequest=(async()=>{
+  const data=await renderApi('/admin/astrologers-data',{method:'GET'});
+  if(!data?.success)throw new Error(data?.error||'Admin astrologer data unavailable.');
+  await smvRenderAdminAstrologersTargeted(data);
+ })();
+ try{return await smvAdminAstrologersRequest;}finally{smvAdminAstrologersRequest=null;}
+}
+
+async function smvRenderAdminWithdrawalsTargeted(withdrawals){
+  const withdrawalDocs=withdrawals.docs.slice().sort((a,b)=>Number(b.data().createdAt?.seconds||0)-Number(a.data().createdAt?.seconds||0)).slice(0,50);
   $('adminWithdrawals').innerHTML=withdrawalDocs.length?withdrawalDocs.map(d=>{const w=d.data();return `<div class="card" style="margin:10px 0"><b>₹${Number(w.amount||0).toFixed(2)}</b> · <b>${escapeHtml(w.status||'pending').toUpperCase()}</b><div class="small">Astrologer: ${escapeHtml(w.astrologerName||w.astrologerId||'')} · Astrologer ID: ${escapeHtml(w.astrologerId||'')}<br><b>Withdrawal ID:</b> ${escapeHtml(w.withdrawalId||'—')}${String(w.status||'').toLowerCase()==='paid' && /^SMV-PMT-/.test(String(w.adminPaymentId||'')) ? `<br><b>Admin Payment ID:</b> ${escapeHtml(w.adminPaymentId)}` : ''}<br>Requested: ${escapeHtml(smvDateTime(w.createdAt||w.requestedAt))}${String(w.status||'').toLowerCase()==='paid' && w.paidAt ? `<br><b>Paid Date & Time:</b> ${escapeHtml(smvDateTime(w.paidAt))}` : ''}</div><div id="withdrawBank_${d.id}" class="small" style="margin-top:8px"><b>PRIVATE PAYMENT DETAILS:</b> Loading…</div><div class="action-row">${w.status==='pending'?`<button class="btn" data-wstatus="${d.id}" data-status="processing">MARK PROCESSING</button><button class="btn gray" data-wstatus="${d.id}" data-status="rejected">REJECT</button>`:''}${w.status==='processing'?`<button class="btn" data-wstatus="${d.id}" data-status="paid">MARK PAID</button>`:''}${String(w.status||'').toLowerCase()==='paid' && !/^SMV-PMT-/.test(String(w.adminPaymentId||''))?`<button class="btn" data-wstatus="${d.id}" data-status="paid">CREATE ADMIN PAYMENT ID</button>`:''}</div></div>`}).join(''):'<div class="empty">No withdrawal requests.</div>';
   for(const d of withdrawalDocs){
     try{
@@ -3493,7 +3676,7 @@ async function loadAdminPanelData(background=false){
             : `Withdrawal status updated to ${newStatus}.`
         );
 
-        await loadAdminPanel();
+        await smvRefreshAdminWithdrawalsTargeted();
 
       } catch(e) {
 
@@ -3520,6 +3703,103 @@ async function loadAdminPanelData(background=false){
     };
 
   });
+
+}
+let smvAdminWithdrawalsRequest=null;
+async function smvRefreshAdminWithdrawalsTargeted(){
+ if(smvAdminWithdrawalsRequest)return smvAdminWithdrawalsRequest;
+ smvAdminWithdrawalsRequest=(async()=>{
+  const data=await renderApi('/admin/withdrawals-data',{method:'GET'});
+  if(!data?.success)throw new Error(data?.error||'Admin withdrawal data unavailable.');
+  const withdrawals={docs:(data.withdrawals||[]).map(x=>({id:x.id,data:()=>x}))};
+  await smvRenderAdminWithdrawalsTargeted(withdrawals);
+  // Payment-method change approvals share the withdrawals/payouts dirty category
+  // and are rendered inside the targeted astrologer renderer.
+  await smvRefreshAdminAstrologersTargeted();
+ })();
+ try{return await smvAdminWithdrawalsRequest;}finally{smvAdminWithdrawalsRequest=null;}
+}
+
+async function loadAdminPanelData(background=false){
+ if(!currentUser || !(await isCurrentAdmin())){hide('admin');hide('adminLink');return;}
+  if(!background)loadAdminContent().catch(e=>console.warn('Admin content unavailable:',e));
+ if(!background){hidePrimarySections('admin');show('smv-dashboard-page');show('admin');}
+ setTimeout(()=>window.__smvRefreshAdminSections?.(),0);
+ try{
+  const adminLoadUid=currentUser.uid;
+  const adminReads=await Promise.allSettled([
+   withTimeout(renderApi('/admin-data',{method:'GET'}),20000),
+   withTimeout(getDoc(doc(db,'smv_settings','commission'))),withTimeout(getDoc(doc(db,'smv_settings','question'))),withTimeout(getDoc(doc(db,'smv_settings','answer')))
+  ]);
+  const adminRead=i=>{if(adminReads[i].status==='rejected')throw adminReads[i].reason;return adminReads[i].value;};
+  const adminData=adminRead(0);
+  if(currentUser?.uid!==adminLoadUid)return;
+  if(background&&($('admin')?.classList.contains('hidden')||smvEditing('admin'))){smvLiveQueue?.request();return;}
+
+  if(!adminData?.success) throw new Error(adminData?.error||'Admin data could not be loaded.');
+  const toDocs=(arr)=>({docs:(arr||[]).map(x=>({id:x.id,data:()=>x})),size:(arr||[]).length,empty:!(arr||[]).length});
+  const users=toDocs(adminData.users), astros=toDocs(adminData.astrologers), questions=toDocs(adminData.questions), payments=toDocs(adminData.payments);
+  if(!currentUser || currentUser.uid!==adminLoadUid || currentUser.uid!==auth?.currentUser?.uid) return;
+  renderAdminWorkflows({data:adminData,api:renderApi,refresh:smvRefreshWorkflowCards,lang:"en",escape:escapeHtml,date:smvDateTime});
+  smvRenderOpenWorkflowControl(adminData);
+  smvRenderPrivateConsultAdmin(adminData);
+  smvWatchAdminQuestions();
+  const adminReadErrors=adminData.errors||{};
+  const readErrorText=Object.entries(adminReadErrors).filter(([,v])=>v).map(([k,v])=>k+': '+v).join(' | ');
+  $('adminDataLoadMsg') && ($('adminDataLoadMsg').innerHTML=readErrorText?'<div class="empty error">Some Admin data could not be loaded: '+escapeHtml(readErrorText)+'</div>':'');
+  const customers=(adminData.customers||[]).length, pendingDocs=astros.docs.filter(d=>d.data().status==='pending');
+  const userMap=new Map(users.docs.map(d=>[d.id,d.data()]));
+  $('adminSummary').innerHTML=`<div class="stat">Customers <b>${customers}</b></div><div class="stat">Astrologers <b>${astros.size}</b></div><div class="stat">Pending <b>${pendingDocs.length}</b></div><div class="stat">Questions <b>${questions.size}</b></div>`;
+  const apmt=$('adminAstrologerProfileManagementToggle'),apmb=$('adminAstrologerProfileManagementBody');
+  if(apmt&&apmb&&!apmt.dataset.smvBound){apmt.dataset.smvBound='1';apmt.onclick=()=>{const hidden=apmb.classList.toggle('hidden');apmt.textContent=hidden?'▶':'▼';apmt.title=hidden?'Expand':'Collapse';apmt.setAttribute('aria-label',(hidden?'Expand':'Collapse')+' Astrologer Profile Management');};}
+
+  let aqCard=$('astrologerAutoApprovalCard');
+  if(!aqCard){aqCard=document.createElement('div');aqCard.id='astrologerAutoApprovalCard';aqCard.className='card';$('adminSummary')?.insertAdjacentElement('afterend',aqCard);}
+  const aq=adminData.settings?.astrologerAutoApproval||{enabled:false,formUrl:'',passMark:20,defaultChatPrice:25,webhookSecret:''};
+  aqCard.innerHTML=`<h3>Astrologer Auto Approval — Google Form Qualification</h3><div class="grid"><label><b>Auto Approval</b><select id="astroAutoApprovalEnabled"><option value="false">OFF — Manual Admin Approval</option><option value="true">ON — Auto Approve Passed Test</option></select></label><label><b>Pass Mark / 25</b><input id="astroAutoPassMark" type="number" min="1" max="25" step="1"></label><label><b>Default Private Chat Price ₹</b><input id="astroAutoChatPrice" type="number" min="1" step="0.01"></label><label><b>Published Google Form URL</b><input id="astroAutoFormUrl" type="url" placeholder="https://docs.google.com/forms/..."></label><label><b>Apps Script Web App URL</b><input id="astroQuizSyncWebAppUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec"></label></div><p class="small">When enabled: registered pending Astrologer → 25-question Google Form quiz → verified score reaches this backend → pass mark reached → account auto approved. When OFF, existing Admin manual approval continues unchanged.</p><div class="small"><b>Webhook Secret:</b> <code id="astroQuizWebhookSecret">${escapeHtml(aq.webhookSecret||'Not generated yet')}</code></div><div class="action-row"><button class="btn" id="saveAstroAutoApproval">SAVE AUTO APPROVAL</button><button class="btn gray" id="rotateAstroQuizSecret">ROTATE WEBHOOK SECRET</button></div><div class="small" id="astroAutoApprovalMsg"></div>`;
+  $('astroAutoApprovalEnabled').value=String(aq.enabled===true);$('astroAutoPassMark').value=Number(aq.passMark||20);$('astroAutoChatPrice').value=Number(aq.defaultChatPrice||25);$('astroAutoFormUrl').value=aq.formUrl||'';$('astroQuizSyncWebAppUrl').value=aq.syncWebAppUrl||'';
+  const saveAQ=async rotate=>{const b=rotate?$('rotateAstroQuizSecret'):$('saveAstroAutoApproval');b.disabled=true;try{const r=await renderApi('/admin/astrologer-auto-approval/settings',{method:'POST',body:JSON.stringify({enabled:$('astroAutoApprovalEnabled').value==='true',passMark:Number($('astroAutoPassMark').value),defaultChatPrice:Number($('astroAutoChatPrice').value),formUrl:$('astroAutoFormUrl').value.trim(),syncWebAppUrl:$('astroQuizSyncWebAppUrl').value.trim(),rotateSecret:rotate})});$('astroQuizWebhookSecret').textContent=r.webhookSecret;$('astroAutoApprovalMsg').innerHTML='<span class="success">Astrologer Auto Approval settings saved.</span>';}catch(e){$('astroAutoApprovalMsg').innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';}finally{b.disabled=false;}};
+  $('saveAstroAutoApproval').onclick=()=>saveAQ(false);$('rotateAstroQuizSecret').onclick=()=>saveAQ(true);
+  let qm=$('astrologerQuizQuestionManager');
+  if(!qm){qm=document.createElement('div');qm.id='astrologerQuizQuestionManager';qm.className='card';aqCard.insertAdjacentElement('afterend',qm);}
+  const renderQuizManager=async()=>{
+    try{
+      const r=await renderApi('/admin/astrologer-quiz/questions',{method:'GET'}),qs=r.questions||[];
+      qm.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><h3 style="margin:0;color:#e60000;font-weight:900">Astrologer Qualification Test — Question Manager</h3><button type="button" id="astrologerQuizQuestionManagerToggle" class="smv-v170-collapse-btn" aria-label="Collapse 25 Question Section" title="Collapse">▼</button></div><div id="astrologerQuizQuestionManagerBody"><p class="small">Edit Tamil + English question, four choices, correct answer, order and Enable/Disable. Only enabled questions are sent to Google Form. Pass Mark is controlled above.</p><div class="action-row"><button class="btn" id="quizLoadDefaults">LOAD DEFAULT 25 QUESTIONS</button><button class="btn" id="quizAddQuestion">ADD QUESTION</button><button class="btn" id="quizSyncGoogleForm">SYNC GOOGLE FORM</button></div><div id="quizManagerMsg" class="small"></div><div id="quizQuestionList"></div></div>`;
+      const qmt=$('astrologerQuizQuestionManagerToggle'),qmb=$('astrologerQuizQuestionManagerBody');
+      if(qmt&&qmb)qmt.onclick=()=>{const hidden=qmb.classList.toggle('hidden');qmt.textContent=hidden?'▶':'▼';qmt.title=hidden?'Expand':'Collapse';qmt.setAttribute('aria-label',(hidden?'Expand':'Collapse')+' 25 Question Section');};
+      const list=$('quizQuestionList');
+      const editor=q=>`<div class="card" data-qcard="${escapeHtml(q.id||'new')}" style="margin:10px 0"><div class="grid"><label><b>Order</b><input data-f="order" type="number" min="1" value="${escapeHtml(String(q.order||qs.length+1))}"></label><label><b>Status</b><select data-f="enabled"><option value="true">Enabled</option><option value="false">Disabled</option></select></label></div><label><b>Tamil Question</b><textarea data-f="questionTa">${escapeHtml(q.questionTa||'')}</textarea></label><label><b>English Question</b><textarea data-f="questionEn">${escapeHtml(q.questionEn||'')}</textarea></label>${[0,1,2,3].map(i=>`<div class="grid"><label><b>Choice ${i+1} — Tamil</b><input data-ta="${i}" value="${escapeHtml(q.choicesTa?.[i]||'')}"></label><label><b>Choice ${i+1} — English</b><input data-en="${i}" value="${escapeHtml(q.choicesEn?.[i]||'')}"></label></div>`).join('')}<label><b>Correct Answer</b><select data-f="correctIndex">${[0,1,2,3].map(i=>`<option value="${i}">Choice ${i+1}</option>`).join('')}</select></label><div class="action-row"><button class="btn" data-qsave="${escapeHtml(q.id||'')}">SAVE</button>${q.id?`<button class="btn gray" data-qdelete="${escapeHtml(q.id)}">DELETE</button>`:''}</div></div>`;
+      list.innerHTML=qs.length?qs.map(editor).join(''):'<div class="empty">No saved questions yet. Use ADD QUESTION to create the Question Bank.</div>';
+      qs.forEach((q,i)=>{const c=list.children[i];c.querySelector('[data-f="enabled"]').value=String(q.enabled!==false);c.querySelector('[data-f="correctIndex"]').value=String(Number(q.correctIndex||0));});
+      const bind=()=>{
+        list.querySelectorAll('[data-qsave]').forEach(b=>b.onclick=async()=>{const c=b.closest('[data-qcard]'),payload={id:b.dataset.qsave||undefined,order:Number(c.querySelector('[data-f="order"]').value),enabled:c.querySelector('[data-f="enabled"]').value==='true',questionTa:c.querySelector('[data-f="questionTa"]').value.trim(),questionEn:c.querySelector('[data-f="questionEn"]').value.trim(),choicesTa:[...c.querySelectorAll('[data-ta]')].map(x=>x.value.trim()),choicesEn:[...c.querySelectorAll('[data-en]')].map(x=>x.value.trim()),correctIndex:Number(c.querySelector('[data-f="correctIndex"]').value)};b.disabled=true;try{await renderApi('/admin/astrologer-quiz/questions',{method:'POST',body:JSON.stringify(payload)});await renderQuizManager();}catch(e){$('quizManagerMsg').innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';b.disabled=false;}});
+        list.querySelectorAll('[data-qdelete]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this qualification question?'))return;await renderApi('/admin/astrologer-quiz/questions/delete',{method:'POST',body:JSON.stringify({id:b.dataset.qdelete})});await renderQuizManager();});
+      };bind();
+      $('quizLoadDefaults').onclick=async()=>{const b=$('quizLoadDefaults');b.disabled=true;try{const r=await renderApi('/admin/astrologer-quiz/load-defaults',{method:'POST',body:JSON.stringify({fillMissing:false})});$('quizManagerMsg').innerHTML='<span class="success">Default professional Vedic Astrology questions loaded: '+escapeHtml(String(r.created))+'/25.</span>';await renderQuizManager();}catch(e){$('quizManagerMsg').innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';b.disabled=false;}};
+      $('quizAddQuestion').onclick=()=>{list.insertAdjacentHTML('afterbegin',editor({id:'',order:qs.length+1,enabled:true,choicesTa:['','','',''],choicesEn:['','','',''],correctIndex:0}));const c=list.firstElementChild;c.querySelector('[data-f="enabled"]').value='true';c.querySelector('[data-f="correctIndex"]').value='0';bind();};
+      $('quizSyncGoogleForm').onclick=async()=>{const b=$('quizSyncGoogleForm');b.disabled=true;b.textContent='SYNCING...';$('quizManagerMsg').textContent='';try{const r=await renderApi('/admin/astrologer-quiz/sync-google-form',{method:'POST',body:JSON.stringify({}),timeoutMs:95000});$('quizManagerMsg').innerHTML='<span class="success">Google Form synced successfully. Enabled Questions: '+escapeHtml(String(r.enabledQuestions||0))+' · Pass Mark: '+escapeHtml(String(r.passMark||''))+'</span>';}catch(e){$('quizManagerMsg').innerHTML='<span class="error">'+escapeHtml(e.message||String(e))+'</span>';}finally{b.disabled=false;b.textContent='SYNC GOOGLE FORM';}};
+    }catch(e){qm.innerHTML='<h3>Astrologer Qualification Test — Question Manager</h3><div class="error">'+escapeHtml(e.message||String(e))+'</div>';}
+  };
+  renderQuizManager();
+
+
+  let settings={astroPercent:20,adminPercent:80}; try{const ss=adminRead(1);if(ss.exists())settings=ss.data();}catch(e){}
+  let questionSettings={price:5}; try{const qps=adminRead(2);if(qps.exists())questionSettings=qps.data();}catch(e){}
+  $('questionPrice').value=Number(questionSettings.price||5);
+  renderAdminOffers().catch(e=>console.error('Offers manager load failed:',e));
+  $('saveQuestionPrice').onclick=async()=>{const price=Math.round(Number($('questionPrice').value)*100)/100;if(!Number.isFinite(price)||price<1){$('questionPriceMsg').innerHTML='<span class="error">Enter a valid price of at least ₹1.</span>';return;}const b=$('saveQuestionPrice');b.disabled=true;b.textContent='SAVING...';try{await setDoc(doc(db,'smv_settings','question'),{price,updatedAt:serverTimestamp(),updatedBy:currentUser.uid});questionServicePrice=price;if($('askRate'))$('askRate').innerHTML=`<b>₹${price.toFixed(2)} per Question</b>`;if($('publicQuestionPrice'))$('publicQuestionPrice').textContent=`₹${price.toFixed(2)}`;$('questionPriceMsg').innerHTML='<span class="success">Current public question price saved: ₹'+price.toFixed(2)+'</span>';}catch(e){$('questionPriceMsg').innerHTML='<span class="error">Unable to save price: '+escapeHtml(e.message||String(e))+'</span>';}finally{b.disabled=false;b.textContent='SAVE PRICE';}};
+  $('astroCommission').value=settings.astroPercent??20;$('adminCommission').value=settings.adminPercent??80;
+  $('saveCommission').onclick=async()=>{const a=Number($('astroCommission').value),ad=Number($('adminCommission').value);if(a<0||ad<0||Math.abs(a+ad-100)>0.001){$('commissionMsg').innerHTML='<span class="error">Astrologer % + Admin % must equal 100%.</span>';return;}await setDoc(doc(db,'smv_settings','commission'),{astroPercent:a,adminPercent:ad,updatedAt:serverTimestamp(),updatedBy:currentUser.uid});$('commissionMsg').innerHTML='<span class="success">Commission settings saved.</span>';};
+  let answerSettings={minimumWords:150}; try{const aw=adminRead(3);if(aw.exists())answerSettings=aw.data();}catch(e){}
+  $('minimumAnswerWords').value=Number(answerSettings.minimumWords||150);
+  $('saveAnswerWords').onclick=async()=>{const n=Math.floor(Number($('minimumAnswerWords').value));if(!Number.isFinite(n)||n<1||n>10000){$('answerWordsMsg').innerHTML='<span class="error">Enter a minimum between 1 and 10000 words.</span>';return;}await setDoc(doc(db,'smv_settings','answer'),{minimumWords:n,updatedAt:serverTimestamp(),updatedBy:currentUser.uid});$('answerWordsMsg').innerHTML='<span class="success">Minimum answer length saved: '+n+' words. It applies to new paid questions.</span>';};
+  $('testRazorpayBtn').onclick=async()=>{const b=$('testRazorpayBtn');b.disabled=true;b.textContent='TESTING...';try{const r=await withTimeout(renderApi('/test-razorpay',{method:'GET'}),60000);$('razorpayTestMsg').innerHTML='<span class="success"><b>Razorpay connection OK.</b> '+escapeHtml(r?.message||'Render payment server and Razorpay API are working.')+'</span>';}catch(e){$('razorpayTestMsg').innerHTML='<span class="error"><b>Razorpay test failed:</b> '+escapeHtml(e.message||String(e))+'</span>';}b.disabled=false;b.textContent='TEST RAZORPAY CONNECTION';};
+
+  await smvRenderAdminAstrologersTargeted({users:adminData.users,astrologers:adminData.astrologers});
+
+  // Public Question Admin Approval: Admin selects exactly one approved astrologer and commission rate.
+  await smvRenderAdminWithdrawalsTargeted({docs:(adminData.withdrawals||[]).map(x=>({id:x.id,data:()=>x}))});
   /* ADMIN EARNINGS HISTORY — display-only ledger from credited answered questions. */
   try {
     const adminEarnedQuestions = questions.docs.filter(d=>{const q=d.data()||{};return q.status==='answered' && q.commissionStatus==='credited';}).slice().sort((a,b)=>{const at=Number(b.data()?.commissionCreditedAt?.seconds||b.data()?.answerApprovedAt?.seconds||0);const bt=Number(a.data()?.commissionCreditedAt?.seconds||a.data()?.answerApprovedAt?.seconds||0);return at-bt;});
