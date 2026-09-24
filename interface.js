@@ -29,6 +29,8 @@
   const active=roots.some(el=>!el.classList.contains('hidden'));
   workspace.classList.toggle('hidden',!active);
   document.body.dataset.smvWorkspace=active?'open':'closed';
+  const internal=active||document.body.classList.contains('smv-consult-dedicated');
+  for(const id of ['smv-public-page','smvPremiumHeaderV9','smv24-footer'])document.getElementById(id)?.classList.toggle('hidden',internal);
  }
  window.__smvSyncWorkspace=sync;
  sync();

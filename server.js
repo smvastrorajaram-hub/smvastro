@@ -2518,7 +2518,7 @@ app.post("/private-consultation/verify-payment", express.json({limit:"15kb"}), a
         paymentRecordedAt:new Date().toISOString(),updatedAt:FieldValue.serverTimestamp()
       });
       const finalStatus=autoAllow?"approved_for_astrologer":"pending_admin_approval";
-      res.json({success:true,verified:true,consultationId,status:finalStatus,paymentStatus:"paid"});
+      res.json({success:true,verified:true,consultationId,paymentId,paymentRecordedAt:new Date().toISOString(),status:finalStatus,paymentStatus:"paid"});
       setImmediate(async()=>{
         try{
           await Promise.allSettled([
@@ -2530,7 +2530,7 @@ app.post("/private-consultation/verify-payment", express.json({limit:"15kb"}), a
       });
       return;
     }
-    return res.json({success:true,verified:true,consultationId,status:String(c.status||"pending_admin_approval"),paymentStatus:"paid"});
+    return res.json({success:true,verified:true,consultationId,paymentId,paymentRecordedAt:c.paymentRecordedAt||null,status:String(c.status||"pending_admin_approval"),paymentStatus:"paid"});
   }catch(e){console.error("Private consultation verify-payment error:",e);return res.status(500).json({error:e?.message||"Unable to verify private consultation payment."});}
 });
 
@@ -3180,7 +3180,7 @@ app.post("/verify-payment", express.json(), async (req, res) => {
     const result = await markQuestionPaid(questionId, orderId, paymentId, signature, "render_checkout_verification");
     // Essential paid-state commit is complete. Respond now; notifications, offer
     // consumption, email and audit mirrors are idempotent secondary work.
-    res.json({ verified: true, questionId, alreadyProcessed: result.already, customerPaymentId: result.customerPaymentId || null, paymentRecordedAt: result.paymentRecordedAt || new Date().toISOString(), message: "Payment verified and consultation updated successfully." });
+    res.json({ verified: true, questionId, paymentId, alreadyProcessed: result.already, customerPaymentId: result.customerPaymentId || null, paymentRecordedAt: result.paymentRecordedAt || new Date().toISOString(), message: "Payment verified and consultation updated successfully." });
     runQuestionPaymentSideEffects({result,questionId,orderId,paymentId});
     setImmediate(()=>db.collection("razorpay_orders").doc(orderId).set({razorpayPaymentId:paymentId,status:"verified",questionId,verifiedAt:FieldValue.serverTimestamp()},{merge:true}).catch(e=>console.error("Razorpay verification audit update failed:",e)));
     return;

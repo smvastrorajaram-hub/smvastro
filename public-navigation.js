@@ -24,9 +24,11 @@
   footer?.classList.toggle('hidden',on);
   if(on)workspace?.classList.add('hidden');
  }
+ window.__smvSetDedicatedConsultView=setDedicatedConsultView;
  function navigate(id,{historyMode='push'}={}){
   if(!targets.has(id))return false;
   const target=document.getElementById(id);if(!target)return false;
+  if(document.getElementById('paymentSuccessPanel')?.open)return false;
   const ticket=++revision;window.__SMV_PUBLIC_ROUTE=id;window.__smvPreparePublicNavigation?.();
   ['dashboard','admin','ask-flow','register-flow','astro-register-form','astro-flow','contact'].forEach(key=>document.getElementById(key)?.classList.add('hidden'));
   document.body.dataset.smvWorkspace='closed';document.body.classList.remove('smv-horoscope-active');

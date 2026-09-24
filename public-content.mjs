@@ -223,7 +223,7 @@
             if(msg)msg.innerHTML='<span class="success">Payment successful. Your private consultation is waiting for Admin approval.</span>';
             if(btn){btn.textContent='PAYMENT DONE ✓';}
             privateConsultSubmitting=false;
-            await window.__smvRefreshDashboard();
+            window.__smvShowVerifiedPayment({...vr,paymentId:vr.paymentId||response.razorpay_payment_id},'private');
           }catch(err){if(msg)msg.innerHTML='<span class="error">'+esc(err.message||String(err))+'</span>';if(btn){btn.disabled=false;btn.textContent='PAY & SUBMIT';}}
         },
         modal:{ondismiss:()=>{privateConsultSubmitting=false;if(btn){btn.disabled=false;btn.textContent='PAY & SUBMIT';}}}
