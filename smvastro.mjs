@@ -1069,6 +1069,31 @@ const smvReviewSummaryCache=new Map();
 window.__smvReviewCache=smvReviewCache;
 window.__smvReviewSummaryCache=smvReviewSummaryCache;
 let smvAstroListRequest=null;
+let smvPublicAstrologersCache=null,smvPublicAstrologersRequest=null;
+async function smvGetPublicAstrologersOnce(){
+ if(Array.isArray(smvPublicAstrologersCache))return smvPublicAstrologersCache;
+ if(smvPublicAstrologersRequest)return smvPublicAstrologersRequest;
+ smvPublicAstrologersRequest=(async()=>{const r=await withTimeout(fetch(RAZORPAY_BACKEND_URL+"/public/astrologers",{cache:"no-store"}),12000);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||`Astrologer service returned HTTP ${r.status}.`);smvPublicAstrologersCache=Array.isArray(d.astrologers)?d.astrologers:[];return smvPublicAstrologersCache;})();
+ try{return await smvPublicAstrologersRequest;}finally{smvPublicAstrologersRequest=null;}
+}
+async function smvRenderPrivateConsultAstrologers(){
+ const host=$('privateConsultationAstrologers');if(!host||host.dataset.smvLoaded==='1')return;
+ host.innerHTML='<div class="empty">Loading approved astrologers...</div>';
+ try{
+  const items=await smvGetPublicAstrologersOnce();
+  if(!items.length){host.innerHTML='<div class="empty">No approved astrologers available yet.</div>';host.dataset.smvLoaded='1';return;}
+  host.innerHTML='';
+  items.forEach(a=>{
+   const row=document.createElement('article');row.className='smv-private-consult-row';
+   const photo=a.photoData||a.photoURL||a.photoUrl||'',desc=a.profileDescription||a.bio||a.about||'Professional astrologer';
+   row.innerHTML=`<div class="smv-private-consult-head">${photo?`<img src="${escapeHtml(photo)}" alt="${escapeHtml(a.name||'Astrologer')} photo">`:''}<div><h3>${escapeHtml(a.name||'Astrologer')}</h3><p><b>${escapeHtml(a.expertise||a.specialization||'Astrology')}</b> · ${escapeHtml(a.experience||'Experienced')} years experience</p></div></div><div class="smv-private-rating-summary">${Number(a.rating||0)>0?`${ratingStars(a.rating)} <strong>${clampRating(a.rating).toFixed(1)} / 5</strong>`:'<span class="smv-rating-none">Reviews load on request</span>'}</div><p class="smv-private-consult-description">${escapeHtml(desc)}</p><button class="btn gray smv-private-review-toggle" type="button">REVIEWS &amp; RATINGS</button><div class="smv-inline-reviews hidden"></div><p><b>Chat Price: ₹${Number(a.chatPrice||0).toFixed(2)}</b></p><button class="btn smv-private-consult-select" type="button" data-astrologer-id="${escapeHtml(String(a.id||''))}" data-astrologer-name="${escapeHtml(a.name||'Astrologer')}" data-price="${Number(a.chatPrice||0)}">SELECT ASTROLOGER</button>`;
+   const btn=row.querySelector('.smv-private-review-toggle'),box=row.querySelector('.smv-inline-reviews'),sum=row.querySelector('.smv-private-rating-summary');
+   btn.onclick=async()=>{const opening=box.classList.contains('hidden');box.classList.toggle('hidden',!opening);if(!opening||box.dataset.loaded==='1')return;box.innerHTML='<div class="empty">Loading reviews...</div>';try{const reviews=await getReviews(a),s=ratingSummary(reviews);sum.innerHTML=s.count?`${ratingStars(s.avg)} <strong>${s.avg.toFixed(1)} / 5</strong> <span class="smv-rating-count">(${s.count})</span>`:'<span class="smv-rating-none">No ratings yet</span>';box.innerHTML=reviews.length?reviews.map(r=>`<div class="smv-directory-review"><div class="stars">${ratingStars(r.rating)} <strong>${clampRating(r.rating).toFixed(1)} / 5</strong></div><p>${escapeHtml(r.review||'Verified customer review')}</p></div>`).join(''):'<div class="empty">No approved reviews for this astrologer yet.</div>';box.dataset.loaded='1';}catch(e){box.innerHTML='<div class="empty error">Reviews are temporarily unavailable.</div>';}}
+   host.appendChild(row);
+  });host.dataset.smvLoaded='1';
+ }catch(e){host.innerHTML='<div class="empty error">Approved astrologers are temporarily unavailable.</div>';}
+}
+window.addEventListener('smv:private-consultation-open',()=>smvRenderPrivateConsultAstrologers().catch(()=>{}));
 function loadAstroCards(){
  if(smvAstroListRequest)return smvAstroListRequest;
  smvAstroListRequest=smvLoadAstroCards().finally(()=>smvAstroListRequest=null);return smvAstroListRequest;
@@ -1119,10 +1144,7 @@ async function smvLoadAstroCards(){
  try{
   let items=[];
   try {
-    const r=await withTimeout(fetch(RAZORPAY_BACKEND_URL+"/public/astrologers",{cache:"no-store"}),12000);
-    const d=await r.json().catch(()=>({}));
-    if(!r.ok) throw new Error(d.error||`Astrologer service returned HTTP ${r.status}.`);
-    items=Array.isArray(d.astrologers)?d.astrologers:[];
+    items=await smvGetPublicAstrologersOnce();
   } catch(backendErr) {
     // V47 strict quota rule: backend failure must not trigger a second direct
     // Firestore query from the browser. Retry is explicit and backend-only.

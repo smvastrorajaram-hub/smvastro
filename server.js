@@ -2289,9 +2289,11 @@ app.post("/offers/quote",express.json({limit:"10kb"}),async(req,res)=>{
 
 // Public homepage offer banners.
 // Payment eligibility/final amount remain server-verified separately.
+let publicOfferBannerCache={expiresAt:0,offers:null};
 app.get("/offers/public-banners", async (req, res) => {
   try {
     const now = Date.now();
+    if(Array.isArray(publicOfferBannerCache.offers)&&publicOfferBannerCache.expiresAt>now){res.set("Cache-Control","public, max-age=30, stale-while-revalidate=60");return res.json({success:true,offers:publicOfferBannerCache.offers,cached:true});}
     const bannerDateMs = (v) => {
       if (!v) return null;
       if (typeof v.toMillis === "function") return v.toMillis();
@@ -2332,8 +2334,8 @@ app.get("/offers/public-banners", async (req, res) => {
         discountValue:Number(o.discountValue||0),
         automatic:o.automatic===true,startAt:bannerDateIso(o.startAt),endAt:bannerDateIso(o.endAt)
       }));
-    res.set("Cache-Control","no-store, no-cache, must-revalidate, proxy-revalidate");
-    res.set("Pragma","no-cache"); res.set("Expires","0");
+    publicOfferBannerCache={expiresAt:now+60000,offers};
+    res.set("Cache-Control","public, max-age=30, stale-while-revalidate=60");
     return res.json({success:true,offers});
   } catch(e) {
     console.error("Public offer banner load failed:",e);
