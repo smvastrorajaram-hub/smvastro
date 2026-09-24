@@ -49,10 +49,20 @@
  },true);
  document.addEventListener('click',event=>{
   const back=event.target.closest?.('#privateConsultationBack');if(!back)return;
-  event.preventDefault();event.stopImmediatePropagation();navigate('home',{historyMode:'push'});
+  event.preventDefault();event.stopImmediatePropagation();
+  if(new URLSearchParams(location.search).get('view')==='consult'){
+   window.close();
+   setTimeout(()=>{if(!window.closed)location.href='./#home';},120);
+   return;
+  }
+  navigate('home',{historyMode:'push'});
  },true);
  window.addEventListener('hashchange',()=>{const id=location.hash.slice(1);if(targets.has(id))navigate(id,{historyMode:'none'});});
  window.addEventListener('popstate',()=>{const id=location.hash.slice(1)||'home';if(targets.has(id))navigate(id,{historyMode:'none'});});
- function restore(){const id=location.hash.slice(1);if(targets.has(id)&&id!=='home')navigate(id,{historyMode:'none'});}
+ function restore(){
+  const params=new URLSearchParams(location.search);
+  if(params.get('view')==='consult'){navigate('private-consultation',{historyMode:'none'});return;}
+  const id=location.hash.slice(1);if(targets.has(id)&&id!=='home')navigate(id,{historyMode:'none'});
+ }
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',restore,{once:true});else restore();
 })();

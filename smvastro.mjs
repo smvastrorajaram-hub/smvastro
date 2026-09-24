@@ -1070,6 +1070,24 @@ window.__smvReviewCache=smvReviewCache;
 window.__smvReviewSummaryCache=smvReviewSummaryCache;
 let smvAstroListRequest=null;
 let smvPublicAstrologersCache=null,smvPublicAstrologersRequest=null;
+const smvPublicReviewsCache=new Map(),smvPublicReviewsRequests=new Map();
+async function smvGetPublicReviewsOnce(astrologer){
+ const astrologerId=String(astrologer?.id||astrologer?.uid||"").trim();
+ if(!astrologerId)throw new Error("Astrologer ID is missing.");
+ if(smvPublicReviewsCache.has(astrologerId))return smvPublicReviewsCache.get(astrologerId);
+ if(smvPublicReviewsRequests.has(astrologerId))return smvPublicReviewsRequests.get(astrologerId);
+ const request=(async()=>{
+  const r=await withTimeout(fetch(RAZORPAY_BACKEND_URL+"/public/astrologers/"+encodeURIComponent(astrologerId)+"/reviews",{cache:"no-store"}),12000);
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(d.error||`Review service returned HTTP ${r.status}.`);
+  const reviews=Array.isArray(d.reviews)?d.reviews:[];
+  smvPublicReviewsCache.set(astrologerId,reviews);
+  return reviews;
+ })();
+ smvPublicReviewsRequests.set(astrologerId,request);
+ try{return await request;}finally{smvPublicReviewsRequests.delete(astrologerId);}
+}
+
 async function smvGetPublicAstrologersOnce(){
  if(Array.isArray(smvPublicAstrologersCache))return smvPublicAstrologersCache;
  if(smvPublicAstrologersRequest)return smvPublicAstrologersRequest;
@@ -1088,7 +1106,7 @@ async function smvRenderPrivateConsultAstrologers(){
    const photo=a.photoData||a.photoURL||a.photoUrl||'',desc=a.profileDescription||a.bio||a.about||'Professional astrologer';
    row.innerHTML=`<div class="smv-private-consult-head">${photo?`<img class="smv-private-consult-photo" src="${escapeHtml(photo)}" alt="${escapeHtml(a.name||'Astrologer')} photo">`:''}<div class="smv-private-consult-meta"><h3>${escapeHtml(a.name||'Astrologer')}</h3><div class="small"><b>Vedic:</b> ${escapeHtml(a.expertise||a.specialization||'Astrology')}</div><div class="small"><b>Experience:</b> ${escapeHtml(a.experience||'Experienced')} years</div></div></div><p class="smv-private-consult-description">${escapeHtml(desc)}</p><div class="smv-private-rating-summary">${Number(a.rating||0)>0?`${ratingStars(a.rating)} <strong>${clampRating(a.rating).toFixed(1)} / 5</strong>`:'<span class="smv-rating-none">Reviews load on request</span>'}</div><button class="btn gray smv-private-review-toggle" type="button">REVIEWS &amp; RATINGS</button><div class="smv-inline-reviews hidden"></div><div class="smv-private-consult-price">Chat Price: ₹${Number(a.chatPrice||0).toFixed(2)}</div><button class="btn smv-private-consult-select" type="button" data-astrologer-id="${escapeHtml(String(a.id||''))}" data-astrologer-name="${escapeHtml(a.name||'Astrologer')}" data-price="${Number(a.chatPrice||0)}">SELECT ASTROLOGER</button>`;
    const btn=row.querySelector('.smv-private-review-toggle'),box=row.querySelector('.smv-inline-reviews'),sum=row.querySelector('.smv-private-rating-summary');
-   btn.onclick=async()=>{const opening=box.classList.contains('hidden');box.classList.toggle('hidden',!opening);btn.textContent=opening?'HIDE REVIEWS & RATINGS':'REVIEWS & RATINGS';if(!opening||box.dataset.loaded==='1')return;box.innerHTML='<div class="empty">Loading reviews...</div>';try{const reviews=await getReviews(a),s=ratingSummary(reviews);sum.innerHTML=s.count?`${ratingStars(s.avg)} <strong>${s.avg.toFixed(1)} / 5</strong> <span class="smv-rating-count">(${s.count} review${s.count===1?'':'s'})</span>`:'<span class="smv-rating-none">No ratings yet</span>';box.innerHTML=reviews.length?reviews.map(r=>`<div class="smv-directory-review"><div class="stars">${ratingStars(r.rating)} <strong>${clampRating(r.rating).toFixed(1)} / 5</strong></div><p>${escapeHtml(r.review||'Verified customer review')}</p><span class="small">${escapeHtml(r.customerName||r.name||'Verified customer')}</span></div>`).join(''):'<div class="empty">No approved reviews for this astrologer yet.</div>';box.dataset.loaded='1';}catch(e){box.innerHTML='<div class="empty error">Unable to load reviews: '+escapeHtml(e?.message||String(e))+'</div>';}}
+   btn.onclick=async()=>{const opening=box.classList.contains('hidden');box.classList.toggle('hidden',!opening);btn.textContent=opening?'HIDE REVIEWS & RATINGS':'REVIEWS & RATINGS';if(!opening||box.dataset.loaded==='1')return;box.innerHTML='<div class="empty">Loading reviews...</div>';try{const reviews=await smvGetPublicReviewsOnce(a),s=ratingSummary(reviews);sum.innerHTML=s.count?`${ratingStars(s.avg)} <strong>${s.avg.toFixed(1)} / 5</strong> <span class="smv-rating-count">(${s.count} review${s.count===1?'':'s'})</span>`:'<span class="smv-rating-none">No ratings yet</span>';box.innerHTML=reviews.length?reviews.map(r=>`<div class="smv-directory-review"><div class="stars">${ratingStars(r.rating)} <strong>${clampRating(r.rating).toFixed(1)} / 5</strong></div><p>${escapeHtml(r.review||'Verified customer review')}</p><span class="small">${escapeHtml(r.customerName||r.name||'Verified customer')}</span></div>`).join(''):'<div class="empty">No approved reviews for this astrologer yet.</div>';box.dataset.loaded='1';}catch(e){box.innerHTML='<div class="empty error">Unable to load reviews: '+escapeHtml(e?.message||String(e))+'</div>';}}
    host.appendChild(row);
   });host.dataset.smvLoaded='1';
  }catch(e){host.innerHTML='<div class="empty error">Approved astrologers are temporarily unavailable.</div>';}
@@ -1164,7 +1182,7 @@ async function smvLoadAstroCards(){
     row.innerHTML=`<div class="smv-astro-directory-head">${photo?`<img src="${escapeHtml(photo)}" alt="${escapeHtml(a.name||'Astrologer')} photo">`:''}<div><h3>${escapeHtml(a.name||"Astrologer")}</h3><p class="smv-astro-speciality"><b>${escapeHtml(a.expertise||a.specialization||"Astrology")}</b></p><p class="small">${escapeHtml(a.experience||"Experienced")} years experience</p></div></div><div class="smv-astro-rating-summary"><span class="smv-rating-loading">Loading ratings...</span></div><p class="smv-astro-description">${escapeHtml(description)}</p><button class="btn gray smv-review-toggle" type="button" aria-expanded="false">REVIEWS &amp; RATINGS</button><div class="smv-inline-reviews hidden"><div class="empty">Reviews will load when opened.</div></div>`;
     const btn=row.querySelector('.smv-review-toggle'),reviewBox=row.querySelector('.smv-inline-reviews'),summaryBox=row.querySelector('.smv-astro-rating-summary');
     let loaded=false,reviewsCache=null;
-    const ensureReviews=async()=>{if(reviewsCache)return reviewsCache;reviewsCache=await getReviews(a);return reviewsCache;};
+    const ensureReviews=async()=>{if(reviewsCache)return reviewsCache;reviewsCache=await smvGetPublicReviewsOnce(a);return reviewsCache;};
     const storedRating=Number(a.rating||0);
     summaryBox.innerHTML=storedRating>0?`${ratingStars(storedRating)} <strong>${clampRating(storedRating).toFixed(1)} / 5</strong>`:`<span class="smv-rating-none">Reviews load on request</span>`;
     if(storedRating>0){a.__smvSummary={avg:clampRating(storedRating),count:1};addPrivateRating(a,a.__smvSummary);}

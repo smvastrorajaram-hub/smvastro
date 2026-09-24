@@ -2343,7 +2343,7 @@ app.get("/offers/public-banners", async (req, res) => {
       }));
     publicOfferBannerCache={expiresAt:now+60000,offers};
     res.set("Cache-Control","public, max-age=30, stale-while-revalidate=60");
-    return res.json({success:true,offers});
+    return res.json({success:true,offers,activeOfferCount:offers.length});
   } catch(e) {
     console.error("Public offer banner load failed:",e);
     return res.status(500).json({success:false,offers:[],error:"Unable to load offers."});
