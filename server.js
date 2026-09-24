@@ -1003,11 +1003,14 @@ app.get("/public/astrologers/:astrologerId/reviews", async(req,res)=>{
     }
     // V46: one targeted Firestore query only. No full-review scan and no extra
     // astrologer-document read. The public directory itself exposes approved astrologers.
+    // One indexed equality query only. Filter approval in memory so this
+    // endpoint does not depend on a Firestore composite index.
     const snap=await db.collection("smv_reviews")
       .where("astrologerId","==",astrologerId)
-      .where("approved","==",true)
       .limit(100).get();
-    const reviews=snap.docs.map(d=>({id:d.id,...d.data()}));
+    const reviews=snap.docs
+      .map(d=>({id:d.id,...d.data()}))
+      .filter(r=>r.approved===true || String(r.status||"").toLowerCase()==="approved");
     publicReviewsCache.set(astrologerId,{expiresAt:now+60000,reviews});
     res.set("Cache-Control","public, max-age=30, stale-while-revalidate=60");
     return res.json({success:true,astrologerId,reviews});
@@ -2371,6 +2374,7 @@ app.post("/admin/offers/save",express.json({limit:"30kb"}),async(req,res)=>{
     const savedSnap=await ref.get();
     if(!savedSnap.exists)return res.status(500).json({error:"Offer save verification failed."});
     const saved={id:savedSnap.id,...savedSnap.data()};
+    publicOfferBannerCache={expiresAt:0,offers:null};
     return res.json({success:true,id,saved});
   }catch(e){return res.status(400).json({error:e?.message||"Unable to save offer."});}
 });
@@ -2378,7 +2382,9 @@ app.post("/admin/offers/delete",express.json({limit:"10kb"}),async(req,res)=>{
   const user=await requireUser(req,res);if(!user)return;if(!(await isAdminUser(user)))return res.status(403).json({error:"Admin access denied."});
   const id=offerText(req.body?.id,80);if(!id)return res.status(400).json({error:"Offer ID required."});
   if(id===BUILTIN_WELCOME_ID)return res.status(409).json({error:"Built-in ₹1 Welcome Offer cannot be deleted. Disable it instead."});
-  await db.collection(OFFER_COLLECTION).doc(id).delete();return res.json({success:true});
+  await db.collection(OFFER_COLLECTION).doc(id).delete();
+  publicOfferBannerCache={expiresAt:0,offers:null};
+  return res.json({success:true});
 });
 
 app.post("/private-consultation/create-order", express.json({limit:"30kb"}), async (req,res)=>{

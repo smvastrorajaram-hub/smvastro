@@ -3877,7 +3877,7 @@ document.addEventListener('DOMContentLoaded', function(){
     if(!force && Date.now()-__smvBannerLastLoad<30000)return;
     __smvBannerLoading=true;
     try{
-      const r=await fetch(BACKEND_URL+"/offers/public-banners?t="+Date.now(),{cache:"no-store",headers:{"Accept":"application/json"}});
+      const r=await fetch(BACKEND_URL+"/offers/public-banners",{cache:"default",headers:{"Accept":"application/json"}});
       const data=await r.json().catch(()=>({offers:[]})); if(!r.ok)throw new Error(data.error||"Offer banner request failed");
       const offers=Array.isArray(data.offers)?data.offers:[];
       if(!offers.length){host.innerHTML="";host.classList.add("hidden");return;}
@@ -3903,6 +3903,7 @@ document.addEventListener('DOMContentLoaded', function(){
   }
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",()=>loadHomeOfferBanners(),{once:true}); else loadHomeOfferBanners();
   window.addEventListener("focus",()=>{if(Date.now()-__smvBannerLastLoad>60000)loadHomeOfferBanners();});
+  window.addEventListener("smv:offers-changed",()=>loadHomeOfferBanners(true));
 })();
 </script>
 
