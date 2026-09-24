@@ -1005,6 +1005,10 @@ app.get("/public/astrologers/:astrologerId/reviews", async(req,res)=>{
     // astrologer-document read. The public directory itself exposes approved astrologers.
     // One indexed equality query only. Filter approval in memory so this
     // endpoint does not depend on a Firestore composite index.
+    // Reviews are keyed as `${questionId}_${customerUid}`. Public review lookup
+    // stays bounded and index-free: use the astrologer field equality query first.
+    // If an old project has no usable field index, return the actual backend error
+    // to the browser instead of hiding it behind a generic message.
     const snap=await db.collection("smv_reviews")
       .where("astrologerId","==",astrologerId)
       .limit(100).get();
@@ -1014,7 +1018,7 @@ app.get("/public/astrologers/:astrologerId/reviews", async(req,res)=>{
     publicReviewsCache.set(astrologerId,{expiresAt:now+60000,reviews});
     res.set("Cache-Control","public, max-age=30, stale-while-revalidate=60");
     return res.json({success:true,astrologerId,reviews});
-  }catch(e){console.error("Public astrologer reviews load failed:",e);return res.status(500).json({error:e?.message||"Unable to load astrologer reviews."});}
+   }catch(e){console.error("Public astrologer reviews load failed:",e);return res.status(500).json({error:e?.message||"Unable to load astrologer reviews.",code:e?.code||"REVIEWS_LOAD_FAILED"});}
 });
 // ============================================================
 // CUSTOMER REVIEW API
@@ -2313,14 +2317,14 @@ app.get("/offers/public-banners", async (req, res) => {
       const ms = bannerDateMs(v);
       return ms === null ? null : new Date(ms).toISOString();
     };
-    const snap = await db.collection(OFFER_COLLECTION).get();
+    const snap = await db.collection(OFFER_COLLECTION).where("enabled","==",true).limit(50).get();
     const offers = snap.docs
       .map(d => ({ id: d.id, ...d.data() }))
       .filter(o => {
         const enabled = o.enabled === true || String(o.enabled).toLowerCase() === "true";
         if (!enabled) return false;
-        const mode = String(o.displayMode || "").trim().toLowerCase().replace(/[\s+-]+/g, "_");
-        if (["hidden","off","none","disabled"].includes(mode)) return false;
+        // Homepage banner follows the Admin enabled state + active date window.
+        // displayMode is payment/UI metadata and must not silently suppress an enabled banner.
         const start = bannerDateMs(o.startAt), end = bannerDateMs(o.endAt);
         if (start !== null && now < start) return false;
         if (end !== null && now > end) return false;
