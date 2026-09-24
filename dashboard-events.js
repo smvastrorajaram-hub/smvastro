@@ -1,14 +1,31 @@
 // Server-side change signals. Full records remain behind existing authorized APIs.
 module.exports=function registerDashboardEvents(app,{db,requireUser,isAdminUser}){
+ // Share identical listeners across tabs/connections in this server process.
+ // Keys include the role/user query scope; never share records across users.
+ const listeners=new Map();
+ function listen(key,ref,next,error){
+  let entry=listeners.get(key);
+  if(!entry){
+   entry={subscribers:new Set(),snapshot:null,stop:null};listeners.set(key,entry);
+   entry.stop=ref.onSnapshot(snapshot=>{
+    entry.snapshot=snapshot;for(const sub of [...entry.subscribers])sub.next(snapshot);
+   },err=>{for(const sub of [...entry.subscribers])sub.error(err);listeners.delete(key);});
+  }
+  const subscriber={next,error};entry.subscribers.add(subscriber);
+  if(entry.snapshot)queueMicrotask(()=>{if(entry.subscribers.has(subscriber))next(entry.snapshot);});
+  return ()=>{entry.subscribers.delete(subscriber);if(!entry.subscribers.size){entry.stop?.();if(listeners.get(key)===entry)listeners.delete(key);}};
+ }
+
  app.get('/dashboard/events',async(req,res)=>{
   const user=await requireUser(req,res);if(!user)return;
   let stopped=false,heartbeat,expiry,debounce;const unsubs=[];
   function stop(){if(stopped)return;stopped=true;clearInterval(heartbeat);clearTimeout(expiry);clearTimeout(debounce);unsubs.forEach(fn=>fn());if(!res.writableEnded)res.end();}
   res.on('close',stop);
   try{
-   const [adminUser,profile,astro]=await Promise.all([isAdminUser(user),db.collection('smv_users').doc(user.uid).get(),db.collection('smv_astrologers').doc(user.uid).get()]);
+   const [adminUser,profile]=await Promise.all([isAdminUser(user),db.collection('smv_users').doc(user.uid).get()]);
    if(stopped)return;
    const role=adminUser?'admin':String(profile.data()?.role||'customer');
+   const astro=role==='astrologer'?await db.collection('smv_astrologers').doc(user.uid).get():null;
    res.status(200).set({'Content-Type':'text/event-stream','Cache-Control':'no-cache, no-transform','Connection':'keep-alive','X-Accel-Buffering':'no'});
    res.flushHeaders();
    const send=(event,data={})=>{if(!stopped)res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);};
@@ -30,7 +47,8 @@ module.exports=function registerDashboardEvents(app,{db,requireUser,isAdminUser}
    refs.forEach((entry,index)=>{
     const ref=entry.ref,kind=entry.kind;
     let first=true;
-    unsubs.push(ref.onSnapshot(snap=>{
+    const sharedKey=ref.path||[role,user.uid,kind].join(':');
+    unsubs.push(listen(sharedKey,ref,snap=>{
      if(first){first=false;if(--waiting===0)send('ready');return;}
      // Recheck access at reconnect after own role/approval changes.
      if(index===0 || (role==='astrologer'&&kind==='profile')){send('change',{kinds:['profile']});stop();return;}

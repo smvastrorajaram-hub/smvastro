@@ -10,33 +10,47 @@
    if(active)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');
   });
  }
+ function setDedicatedConsultView(on){
+  const shell=document.getElementById('smv-consult-dedicated-shell');
+  const publicPage=document.getElementById('smv-public-page');
+  const header=document.getElementById('smvPremiumHeaderV9');
+  const footer=document.getElementById('smv24-footer');
+  const workspace=document.getElementById('smv-dashboard-page');
+  document.body.classList.toggle('smv-consult-dedicated',on);
+  document.body.classList.toggle('smv-internal-public-view',on);
+  shell?.classList.toggle('hidden',!on);
+  publicPage?.classList.toggle('hidden',on);
+  header?.classList.toggle('hidden',on);
+  footer?.classList.toggle('hidden',on);
+  if(on)workspace?.classList.add('hidden');
+ }
  function navigate(id,{historyMode='push'}={}){
   if(!targets.has(id))return false;
   const target=document.getElementById(id);if(!target)return false;
   const ticket=++revision;window.__SMV_PUBLIC_ROUTE=id;window.__smvPreparePublicNavigation?.();
-  ['dashboard','admin','smv-dashboard-page','ask-flow','register-flow','astro-register-form','astro-flow','contact'].forEach(key=>document.getElementById(key)?.classList.add('hidden'));
+  ['dashboard','admin','ask-flow','register-flow','astro-register-form','astro-flow','contact'].forEach(key=>document.getElementById(key)?.classList.add('hidden'));
   document.body.dataset.smvWorkspace='closed';document.body.classList.remove('smv-horoscope-active');
-  document.getElementById('smv-public-page')?.classList.remove('hidden');
-  const publicSections=['home','askNowSection','faq','smv-content-hub','english-horoscope','about'];
+  const dedicated=id==='private-consultation';
+  setDedicatedConsultView(dedicated);
+  const publicSections=['home','askNowSection','faq','smv-content-hub','english-horoscope','about','smv-master-services'];
   if(id==='private-consultation'){
-   publicSections.forEach(key=>document.getElementById(key)?.classList.add('hidden'));
-   document.getElementById('astrologer-directory')?.classList.add('hidden');
    target.classList.remove('hidden');
    window.dispatchEvent(new Event('smv:private-consultation-open'));
   }else{
-   document.getElementById('astrologer-directory')?.classList.add('hidden');
    document.getElementById('private-consultation')?.classList.add('hidden');
    publicSections.forEach(key=>document.getElementById(key)?.classList.remove('hidden'));
   }
   if(id==='contact')target.classList.remove('hidden');
+  if(id==='home')window.dispatchEvent(new Event('smv:payment-ui-reset'));
   if(['publicBlogs','publicMedia','smv-content-hub'].includes(id))window.__smvContentVisible=true;
   if(id==='english-horoscope')window.__smvPublicHoroscopeVisible=true;
   for(let el=target;el&&el!==document.body;el=el.parentElement){
    el.classList.remove('hidden','smv-v173-home-collapsed','smv-v173-sub-collapsed','smv-v174-faq-collapsed');
   }
   selection(id);
-  if(historyMode==='push'&&location.hash!=='#'+id)history.pushState({smvView:'public',section:id},'','#'+id);
-  if(historyMode==='replace')history.replaceState({smvView:'public',section:id},'','#'+id);
+  const url=new URL(location.href);url.searchParams.delete('view');url.hash=id;
+  if(historyMode==='push'&&location.hash!=='#'+id)history.pushState({smvView:'public',section:id},'',url);
+  if(historyMode==='replace')history.replaceState({smvView:'public',section:id},'',url);
   requestAnimationFrame(()=>{if(ticket===revision)target.scrollIntoView({behavior:'auto',block:'start'});});
   return true;
  }
@@ -46,27 +60,21 @@
   const control=event.target.closest?.('a[href^="#"],[data-smv-route]');if(!control)return;
   const id=control.dataset.smvRoute||(control.getAttribute('href')||'').slice(1);if(!targets.has(id))return;
   if(id==='private-consultation'){
-   event.preventDefault();event.stopImmediatePropagation();
-   window.open('./?view=consult','_blank','noopener');
-   return;
+   event.preventDefault();event.stopImmediatePropagation();navigate(id);return;
   }
   event.preventDefault();event.stopImmediatePropagation();navigate(id);
  },true);
  document.addEventListener('click',event=>{
   const back=event.target.closest?.('#privateConsultationBack');if(!back)return;
   event.preventDefault();event.stopImmediatePropagation();
-  if(new URLSearchParams(location.search).get('view')==='consult'){
-   window.close();
-   setTimeout(()=>{if(!window.closed)location.href='./#home';},120);
-   return;
-  }
   navigate('home',{historyMode:'push'});
  },true);
  window.addEventListener('hashchange',()=>{const id=location.hash.slice(1);if(targets.has(id))navigate(id,{historyMode:'none'});});
  window.addEventListener('popstate',()=>{const id=location.hash.slice(1)||'home';if(targets.has(id))navigate(id,{historyMode:'none'});});
  function restore(){
   const params=new URLSearchParams(location.search);
-  if(params.get('view')==='consult'){navigate('private-consultation',{historyMode:'none'});return;}
+  if(params.get('view')==='consult'){navigate('private-consultation',{historyMode:'replace'});return;}
+  setDedicatedConsultView(false);
   const id=location.hash.slice(1);if(targets.has(id)&&id!=='home')navigate(id,{historyMode:'none'});
  }
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',restore,{once:true});else restore();

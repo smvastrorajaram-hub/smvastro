@@ -16,7 +16,7 @@
 <meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"/>
 <meta content="SMV ASTRO" name="apple-mobile-web-app-title"/>
 <title>SMV ASTRO SERVICES</title>
-<link as="image" href="./assets/smv-desktop-hero-rooted-final.jpg" media="(min-width: 900px)" rel="preload"/><link as="image" href="./assets/smv-hero-family-two-girls.png" media="(max-width: 899px)" rel="preload"/><link href="./smvastro.css?v=20260924-v56" rel="stylesheet"/><script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<link as="image" href="./assets/smv-desktop-hero-rooted-final.jpg" media="(min-width: 900px)" rel="preload"/><link as="image" href="./assets/smv-hero-family-two-girls.png" media="(max-width: 899px)" rel="preload"/><link href="./smvastro.css?v=20260924-v64" rel="stylesheet"/><script defer src="https://checkout.razorpay.com/v1/checkout.js"></script><script src="./payment-timing.js?v=64"></script>
 <script>
 /* SMV ASTRO V122 - one-time browser fresh start.
    Clears browser-side app storage/cache only; never touches Firebase/Render/MongoDB data. */
@@ -124,11 +124,8 @@ document.addEventListener('DOMContentLoaded', function(){
 <nav aria-label="Main navigation" class="smv9-menu">
 <a class="active" href="#home">Home</a>
 <a href="#english-horoscope" id="horoscopeNav">Horoscope</a>
-<a href="./?view=consult" id="astrologersNav">Astrologers</a>
 <button data-smv-route="publicBlogs" id="contentNav" type="button">Blog</button>
 <a href="#publicMedia">Media</a>
-<a href="#about">About</a>
-<a href="#contact" id="contactNav">Contact</a>
 <a class="hidden" href="#dashboard" id="dashLink">Dashboard</a>
 <a aria-hidden="true" class="hidden" href="#admin" id="adminLink" tabindex="-1">Admin</a>
 <button class="login" id="authBtn" type="button">Login</button>
@@ -138,12 +135,6 @@ document.addEventListener('DOMContentLoaded', function(){
 </div>
 <main class="container" id="smv-public-page">
 
-<section class="feature-section hidden smv-astrologer-directory" id="astrologer-directory" hidden aria-labelledby="astrologerDirectoryTitle">
-  <div class="home-rule"><span><img alt="" aria-hidden="true" class="smv-brand-symbol" height="20" src="./assets/smv-brand-logo-v17.png" width="20"/></span><span>APPROVED ASTROLOGERS</span><span><img alt="" aria-hidden="true" class="smv-brand-symbol" height="20" src="./assets/smv-brand-logo-v17.png" width="20"/></span></div>
-  <h2 id="astrologerDirectoryTitle">Approved Astrologers</h2>
-  <p class="small smv-astrologer-directory-intro">View approved astrologer profiles. Reviews &amp; Ratings open only when you choose to view them.</p>
-  <div id="astroCards"><div class="empty">Loading approved astrologers...</div></div>
-</section>
 <div id="smvHomeOfferBanners" class="smv-home-offer-banners hidden" aria-live="polite"></div>
 <div id="home" class="smv33-hero"><div class="smv33-scene"><img class="smv33-photo" src="assets/smv-hero-family-two-girls.png" width="1681" height="936" alt="Sri Madurai Veerayah with his consorts" fetchpriority="high"/><div class="smv33-copy"><div class="smv33-mobile-head">
 <div class="smv33-kicker">Sri Madurai Veerayah Astro Services</div>
@@ -166,32 +157,9 @@ document.addEventListener('DOMContentLoaded', function(){
 <div aria-label="SMV ASTRO services" class="smv-master-services">
 <a class="smv-master-service" href="#askNowSection"><span aria-hidden="true" class="smv24-icon"><img alt="" loading="lazy" src="assets/service-icons-v24.png" style="width:417.3913%;left:-286.6848%;top:-13.0435%"/></span><strong>Ask a Question</strong><span>Get personalized answers from approved astrologers.</span></a>
 <a class="smv-master-service" href="#english-horoscope"><span aria-hidden="true" class="smv24-icon"><img alt="" loading="lazy" src="assets/service-icons-v24.png" style="width:417.3913%;left:-29.0761%;top:-138.8587%"/></span><strong>Create Horoscope</strong><span>Accurate Vedic calculations with detailed analysis.</span></a>
-<a class="smv-master-service" href="./?view=consult" id="privateConsultationHomeLink"><span aria-hidden="true" class="smv24-icon"><img alt="" loading="lazy" src="assets/service-icons-v24.png" style="width:417.3913%;left:-157.6087%;top:-138.8587%"/></span><strong>Consult an Astrologer</strong><span>Connect with approved and experienced astrologers.</span></a>
+<a class="smv-master-service" href="./?view=consult" id="privateConsultationHomeLink" data-smv-route="private-consultation"><span aria-hidden="true" class="smv24-icon"><img alt="" loading="lazy" src="assets/service-icons-v24.png" style="width:417.3913%;left:-157.6087%;top:-138.8587%"/></span><strong>Consult an Astrologer</strong><span>Connect with approved and experienced astrologers.</span></a>
 <a class="smv-master-service" href="#publicBlogs"><span aria-hidden="true" class="smv24-icon"><img alt="" loading="lazy" src="assets/service-icons-v24.png" style="width:417.3913%;left:-286.6848%;top:-138.8587%"/></span><strong>Read Our Blog</strong><span>Insights, remedies and astrology knowledge.</span></a>
 </div>
-<section class="section hidden" id="private-consultation" aria-label="Private Consultation">
-<div class="wrap"><button type="button" id="privateConsultationBack" class="smv-consult-back" aria-label="Back to Home">← BACK</button></div>
-<div class="wrap">
-<div class="section-title"><h2>Private Consultation</h2><p>Choose an approved astrologer for a private consultation. The Chat Price shown below is set by Admin.</p></div>
-<div id="privateConsultationAstrologers"><div class="empty">Loading approved astrologers...</div></div>
-<div class="card hidden" id="privateConsultationQuestionCard" style="position:relative">
-  <button type="button" id="privateConsultationQuestionClose" aria-label="Close Private Consultation Question" title="Close" style="position:absolute;right:14px;top:10px;border:0;background:transparent;font-size:28px;line-height:1;cursor:pointer;padding:4px 8px;color:#8b0000">×</button>
-  <h3 style="padding-right:42px">Private Consultation Question</h3>
-  <div id="privateConsultationSelected" class="small"></div>
-  <form id="privateConsultationQuestionForm">
-    <label>Your Name<input id="privateConsultName" maxlength="120" required></label>
-    <label>Birth Date<input id="privateConsultBirthDate" type="date" required></label>
-    <label>Birth Time<input id="privateConsultBirthTime" type="time" required></label>
-    <label>Birth Place<input id="privateConsultBirthPlace" maxlength="200" required></label>
-    <label>Gender<select id="privateConsultGender"><option value="">Select</option><option>Male</option><option>Female</option><option>Other</option></select></label>
-    <label>Your Question<textarea id="privateConsultQuestion" rows="4" maxlength="10000" required></textarea></label>
-    <div id="privateConsultPaymentSummary"></div>
-    <button class="btn" id="privateConsultPayBtn" type="submit">PAY &amp; SUBMIT</button>
-    <div id="privateConsultMsg" class="small"></div>
-  </form>
-</div>
-</div>
-</section>
 <section aria-label="Install SMV ASTRO App" class="smv-install-app-section" id="smvInstallAppSection"><div class="smv-install-app-card"><div class="smv-install-app-icon-wrap"><img alt="SMV ASTRO" class="smv-install-app-icon" height="64" src="./assets/icon-192.png" width="64"/></div><div class="smv-install-app-copy"><h3>📱 Install SMV ASTRO App</h3><p>Install SMV ASTRO on your phone and use it like an app from your Home Screen.</p><div aria-live="polite" class="smv-install-app-help" id="smvInstallAppHelp"></div></div><button class="smv-install-app-btn" id="smvInstallAppBtn" type="button">INSTALL APP</button></div></section>
 <section aria-labelledby="askNowHeading" class="smv-new-asknow" id="askNowSection">
 <div class="smv-new-asknow-inner">
@@ -317,6 +285,31 @@ document.addEventListener('DOMContentLoaded', function(){
 <p>Apply to become an SMV ASTRO astrologer. Your professional profile will be reviewed before it becomes public.</p>
 <button class="btn alt" id="astroRegBtn"><span class="btn-icon"><img alt="" aria-hidden="true" class="smv-brand-symbol" height="20" src="./assets/smv-brand-logo-v17.png" width="20"/></span> Register as Astrologer</button>
 </div>
+</div>
+</div>
+</section>
+</main>
+<main id="smv-consult-dedicated-shell" class="smv-consult-dedicated-shell hidden" aria-label="Private Consultation View">
+<section class="section hidden" id="private-consultation" aria-label="Private Consultation">
+<div class="wrap"><button type="button" id="privateConsultationBack" class="smv-consult-back" aria-label="Back to Home">← BACK</button></div>
+<div class="wrap">
+<div class="section-title"><h2>Private Consultation</h2><p>Choose an approved astrologer for a private consultation. The Chat Price shown below is set by Admin.</p></div>
+<div id="privateConsultationAstrologers"><div class="empty">Loading approved astrologers...</div></div>
+<div class="card hidden" id="privateConsultationQuestionCard" style="position:relative">
+  <button type="button" id="privateConsultationQuestionClose" aria-label="Close Private Consultation Question" title="Close" style="position:absolute;right:14px;top:10px;border:0;background:transparent;font-size:28px;line-height:1;cursor:pointer;padding:4px 8px;color:#8b0000">×</button>
+  <h3 style="padding-right:42px">Private Consultation Question</h3>
+  <div id="privateConsultationSelected" class="small"></div>
+  <form id="privateConsultationQuestionForm">
+    <label>Your Name<input id="privateConsultName" maxlength="120" required></label>
+    <label>Birth Date<input id="privateConsultBirthDate" type="date" required></label>
+    <label>Birth Time<input id="privateConsultBirthTime" type="time" required></label>
+    <label>Birth Place<input id="privateConsultBirthPlace" maxlength="200" required></label>
+    <label>Gender<select id="privateConsultGender"><option value="">Select</option><option>Male</option><option>Female</option><option>Other</option></select></label>
+    <label>Your Question<textarea id="privateConsultQuestion" rows="4" maxlength="10000" required></textarea></label>
+    <div id="privateConsultPaymentSummary"></div>
+    <button class="btn" id="privateConsultPayBtn" type="submit">PAY &amp; SUBMIT</button>
+    <div id="privateConsultMsg" class="small"></div>
+  </form>
 </div>
 </div>
 </section>
@@ -477,14 +470,14 @@ document.addEventListener('DOMContentLoaded', function(){
 </form>
 </section>
 <!-- SMV ASTRO Install App option: placed immediately before the final footer -->
-<div id="smv24-footer" role="contentinfo"><div class="smv24-footer-top"><div class="smv24-brand"><h2><span aria-hidden="true">☀</span> SMV ASTRO</h2><p>Sri Madurai Veerayah Astro Services</p><small>GUIDING YOUR COSMIC JOURNEY</small><em>Astrology for a Better Tomorrow</em></div><div class="smv24-columns"><div aria-label="Footer Quick Links" class="smv26-links" role="navigation"><h3>Quick Links</h3><a href="#home">Home</a><a href="#english-horoscope">Horoscope</a><a href="./?view=consult">Astrologers</a><a href="#publicBlogs">Blog</a><a href="#publicMedia">Media</a><a href="#about">About Us</a><a href="#contact">Contact Us</a></div><div aria-label="Footer Our Services" class="smv26-links" role="navigation"><h3>Our Services</h3><a href="#english-horoscope">Birth Chart Analysis</a><a href="#askNowSection">Career Guidance</a><a href="#askNowSection">Marriage Matching</a><a href="#askNowSection">Health &amp; Wellness</a><a href="#askNowSection">Remedies &amp; Solutions</a><a href="#askNowSection">Personal Consultation</a></div><div aria-label="Footer Support" class="smv26-links" role="navigation"><h3>Support</h3><a href="privacy.html">Privacy Policy</a><a href="terms.html">Terms &amp; Conditions</a><a href="#faq">FAQ</a><a href="sitemap.html">Sitemap</a><a href="https://wa.me/message/EPR2XEATFYREB1">Help &amp; Support</a></div></div><div class="smv24-contact"><a href="tel:+916381171084"><img alt="" class="smv26-social-icon" height="26" src="assets/social/phone.svg" width="26"/> +91 6381171084</a><a href="mailto:smvastroservices@gmail.com">✉ smvastroservices@gmail.com</a><span>⌖ Perambalur, Tamil Nadu, India</span></div><div class="smv24-social"><a aria-label="Facebook" href="https://www.facebook.com/share/1ErDtsZR6i/" rel="noopener noreferrer" target="_blank"><img alt="" class="smv26-social-icon" height="32" src="assets/social/facebook.svg" width="32"/><span>Facebook</span></a><a aria-label="Instagram" href="https://www.instagram.com/smvastroproducts/" rel="noopener noreferrer" target="_blank"><img alt="" class="smv26-social-icon" height="32" src="assets/social/instagram.svg" width="32"/><span>Instagram</span></a><a aria-label="YouTube" href="https://youtube.com/@rajarammaduraiveeran?si=Yez_7W6c14hDl-d2" rel="noopener noreferrer" target="_blank"><img alt="" class="smv26-social-icon" height="32" src="assets/social/youtube.svg" width="32"/><span>YouTube</span></a><a aria-label="WhatsApp" href="https://wa.me/message/EPR2XEATFYREB1" rel="noopener noreferrer" target="_blank"><img alt="" class="smv26-social-icon" height="32" src="assets/social/whatsapp.svg" width="32"/><span>WhatsApp</span></a></div></div><div class="smv24-scenery"><p>Let the Stars Guide You Towards<br/>a Brighter Tomorrow</p></div><div class="smv24-copyright">© 2026 SMV ASTRO SERVICES. All Rights Reserved.<small>TRADITIONAL WISDOM　|　MODERN GUIDANCE</small></div></div>
+<div id="smv24-footer" role="contentinfo"><div class="smv24-footer-top"><div class="smv24-brand"><h2><span aria-hidden="true">☀</span> SMV ASTRO</h2><p>Sri Madurai Veerayah Astro Services</p><small>GUIDING YOUR COSMIC JOURNEY</small><em>Astrology for a Better Tomorrow</em></div><div class="smv24-columns"><div aria-label="Footer Quick Links" class="smv26-links" role="navigation"><h3>Quick Links</h3><a href="#home">Home</a><a href="#english-horoscope">Horoscope</a><a href="#publicBlogs">Blog</a><a href="#publicMedia">Media</a><a href="#about">About Us</a><a href="#contact">Contact Us</a></div><div aria-label="Footer Our Services" class="smv26-links" role="navigation"><h3>Our Services</h3><a href="#english-horoscope">Birth Chart Analysis</a><a href="#askNowSection">Career Guidance</a><a href="#askNowSection">Marriage Matching</a><a href="#askNowSection">Health &amp; Wellness</a><a href="#askNowSection">Remedies &amp; Solutions</a><a href="#askNowSection">Personal Consultation</a></div><div aria-label="Footer Support" class="smv26-links" role="navigation"><h3>Support</h3><a href="privacy.html">Privacy Policy</a><a href="terms.html">Terms &amp; Conditions</a><a href="#faq">FAQ</a><a href="sitemap.html">Sitemap</a><a href="https://wa.me/message/EPR2XEATFYREB1">Help &amp; Support</a></div></div><div class="smv24-contact"><a href="tel:+916381171084"><img alt="" class="smv26-social-icon" height="26" src="assets/social/phone.svg" width="26"/> +91 6381171084</a><a href="mailto:smvastroservices@gmail.com">✉ smvastroservices@gmail.com</a><span>⌖ Perambalur, Tamil Nadu, India</span></div><div class="smv24-social"><a aria-label="Facebook" href="https://www.facebook.com/share/1ErDtsZR6i/" rel="noopener noreferrer" target="_blank"><img alt="" class="smv26-social-icon" height="32" src="assets/social/facebook.svg" width="32"/><span>Facebook</span></a><a aria-label="Instagram" href="https://www.instagram.com/smvastroproducts/" rel="noopener noreferrer" target="_blank"><img alt="" class="smv26-social-icon" height="32" src="assets/social/instagram.svg" width="32"/><span>Instagram</span></a><a aria-label="YouTube" href="https://youtube.com/@rajarammaduraiveeran?si=Yez_7W6c14hDl-d2" rel="noopener noreferrer" target="_blank"><img alt="" class="smv26-social-icon" height="32" src="assets/social/youtube.svg" width="32"/><span>YouTube</span></a><a aria-label="WhatsApp" href="https://wa.me/message/EPR2XEATFYREB1" rel="noopener noreferrer" target="_blank"><img alt="" class="smv26-social-icon" height="32" src="assets/social/whatsapp.svg" width="32"/><span>WhatsApp</span></a></div></div><div class="smv24-scenery"><p>Let the Stars Guide You Towards<br/>a Brighter Tomorrow</p></div><div class="smv24-copyright">© 2026 SMV ASTRO SERVICES. All Rights Reserved.<small>TRADITIONAL WISDOM　|　MODERN GUIDANCE</small></div></div>
 <div class="modal hidden" id="modal">
 <div class="modalbox" style="position:relative">
 <button aria-label="Close" onclick="closeModal()" style="position:absolute;top:10px;right:10px;border:0;background:transparent;font-size:28px;line-height:1;cursor:pointer;padding:4px 8px;color:inherit" title="Close" type="button">×</button>
 <div id="modalContent"></div>
 </div>
 </div>
-<script src="./smvastro.mjs?v=20260924-v56" type="module"></script>
+<script src="./smvastro.mjs?v=20260924-v64" type="module"></script>
 <script>
 /* Tamil Horoscope Generator - V121: server-side astronomical calculation engine. */
 (function(){
@@ -3227,7 +3220,7 @@ if(lat===''||lon===''){
   });
 })();
 </script>
-<script src="./public-content.mjs?v=20260911c" type="module"></script>
+<script src="./public-content.mjs?v=20260924-v64" type="module"></script>
 <script>
 document.addEventListener("click",function(e){
   const b=e.target.closest("[data-open-booking]");
@@ -3795,118 +3788,8 @@ document.addEventListener('DOMContentLoaded', function(){
 
 <!-- SMV V10.3 APPROVED REFERENCE HERO VISUAL FIX -->
 
-<style id="smv-home-offer-banner-style">
-.smv-home-offer-banners{width:100%;margin:10px 0 16px;display:grid;gap:10px;position:relative;z-index:4}
-.smv-home-offer-banners.hidden{display:none!important}
-.smv-home-offer-banner{position:relative;isolation:isolate;overflow:hidden;width:100%;box-sizing:border-box;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:16px;min-height:82px;padding:11px 16px 11px 13px;border:1px solid rgba(221,178,71,.82);border-radius:16px;background:linear-gradient(112deg,#4d0712 0%,#7e1021 36%,#3b092a 72%,#180916 100%);color:#fff;box-shadow:0 8px 24px rgba(72,9,23,.18),inset 0 1px 0 rgba(255,255,255,.16);cursor:pointer;text-decoration:none;transform:translateZ(0)}
-.smv-home-offer-banner::before{content:"";position:absolute;z-index:-1;inset:-70% auto -70% -18%;width:32%;transform:rotate(18deg);background:linear-gradient(90deg,transparent,rgba(255,230,151,.20),transparent);animation:smvOfferShine 5.2s ease-in-out infinite}
-.smv-home-offer-banner::after{content:"";position:absolute;z-index:-2;inset:0;background:radial-gradient(circle at 83% 35%,rgba(255,191,58,.18),transparent 25%),radial-gradient(circle at 9% 70%,rgba(255,221,125,.11),transparent 24%);pointer-events:none}
-@keyframes smvOfferShine{0%,55%{left:-30%}80%,100%{left:125%}}
-.smv-offer-art{width:58px;height:58px;display:grid;place-items:center;flex:none;filter:drop-shadow(0 3px 7px rgba(0,0,0,.28))}
-.smv-offer-art img{width:100%;height:100%;object-fit:contain;display:block}
-.smv-offer-copy{min-width:0;text-align:left}
-.smv-offer-kicker{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:3px}
-.smv-offer-badge{display:inline-flex;align-items:center;min-height:22px;padding:2px 8px;border-radius:999px;background:linear-gradient(180deg,#ffe69a,#e7b73e);color:#5b1017;font-size:.68rem;font-weight:900;letter-spacing:.075em;text-transform:uppercase;box-shadow:0 2px 8px rgba(0,0,0,.18)}
-.smv-offer-name{font-size:.72rem;color:#f7d987;font-weight:800;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:42ch}
-.smv-offer-title{display:block;color:#fff;font-size:clamp(1rem,1.55vw,1.28rem);font-weight:900;line-height:1.18;text-shadow:0 1px 2px rgba(0,0,0,.24)}
-.smv-offer-meta{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:5px;color:#f9e9c1;font-size:.76rem;font-weight:700}
-.smv-offer-code{padding:2px 7px;border:1px dashed rgba(255,226,143,.68);border-radius:6px;background:rgba(255,255,255,.07);letter-spacing:.05em}
-.smv-offer-countdown{font-variant-numeric:tabular-nums;color:#fff3c4}
-.smv-offer-period{font-variant-numeric:tabular-nums;color:#fff7dc;font-weight:800}
-.smv-offer-cta{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-width:116px;min-height:42px;padding:8px 14px;border-radius:11px;background:linear-gradient(180deg,#ffd968,#e7ad26);color:#541019;font-size:.82rem;font-weight:950;letter-spacing:.025em;box-shadow:0 5px 14px rgba(0,0,0,.24),inset 0 1px 0 rgba(255,255,255,.55);transition:transform .18s ease,filter .18s ease}
-.smv-home-offer-banner:hover .smv-offer-cta,.smv-home-offer-banner:focus-visible .smv-offer-cta{transform:translateY(-1px);filter:brightness(1.05)}
-.smv-home-offer-banner:focus-visible{outline:3px solid #f4c650;outline-offset:2px}
-@media(max-width:899px){
- .smv-home-offer-banners{margin:8px 0 11px}
- .smv-home-offer-banner{grid-template-columns:42px minmax(0,1fr) auto;gap:9px;min-height:68px;padding:8px 9px 8px 8px;border-radius:12px}
- .smv-offer-art{width:42px;height:42px}
- .smv-offer-kicker{gap:5px;margin-bottom:2px}.smv-offer-badge{font-size:.56rem;min-height:18px;padding:1px 6px}.smv-offer-name{font-size:.6rem;max-width:21ch}
- .smv-offer-title{font-size:.86rem;line-height:1.15}.smv-offer-meta{gap:5px;margin-top:3px;font-size:.61rem}.smv-offer-cta{min-width:auto;min-height:34px;padding:6px 9px;font-size:.68rem;border-radius:9px}.smv-offer-cta span{display:none}
-}
-@media(max-width:430px){.smv-offer-name{display:none}.smv-offer-countdown{display:none}.smv-offer-period{font-size:.57rem;line-height:1.25}.smv-home-offer-banner{grid-template-columns:38px minmax(0,1fr) auto}.smv-offer-art{width:38px;height:38px}.smv-offer-title{font-size:.8rem}}
-@media(prefers-reduced-motion:reduce){.smv-home-offer-banner::before{animation:none}.smv-offer-cta{transition:none}}
-</style>
-<script id="smv-home-offer-banner-loader">
-(function(){
-  const BACKEND_URL=String(window.SMV_BACKEND_URL||document.documentElement.dataset.smvBackend||"https://smv-astro-1fco.onrender.com").replace(/\/$/,"");
-  const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-  const money=n=>Number.isFinite(Number(n))?`₹${Number(n).toLocaleString("en-IN",{maximumFractionDigits:2})}`:"";
-  function offerSummary(o){
-    const type=String(o.discountType||"");
-    if(type==="fixed_price"&&Number(o.offerPrice)>0)return `${money(o.offerPrice)} SPECIAL`;
-    if(type==="percentage"&&Number(o.discountValue)>0)return `${Number(o.discountValue)}% OFF`;
-    if(type==="flat"&&Number(o.discountValue)>0)return `${money(o.discountValue)} OFF`;
-    return "SPECIAL OFFER";
-  }
-  function openAskNow(){
-    const section=document.getElementById("askNowSection");
-    if(section)section.scrollIntoView({behavior:"smooth",block:"center"});
-    window.setTimeout(()=>{
-      const fn=window.__smvOpenQuestionService;
-      if(typeof fn==="function") Promise.resolve(fn()).catch(e=>console.error("Offer ASK NOW failed:",e));
-      else document.getElementById("askNowButton")?.click();
-    },260);
-  }
-  function formatOfferDateTime(value){
-    if(!value)return "";
-    const d=new Date(value);
-    if(!Number.isFinite(d.getTime()))return "";
-    try{
-      return new Intl.DateTimeFormat("en-IN",{timeZone:"Asia/Kolkata",day:"2-digit",month:"short",year:"numeric",hour:"numeric",minute:"2-digit",hour12:true}).format(d);
-    }catch(_e){return d.toLocaleString("en-IN");}
-  }
-  function offerPeriod(o){
-    const start=formatOfferDateTime(o.startAt),end=formatOfferDateTime(o.endAt);
-    if(start&&end)return `<span class="smv-offer-period">${esc(start)} – ${esc(end)} IST</span>`;
-    if(start)return `<span class="smv-offer-period">Starts ${esc(start)} IST</span>`;
-    if(end)return `<span class="smv-offer-period">Ends ${esc(end)} IST</span>`;
-    return "";
-  }
-  function bindCountdowns(){
-    const tick=()=>document.querySelectorAll("[data-offer-end]").forEach(el=>{
-      const end=Date.parse(el.dataset.offerEnd||""); if(!Number.isFinite(end))return;
-      const d=end-Date.now(); if(d<=0){el.textContent="Ending now";return;}
-      const h=Math.floor(d/36e5),m=Math.floor((d%36e5)/6e4);
-      el.textContent=h>=24?`${Math.floor(h/24)}d ${h%24}h left`:`${h}h ${m}m left`;
-    });
-    tick(); window.clearInterval(window.__smvOfferCountdownTimer); window.__smvOfferCountdownTimer=window.setInterval(tick,60000);
-  }
-  let __smvBannerLastLoad=0,__smvBannerLoading=false;
-  async function loadHomeOfferBanners(force=false){
-    const host=document.getElementById("smvHomeOfferBanners"); if(!host)return;
-    if(__smvBannerLoading)return;
-    if(!force && Date.now()-__smvBannerLastLoad<30000)return;
-    __smvBannerLoading=true;
-    try{
-      const r=await fetch(BACKEND_URL+"/offers/public-banners",{cache:"no-store",headers:{"Accept":"application/json"}});
-      const data=await r.json().catch(()=>({offers:[]})); if(!r.ok)throw new Error(data.error||"Offer banner request failed");
-      const offers=(Array.isArray(data.offers)?data.offers:[]).filter(o=>["home_banner","home_dashboard"].includes(String(o.displayMode||"").toLowerCase()));
-      if(!offers.length){host.innerHTML="";host.classList.add("hidden");return;}
-      host.innerHTML=offers.map(o=>{
-        const title=esc(o.bannerText||o.name||"Special Offer"),name=esc(o.name||"SMV ASTRO Offer"),summary=esc(offerSummary(o));
-        const code=(!o.automatic&&o.promoCode)?`<span class="smv-offer-code">Promo: ${esc(o.promoCode)}</span>`:"";
-        const period=offerPeriod(o);
-        const countdown=o.endAt?`<span class="smv-offer-countdown" data-offer-end="${esc(o.endAt)}"></span>`:"";
-        const rawTheme=String(o.bannerTheme||"auto").toLowerCase();
-        const hay=(String(o.name||"")+" "+String(o.bannerText||"")).toLowerCase();
-        const detected=/pongal/.test(hay)?"pongal":/(diwali|deepavali)/.test(hay)?"diwali":/(navaratri|navarathri)/.test(hay)?"navaratri":/(dasara|dussehra|vijayadashami)/.test(hay)?"dasara":/(ayudha|ayutha)/.test(hay)?"ayudha_pooja":/(shivaratri|sivarathri|maha shiva)/.test(hay)?"shivaratri":/(tamil new year|puthandu)/.test(hay)?"tamil_new_year":"generic";
-        const theme=rawTheme==="auto"?detected:rawTheme;
-        const safeTheme=["generic","pongal","diwali","navaratri","dasara","ayudha_pooja","shivaratri","tamil_new_year"].includes(theme)?theme:"generic";
-        return `<div class="smv-home-offer-banner smv-offer-theme-${safeTheme}" role="button" tabindex="0" aria-label="${title}. Ask a Question" data-smv-offer-open-ask="1"><span class="smv-offer-art" aria-hidden="true"><img src="assets/offers/${safeTheme}.svg" alt="" loading="lazy"></span><span class="smv-offer-copy"><span class="smv-offer-kicker"><span class="smv-offer-badge">${summary}</span><span class="smv-offer-name">${name}</span></span><strong class="smv-offer-title">${title}</strong><span class="smv-offer-meta">${code}${period}${countdown}</span></span><span class="smv-offer-cta"><span>ASK NOW</span> →</span></div>`;
-      }).join("");
-      host.classList.remove("hidden"); bindCountdowns();
-      host.querySelectorAll("[data-smv-offer-open-ask]").forEach(el=>{
-        el.addEventListener("click",openAskNow);
-        el.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();openAskNow();}});
-      });
-    }catch(e){console.warn("Home offer banner load failed:",e);host.innerHTML="";host.classList.add("hidden");}
-    finally{__smvBannerLoading=false;__smvBannerLastLoad=Date.now();}
-  }
-  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",()=>loadHomeOfferBanners(),{once:true}); else loadHomeOfferBanners();
-  window.addEventListener("focus",()=>{if(Date.now()-__smvBannerLastLoad>60000)loadHomeOfferBanners();});
-  window.addEventListener("smv:offers-changed",()=>loadHomeOfferBanners(true));
-})();
-</script>
+
+<script src="./offer-banners.js?v=64"></script>
 
 
 
@@ -3934,8 +3817,8 @@ function add(card){
  card.appendChild(btn);
 }
 function scan(){document.querySelectorAll('#dashboardContent .card,#admin .card').forEach(add)}
-let t=0; function later(){clearTimeout(t);t=setTimeout(scan,150)}
-function start(){scan();new MutationObserver(later).observe(document.body,{childList:true,subtree:true})}
+window.__smvRefreshCollapse=scan;
+function start(){scan();}
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start,{once:true}); else start();
 })();
 </script>
@@ -4202,14 +4085,14 @@ else initFAQ();
   else help.textContent='Install from your browser menu, or tap INSTALL APP when the browser provides the install prompt.';
 })();
 </script>
-<script defer="" src="./interface.js?v=20260917-v13"></script>
+<script defer="" src="./interface.js?v=20260924-v64"></script>
 
 
 
 
 
 
-<script src="./public-navigation.js?v=56"></script>
+<script src="./public-navigation.js?v=64"></script>
 
 </body>
 </html>

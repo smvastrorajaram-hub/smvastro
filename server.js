@@ -18,6 +18,10 @@ try { Astronomy = require("astronomy-engine"); } catch (_) {
 
 
 const app = express();
+app.use((req,res,next)=>{
+ const started=process.hrtime.bigint();const json=res.json.bind(res);
+ res.json=body=>{if(!res.headersSent)res.set('Server-Timing','app;dur='+Number(process.hrtime.bigint()-started)/1e6);return json(body);};next();
+});
 const PORT = process.env.PORT || 10000;
 const ADMIN_UID = String(process.env.ADMIN_UID || "TwjeEIFS3Zcf1SxboLZoujm91Ky2").trim();
 
@@ -976,7 +980,7 @@ app.get("/public/astrologers", async (req, res) => {
       res.set("Cache-Control","public, max-age=30, stale-while-revalidate=60");
       return res.json({success:true,astrologers:publicAstrologersCache.data,cached:true});
     }
-    const snap=await db.collection("smv_astrologers").where("status","==","approved").limit(200).get();
+    const snap=await sharedPublicRead("astrologers",()=>db.collection("smv_astrologers").where("status","==","approved").limit(200).get());
     const checked=await Promise.all(snap.docs.map(async d=>{
       const x=d.data()||{};
       try{
@@ -991,6 +995,12 @@ app.get("/public/astrologers", async (req, res) => {
     return res.json({success:true,astrologers});
   }catch(e){console.error("Public astrologers load failed:",e);return res.status(500).json({error:e?.message||"Unable to load approved astrologers."});}
 });
+const publicReadFlights=new Map();
+function sharedPublicRead(key,read){
+ if(publicReadFlights.has(key))return publicReadFlights.get(key);
+ const task=Promise.resolve().then(read).finally(()=>{if(publicReadFlights.get(key)===task)publicReadFlights.delete(key);});
+ publicReadFlights.set(key,task);return task;
+}
 const publicReviewsCache=new Map();
 app.get("/public/astrologers/:astrologerId/reviews", async(req,res)=>{
   try{
@@ -1009,9 +1019,7 @@ app.get("/public/astrologers/:astrologerId/reviews", async(req,res)=>{
     // stays bounded and index-free: use the astrologer field equality query first.
     // If an old project has no usable field index, return the actual backend error
     // to the browser instead of hiding it behind a generic message.
-    const snap=await db.collection("smv_reviews")
-      .where("astrologerId","==",astrologerId)
-      .limit(100).get();
+    const snap=await sharedPublicRead("reviews:"+astrologerId,()=>db.collection("smv_reviews").where("astrologerId","==",astrologerId).limit(100).get());
     const reviews=snap.docs
       .map(d=>({id:d.id,...d.data()}))
       .filter(r=>r.approved===true || String(r.status||"").toLowerCase()==="approved");
@@ -1560,7 +1568,7 @@ app.post("/admin/set-open-workflow", express.json({limit:"10kb"}), async (req,re
     let opened=0;
     let closed=0;
     if(allow){
-      const snap=await db.collection("smv_questions").get();
+      const snap=await db.collection("smv_questions").where("status","in",["pending_admin_approval","paid"]).get();
       const batch=db.batch();
       for(const d of snap.docs){
         const q=d.data()||{};
@@ -1571,7 +1579,7 @@ app.post("/admin/set-open-workflow", express.json({limit:"10kb"}), async (req,re
       }
       if(opened) await batch.commit();
     } else {
-      const snap=await db.collection("smv_questions").get();
+      const snap=await db.collection("smv_questions").where("status","==","available_to_astrologers").get();
       const batch=db.batch();
       for(const d of snap.docs){
         const q=d.data()||{};
@@ -1596,7 +1604,7 @@ app.get("/astrologer/open-questions", async (req,res)=>{
     if(!astro.exists || String(astro.data()?.status||'').toLowerCase()!=='approved') return res.status(403).json({error:"Your astrologer profile is not approved."});
     const workflow=await getOpenWorkflowSettings();
     if(!workflow.allowWithoutAdminApproval) return res.json({success:true,allowWithoutAdminApproval:false,questions:[]});
-    const [snap,commissionSnap]=await Promise.all([db.collection("smv_questions").get(),db.collection("smv_settings").doc("commission").get().catch(()=>null)]);
+    const [snap,commissionSnap]=await Promise.all([db.collection("smv_questions").where("status","==","available_to_astrologers").get(),db.collection("smv_settings").doc("commission").get().catch(()=>null)]);
     const pct=Number(commissionSnap?.exists?commissionSnap.data()?.astroPercent:20);
     const questions=snap.docs.map(d=>({id:d.id,...d.data()})).filter(q=>q.paymentStatus==='paid' && !q.astrologerId && String(q.status||'')==='available_to_astrologers' && String(q.allocationStatus||'')==='available_to_astrologers').slice(0,100).map(q=>({...q,commissionPercent:Number.isFinite(pct)?pct:20,astrologerCommissionAmount:Math.round(Number(q.amount||0)*(Number.isFinite(pct)?pct:20))/100}));
     return res.json({success:true,allowWithoutAdminApproval:true,questions});
@@ -1908,9 +1916,9 @@ app.get("/admin-data", async (req, res) => {
   if (!user) return;
   if (!(await isAdminUser(user))) return res.status(403).json({ error: "Admin access denied." });
 
-  const readCollection = async (name) => {
+  const readCollection = async (name,source=db.collection(name)) => {
     try {
-      const snap = await db.collection(name).get();
+      const snap = await source.get();
       return { ok: true, items: snap.docs.map(d => ({ id: d.id, ...d.data() })) };
     } catch (e) {
       console.error(`Admin collection ${name} failed:`, e?.message || e);
@@ -1928,7 +1936,7 @@ app.get("/admin-data", async (req, res) => {
       readCollection("smv_payments"),
       readCollection("smv_private_consultations"),
       readCollection("smv_admin_notifications"),
-      readCollection("smv_notifications"),
+      readCollection("smv_notifications",db.collection("smv_notifications").where("userId","==",ADMIN_UID)),
       db.collection("smv_settings").doc("commission").get().then(s=>s.exists?s.data():null).catch(()=>null),
       getPrivateCommissionSettings(),
       db.collection("smv_settings").doc("workflow").get().then(s=>s.exists?s.data():{allowWithoutAdminApproval:false}).catch(()=>({allowWithoutAdminApproval:false})),
@@ -2176,7 +2184,12 @@ function offerDateMs(v){
   const n=Date.parse(raw);
   return Number.isFinite(n)?n:null;
 }
-async function ensureBuiltinWelcomeOffer(){
+let builtinWelcomeReady=null;
+function ensureBuiltinWelcomeOffer(){
+ if(!builtinWelcomeReady)builtinWelcomeReady=migrateBuiltinWelcomeOffer().catch(e=>{builtinWelcomeReady=null;throw e;});
+ return builtinWelcomeReady;
+}
+async function migrateBuiltinWelcomeOffer(){
   const ref=db.collection(OFFER_COLLECTION).doc(BUILTIN_WELCOME_ID), snap=await ref.get();
   if(!snap.exists){
     await ref.set({
@@ -2214,8 +2227,8 @@ async function customerHasAnyPaidService(uid){
   ]);
   return !questions.empty || !privateConsultations.empty;
 }
-async function offerUsageCount(uid, offerId){
-  const s=await db.collection(OFFER_AUDIT_COLLECTION).where("customerId","==",uid).where("offerId","==",offerId).where("status","==","used").get();
+async function offerUsageCount(uid, offerId, maximum=1){
+  const s=await db.collection(OFFER_AUDIT_COLLECTION).where("customerId","==",uid).where("offerId","==",offerId).where("status","==","used").limit(Math.max(1,Math.floor(maximum))).get();
   return s.size;
 }
 function computeOfferPrice(original, offer){
@@ -2255,8 +2268,6 @@ async function resolveOfferForCustomer({uid,service,originalAmount,promoCode}){
       if(eligibility==="new_customer"&&paidBefore>0)continue;
       if(eligibility==="existing_customer"&&paidBefore===0)continue;
     }
-    const limit=Number(o.perCustomerLimit||0);
-    if(limit>0 && await offerUsageCount(uid,d.id)>=limit)continue;
     const oCode=offerText(o.promoCode,40).toUpperCase();
     // Automatic offers never require a promo code. A stale code saved on an
     // older automatic offer is ignored. Manual offers always require an exact code.
@@ -2270,7 +2281,12 @@ async function resolveOfferForCustomer({uid,service,originalAmount,promoCode}){
     const rank=o=>o.id===BUILTIN_WELCOME_ID?300:(offerText(o.promoCode,40)?200:100)+Number(o.priority||0);
     return rank(b)-rank(a) || a.finalAmount-b.finalAmount;
   });
-  const best=candidates[0]||null;
+  let best=null;
+  for(const candidate of candidates){
+    const limit=Number(candidate.perCustomerLimit||0);
+    if(limit>0 && await offerUsageCount(uid,candidate.id,limit)>=limit)continue;
+    best=candidate;break;
+  }
   return best?{originalAmount:original,finalAmount:best.finalAmount,discountAmount:best.discountAmount,offerId:best.id,offerName:best.name||"Offer",automatic:best.automatic===true,promoCode:best.automatic===true?"":offerText(best.promoCode,40).toUpperCase(),displayMode:best.displayMode||"payment_only",bannerText:best.bannerText||"Offer applied",kind:best.kind||"promotion"}:{originalAmount:original,finalAmount:original,discountAmount:0,offerId:null,offerName:null,automatic:false,promoCode:code||"",displayMode:"hidden",bannerText:"",kind:null};
 }
 async function consumeOfferAfterPayment({uid,service,referenceId,paymentId,quote}){
@@ -2317,7 +2333,7 @@ app.get("/offers/public-banners", async (req, res) => {
       const ms = bannerDateMs(v);
       return ms === null ? null : new Date(ms).toISOString();
     };
-    const snap = await db.collection(OFFER_COLLECTION).where("enabled","==",true).limit(50).get();
+    const snap = await sharedPublicRead("banners",()=>db.collection(OFFER_COLLECTION).where("enabled","==",true).limit(50).get());
     const offers = snap.docs
       .map(d => ({ id: d.id, ...d.data() }))
       .filter(o => {
@@ -2364,7 +2380,7 @@ app.post("/admin/offers/save",express.json({limit:"30kb"}),async(req,res)=>{
     const applies=Array.isArray(b.appliesTo)?b.appliesTo.filter(x=>["public_question","private_consultation","all"].includes(String(x))):["public_question"];
     const automatic=builtIn?true:b.automatic===true;
     if(!builtIn && !automatic && !promo)return res.status(400).json({error:"Promo Code is required when Automatic Offer is NO."});
-    const allowedThemes=["auto","generic","pongal","diwali","navaratri","dasara","ayudha_pooja","shivaratri","tamil_new_year"];
+    const allowedThemes=["welcome","vinayagar_chaturthi","karthigai_deepam","thaipusam","new_year","onam","christmas","eid","auto","generic","pongal","diwali","navaratri","dasara","ayudha_pooja","shivaratri","tamil_new_year"];
     const bannerTheme=allowedThemes.includes(String(b.bannerTheme||"auto"))?String(b.bannerTheme||"auto"):"auto";
     const data={name:offerText(b.name,120)||"Promotion",kind:builtIn?"welcome":offerText(b.kind,30)||"promotion",enabled:b.enabled===true,automatic,promoCode:(builtIn||automatic)?"":promo,bannerTheme,discountType,offerPrice:offerMoney(b.offerPrice),discountValue:offerMoney(b.discountValue)||0,eligibility:["new_customer","existing_customer","all"].includes(String(b.eligibility))?String(b.eligibility):"all",appliesTo:applies.length?applies:["public_question"],usageRule:offerText(b.usageRule,30)||"one_per_customer",perCustomerLimit:Math.max(0,Math.floor(Number(b.perCustomerLimit||0))),totalUsageLimit:Math.max(0,Math.floor(Number(b.totalUsageLimit||0))),minimumAmount:Math.max(0,Number(b.minimumAmount||0)),displayMode:["hidden","home_banner","customer_dashboard","payment_only","home_dashboard"].includes(String(b.displayMode))?String(b.displayMode):"payment_only",bannerText:offerText(b.bannerText,240),startAt:b.startAt?String(b.startAt):null,endAt:b.endAt?String(b.endAt):null,priority:Number(b.priority||0),builtIn,updatedAt:FieldValue.serverTimestamp(),updatedBy:user.uid};
     if(discountType==="fixed_price"&&(!Number.isFinite(data.offerPrice)||data.offerPrice<1))return res.status(400).json({error:"Fixed offer price must be at least ₹1."});
@@ -2410,9 +2426,8 @@ app.post("/private-consultation/create-order", express.json({limit:"30kb"}), asy
       return res.status(409).json({error:"Selected astrologer is not currently approved."});
     const originalChatPrice=Number(a.pricePerQuestion||0);
     if(!Number.isFinite(originalChatPrice)||originalChatPrice<1)return res.status(409).json({error:"This astrologer's Chat Price is not available."});
-    const offerQuote=await resolveOfferForCustomer({uid:user.uid,service:"private_consultation",originalAmount:originalChatPrice,promoCode:req.body?.promoCode});
+    const [offerQuote,privateCommission]=await Promise.all([resolveOfferForCustomer({uid:user.uid,service:"private_consultation",originalAmount:originalChatPrice,promoCode:req.body?.promoCode}),getPrivateCommissionSettings()]);
     const chatPrice=offerQuote.finalAmount;
-    const privateCommission=await getPrivateCommissionSettings();
     const commissionSnapshot=privateCommissionSnapshot(chatPrice,privateCommission);
     const {privateAstrologerCommissionRate,privateAdminCommissionRate,astrologerAmount,adminAmount}=commissionSnapshot;
     const ref=db.collection("smv_private_consultations").doc();
@@ -2483,11 +2498,16 @@ app.post("/private-consultation/verify-payment", express.json({limit:"15kb"}), a
     if(c.razorpayOrderId!==orderId)return res.status(409).json({error:"Payment order mismatch."});
     const expected=crypto.createHmac("sha256",RAZORPAY_KEY_SECRET).update(`${orderId}|${paymentId}`).digest("hex");
     if(!signatureEqual(expected,signature))return res.status(400).json({error:"Payment signature verification failed."});
-    const verifiedPayment=await razorpay.payments.fetch(paymentId);
+    let verifiedPayment=await razorpay.payments.fetch(paymentId);
     const expectedAmount=Math.round(Number(c.chatPrice||c.amount||0)*100);
     if(String(verifiedPayment.order_id||"")!==orderId)return res.status(409).json({error:"Razorpay payment/order mismatch."});
     if(Number(verifiedPayment.amount)!==expectedAmount)return res.status(409).json({error:"Razorpay payment amount mismatch."});
-    if(!["captured","authorized"].includes(String(verifiedPayment.status||"").toLowerCase()))return res.status(409).json({error:"Razorpay payment is not captured/authorized."});
+    if(String(verifiedPayment.currency||'')!=='INR')return res.status(409).json({error:'Payment currency mismatch.'});
+    if(verifiedPayment.status==='authorized'){
+      try{verifiedPayment=await razorpay.payments.capture(paymentId,expectedAmount,'INR');}
+      catch(e){verifiedPayment=await razorpay.payments.fetch(paymentId);}
+    }
+    if(verifiedPayment.status!=='captured')return res.status(409).json({error:'Payment capture is pending. Use Recover Payment to check again.'});
     if(c.paymentStatus!=="paid"){
       const privateWorkflow=await getPrivateConsultWorkflow();
       const autoAllow=privateWorkflow.allowWithoutAdminApproval===true;
@@ -3142,12 +3162,12 @@ app.post("/verify-payment", express.json(), async (req, res) => {
     const paymentStatus = String(payment.status || "").toLowerCase();
     if (paymentStatus === "authorized") {
       try {
-        await razorpay.payments.capture(paymentId, expectedAmount, String(payment.currency || "INR"));
+        payment = await razorpay.payments.capture(paymentId, expectedAmount, String(payment.currency || "INR"));
       } catch (captureError) {
         console.error("Razorpay capture error:", captureError);
         // It may have been captured concurrently; re-fetch before failing.
       }
-      payment = await razorpay.payments.fetch(paymentId);
+      if(String(payment.status).toLowerCase()!=="captured") payment = await razorpay.payments.fetch(paymentId);
     }
     if (String(payment.status).toLowerCase() !== "captured") {
       return res.status(409).json({

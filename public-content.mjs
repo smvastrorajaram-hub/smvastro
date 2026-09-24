@@ -45,23 +45,7 @@
       showPublicProfileModal(`<div class="profile-dialog">${photo?`<img class="profile-photo" src="${esc(photo)}" alt="${esc(name)}">`:''}<h2 class="profile-title">${esc(name)}</h2><p class="profile-expertise">${esc(a?.expertise||a?.specialization||'Astrology')}</p><p class="profile-experience">⭐ ${esc(a?.experience||'Experienced')} years experience</p><p class="profile-bio">${esc(a?.profileDescription||a?.bio||a?.about||'Professional astrologer')}</p><h3 class="profile-reviews-title">Verified Reviews</h3><div id="publicProfileReviews"><div class="empty">Loading reviews...</div></div><button class="btn gray" id="profileCloseBtn">CLOSE</button></div>`);
       $('profileCloseBtn').onclick=closeModal;
 
-      let reviews=[];
-      try{
-        const reviewResponse=await withTimeout(fetch(BACKEND+"/public/astrologers/"+encodeURIComponent(a.id)+"/reviews",{cache:"no-store"}),10000);
-        const reviewData=await reviewResponse.json().catch(()=>({}));
-        if(!reviewResponse.ok) throw new Error(reviewData.error||`Review service returned HTTP ${reviewResponse.status}.`);
-        reviews=Array.isArray(reviewData.reviews)?reviewData.reviews:[];
-      }catch(reviewApiError){
-        console.warn('Public review API unavailable; using Firestore fallback:',reviewApiError);
-        try{
-          const f=await fb();
-          const snap=await withTimeout(f.getDocs(f.query(f.collection(db,'smv_reviews'),f.where('astrologerId','==',a.id),f.where('approved','==',true))),10000);
-          reviews=snap.docs.map(d=>({id:d.id,...(d.data()||{})}));
-        }catch(firestoreError){
-          console.warn('Firestore review fallback unavailable:',firestoreError);
-          reviews=[];
-        }
-      }
+      const reviews=await window.__smvGetPublicReviewsOnce(a);
       const reviewBox=$('publicProfileReviews');
       if(!reviewBox)return;
       reviewBox.innerHTML=reviews.length?reviews.map(r=>`<div class="card" style="margin:10px 0"><div class="stars">${stars(r.rating)}</div><p style="white-space:pre-wrap">“${esc(r.review||'Verified customer review')}”</p><p class="small">Verified customer</p></div>`).join(''):'<div class="empty">No approved reviews for this astrologer yet.</div>';
@@ -113,7 +97,7 @@
   async function updateAppointment(id,status,button){
     if(appointmentUpdating)return; appointmentUpdating=true;
     const buttons=[...document.querySelectorAll('[data-apstatus]')]; buttons.forEach(x=>x.disabled=true);
-    try{await fb();const u=auth?.currentUser;if(!u)throw new Error('Please login as Admin.');const token=await u.getIdToken();const r=await fetch(BACKEND+'/admin/appointment-status',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({id,status}),cache:'no-store'});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||`Appointment update returned HTTP ${r.status}.`);await loadAdminAppointments();}catch(e){console.error('Appointment update error:',e);alert(e?.message||String(e));buttons.forEach(x=>x.disabled=false);}finally{appointmentUpdating=false;}
+    try{await fb();const u=auth?.currentUser;if(!u)throw new Error('Please login as Admin.');const token=await u.getIdToken();const r=await fetch(BACKEND+'/admin/appointment-status',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({id,status}),cache:'no-store'});const d=await r.json().catch(()=>({}));window.__smvRecordTiming?.(path,performance.now()-started,r.ok);if(!r.ok)throw new Error(d.error||`Appointment update returned HTTP ${r.status}.`);await loadAdminAppointments();}catch(e){console.error('Appointment update error:',e);alert(e?.message||String(e));buttons.forEach(x=>x.disabled=false);}finally{appointmentUpdating=false;}
   }
 
   window.__smvSetupLanguage=()=>{document.documentElement.lang='en';};
@@ -166,55 +150,24 @@
       finally{bookingSubmitting=false;btn.disabled=false;btn.textContent='REQUEST APPOINTMENT';}
     });
   }
-  async function openPrivateConsultation(){
-    const section=$('private-consultation'),box=$('privateConsultationAstrologers');
-    if(!section||!box)return;
-    document.querySelectorAll('main section, body > section').forEach(s=>{if(s.id&&s.id!=='private-consultation')s.classList.add('hidden');});
-    $('astrologer-directory')?.classList.add('hidden');
-    section.classList.remove('hidden');
-    box.innerHTML='<div class="empty">Loading approved astrologers...</div>';
-    section.scrollIntoView({behavior:'smooth',block:'start'});
-    try{
-      const r=await withTimeout(fetch(BACKEND+'/public/astrologers',{cache:'no-store'}),12000);
-      const d=await r.json().catch(()=>({}));
-      if(!r.ok)throw new Error(d.error||`Astrologer service returned HTTP ${r.status}.`);
-      const items=Array.isArray(d.astrologers)?d.astrologers:[];
-      if(!items.length){box.innerHTML='<div class="empty">No approved astrologers available for private consultation.</div>';return;}
-      box.innerHTML=items.map(a=>{
-        const price=Number(a.chatPrice||0);
-        return `<article class="smv-private-consult-row">
-          <div class="smv-private-consult-head">
-            ${a.photoData?`<img class="smv-private-consult-photo" src="${esc(a.photoData)}" alt="${esc(a.name||'Astrologer')}">`:''}
-            <div class="smv-private-consult-meta"><h3>${esc(a.name||'Astrologer')}</h3><div class="small"><b>${esc(a.expertise||a.specialization||'Astrology')}</b> · ${esc(a.experience||'Experienced')} years experience</div></div>
-          </div>
-          <p class="smv-private-consult-description">${esc(a.profileDescription||a.bio||a.about||'Professional astrologer')}</p>
-          <div class="smv-private-consult-price"><b>Chat Price: ${price>=1?'₹'+price.toFixed(2):'Not available'}</b></div>
-          <button type="button" class="btn smv-private-consult-select" data-private-consult-astro="${esc(a.id)}" ${price>=1?'':'disabled'}>SELECT ASTROLOGER</button>
-        </article>`;
-      }).join('');
-      box.querySelectorAll('[data-private-consult-astro]').forEach(b=>b.onclick=()=>{
-        const user=window.__smvFirebaseCurrentUser;
-        const role=String(window.__smvCurrentRole||'').toLowerCase();
-        if(!user || role!=='customer'){
-          alert('Customer Login Required — Please login with a Customer account to select an astrologer.');
-          if(!user)$('authBtn')?.click();
-          return;
-        }
-        const astro=items.find(a=>String(a.id)===String(b.dataset.privateConsultAstro));
-        if(!astro)return;
-        window.__smvSelectedPrivateConsultAstrologer={id:astro.id,name:astro.name||'Astrologer',chatPrice:Number(astro.chatPrice||0)};
-        box.querySelectorAll('[data-private-consult-astro]').forEach(x=>{x.textContent=x===b?'SELECTED':'SELECT ASTROLOGER';});
-        const card=$('privateConsultationQuestionCard'),selected=$('privateConsultationSelected'),summary=$('privateConsultPaymentSummary');
-        if(selected)selected.innerHTML='<b>Selected Astrologer:</b> '+esc(astro.name||'Astrologer');
-        if(summary){summary.innerHTML='<b>Private Consultation Chat Price: ₹'+Number(astro.chatPrice||0).toFixed(2)+'</b>';if(!$('privateConsultPromoCode'))summary.insertAdjacentHTML('afterend','<div class="action-row" style="margin:8px 0"><input id="privateConsultPromoCode" maxlength="40" placeholder="Promotion code (optional)"><span class="small">Automatic eligible offers are checked at payment.</span></div>');}
-        card?.classList.remove('hidden');
-        card?.scrollIntoView({behavior:'smooth',block:'start'});
-      });
-    }catch(e){
-      console.error('Private consultation astrologers load failed:',e);
-      box.innerHTML='<div class="empty error">'+esc(e.message||String(e))+'</div>';
+  function selectPrivateAstrologer(astro,button){
+    const user=window.__smvFirebaseCurrentUser;
+    if(!user || window.__smvCurrentRole!=='customer'){
+      alert('Customer Login Required — Please login with a Customer account to select an astrologer.');
+      if(!user)$('authBtn')?.click();return;
     }
+    if(window.__smvSelectedPrivateConsultAstrologer?.id===astro.id){$('privateConsultationQuestionCard')?.classList.remove('hidden');$('privateConsultationQuestionCard')?.scrollIntoView({behavior:'smooth',block:'start'});return;}
+    $('smvPrivateAutomaticOffer')?.remove();
+    window.__smvSelectedPrivateConsultAstrologer={id:astro.id,name:astro.name||'Astrologer',chatPrice:Number(astro.chatPrice||0)};
+    document.querySelectorAll('.smv-private-consult-select').forEach(el=>{el.textContent=el===button?'SELECTED':'SELECT ASTROLOGER';});
+    $('privateConsultationSelected').textContent='Selected Astrologer: '+astro.name;
+    const summary=$('privateConsultPaymentSummary');
+    summary.textContent='Private Consultation Chat Price: ₹'+Number(astro.chatPrice).toFixed(2);
+    delete summary.dataset.smvOfferFinal;delete summary.dataset.smvOfferOriginal;
+    $('privateConsultationQuestionCard')?.classList.remove('hidden');
+    $('privateConsultationQuestionCard')?.scrollIntoView({behavior:'smooth',block:'start'});
   }
+  window.__smvSelectPrivateAstrologer=selectPrivateAstrologer;
 
   let privateConsultSubmitting=false;
   async function submitPrivateConsultation(e){
@@ -246,10 +199,11 @@
       if(!u || String(window.__smvCurrentRole||'').toLowerCase()!=='customer')throw new Error('Please login with your Customer account before payment.');
       const token=await u.getIdToken();
       const api=async(path,body)=>{
+        const started=performance.now();
         const r=await fetch(BACKEND+path,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(body),cache:'no-store'});
-        const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||`Service returned HTTP ${r.status}.`);return d;
+        const d=await r.json().catch(()=>({}));window.__smvRecordTiming?.(path,performance.now()-started,r.ok);if(!r.ok)throw new Error(d.error||`Service returned HTTP ${r.status}.`);return d;
       };
-      const order=await api('/private-consultation/create-order',payload);
+      const [order]=await Promise.all([api('/private-consultation/create-order',payload),window.__smvEnsureCheckout()]);
       if(!order?.orderId||!order?.keyId||!order?.consultationId)throw new Error('Private consultation payment order was not created correctly.');
       if(order?.offerId&&msg)msg.innerHTML='<span class="success">'+esc(order.offerBannerText||order.offerName||'Offer applied')+' — Pay ₹'+(Number(order.amount||0)/100).toFixed(2)+'</span>';
       if(typeof window.Razorpay!=='function')throw new Error('Payment checkout is not ready. Please refresh and try again.');
@@ -268,6 +222,8 @@
             if(!vr?.verified)throw new Error(vr?.error||'Payment verification failed.');
             if(msg)msg.innerHTML='<span class="success">Payment successful. Your private consultation is waiting for Admin approval.</span>';
             if(btn){btn.textContent='PAYMENT DONE ✓';}
+            privateConsultSubmitting=false;
+            await window.__smvRefreshDashboard();
           }catch(err){if(msg)msg.innerHTML='<span class="error">'+esc(err.message||String(err))+'</span>';if(btn){btn.disabled=false;btn.textContent='PAY & SUBMIT';}}
         },
         modal:{ondismiss:()=>{privateConsultSubmitting=false;if(btn){btn.disabled=false;btn.textContent='PAY & SUBMIT';}}}
@@ -296,19 +252,6 @@
     $('privateConsultationQuestionForm')?.reset();
     $('privateConsultationAstrologers')?.scrollIntoView({behavior:'smooth',block:'start'});
   });
-  const privateConsultLink=$('privateConsultationHomeLink');
-  if(privateConsultLink)privateConsultLink.onclick=e=>{
-    e.preventDefault();
-    const section=$('private-consultation');
-    if(section && !section.classList.contains('hidden')){
-      section.classList.add('hidden');
-      $('home')?.classList.remove('hidden');
-      $('smv-master-services')?.classList.remove('hidden');
-      privateConsultLink.scrollIntoView({behavior:'smooth',block:'center'});
-      return;
-    }
-    openPrivateConsultation();
-  };
   // IMPORTANT: this script is a separate ES module from the main app module.
   // openQuestionService() is therefore not in this module's lexical scope.
   // Always cross the module boundary through the explicit window bridge.
@@ -335,7 +278,7 @@
     window.__SMV_ADMIN_HOOKED=true;
     window.__smvRefreshAdminSections=refreshAdminSections;
   }
-  setupBooking();setupAsk();if(location.hash==='#private-consultation')openPrivateConsultation();loadQuestionPrice().catch(()=>{});if(window.__smvReloadAstrologers)window.__smvReloadAstrologers().catch(()=>{});else window.addEventListener('smv:app-ready',()=>window.__smvReloadAstrologers?.().catch(()=>{}),{once:true});hookAdmin();loadReviews().catch(()=>{});
+  setupBooking();setupAsk();if($('publicQuestionPrice'))loadQuestionPrice().catch(()=>{});if(window.__smvReloadAstrologers)window.__smvReloadAstrologers().catch(()=>{});else window.addEventListener('smv:app-ready',()=>window.__smvReloadAstrologers?.().catch(()=>{}),{once:true});hookAdmin();loadReviews().catch(()=>{});
   // Admin data loaders are triggered explicitly after Admin authentication.
 })();
   document.getElementById("contactNav")?.addEventListener("click",e=>{e.preventDefault();document.getElementById("contact")?.classList.remove("hidden");document.getElementById("contact")?.scrollIntoView({behavior:"smooth",block:"start"});});

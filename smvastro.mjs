@@ -2,17 +2,6 @@
 // Consolidated: dashboard-live.mjs + admin-workflows.mjs + app.mjs
 
 
-// Unified dashboard typography stylesheet. Loaded after the legacy stylesheet so
-// Customer, Astrologer and Admin dashboards share one predictable hierarchy.
-(function loadDashboardTypography(){
-  if(document.querySelector('link[data-smv-dashboard-typography]')) return;
-  const link=document.createElement('link');
-  link.rel='stylesheet';
-  link.href='dashboard-typography.css';
-  link.dataset.smvDashboardTypography='true';
-  document.head.appendChild(link);
-})();
-
 // Coalesce updates, serialize requests and retain edits until a safe refresh.
 function createRefreshQueue({run,canRun,onPending=()=>{},onError=()=>{},delay=120}){
  let pending=false,running=false,timer=null,stopped=false;
@@ -116,7 +105,7 @@ function renderAdminWorkflows({data, api, refresh, lang, escape: esc, date}) {
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendEmailVerification, deleteUser, updateProfile, setPersistence, browserSessionPersistence, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-import { getFirestore, collection, query, where, getDocs, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch, runTransaction, onSnapshot } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+import { getFirestore, collection, query, where, getDocs, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch, runTransaction } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
 window.__SMV_BUILD="V120-UI";
 const firebaseConfig={apiKey:"AIzaSyCKXyfZ9sjGmej7ygxHpzHNcNysMXHuvSs",authDomain:"smv-astro.firebaseapp.com",projectId:"smv-astro",storageBucket:"smv-astro.firebasestorage.app",messagingSenderId:"299081899217",appId:"1:299081899217:web:8d558df08e86037ea539f0"};
@@ -158,6 +147,7 @@ async function renderApi(path, options={}, userOverride=null){
  const fetchOptions={...options};delete fetchOptions.timeoutMs;
  if(method==='GET'&&smvReadRequests.has(key))return smvReadRequests.get(key);
  const task=(async()=>{
+  const started=performance.now();let ok=false;
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),timeoutMs);
   try{
@@ -168,9 +158,9 @@ async function renderApi(path, options={}, userOverride=null){
     if(response.status===404&&!data.error)throw new Error('Backend API unavailable (404). Deploy the updated server.js and refund-service.js to Render and check the backend URL.'+' '+path);
     throw new Error(data.error||`Service error (${response.status})`);
    }
-   return data;
+   ok=true;return data;
   }catch(e){if(e.name==='AbortError')throw new Error('The request timed out. Refresh the status before retrying an action.');throw e;}
-  finally{clearTimeout(timer);}
+  finally{clearTimeout(timer);window.__smvRecordTiming?.(path,performance.now()-started,ok);}
  })();
  if(method==='GET')smvReadRequests.set(key,task);
  try{return await task;}finally{if(smvReadRequests.get(key)===task)smvReadRequests.delete(key);}
@@ -187,6 +177,7 @@ async function ensureRazorpayCheckout(){
  });
  return razorpayCheckoutPromise;
 }
+window.__smvEnsureCheckout=ensureRazorpayCheckout;
 function smvAssertLiveCheckout(key){
  const value=String(key||'').trim();
  if(!/^rzp_(?:test|live)_[A-Za-z0-9]+$/.test(value))throw new Error('Payment blocked: this backend returned an invalid Razorpay key. Configure a matching Test or Live Razorpay key in the backend. Backend: '+RAZORPAY_BACKEND_URL);
@@ -213,7 +204,7 @@ let dashboardReadyUid=null;
 let dashboardReadyAt=0;
 let dashboardReadyRole=null;
 const $=id=>document.getElementById(id);
-const show=id=>$(id)?.classList.remove("hidden"); const hide=id=>$(id)?.classList.add("hidden");
+const show=id=>{ $(id)?.classList.remove('hidden');if(id==='dashboard'||id==='admin')window.__smvSyncWorkspace?.();window.__smvRefreshCollapse?.(); }; const hide=id=>{ $(id)?.classList.add('hidden');if(id==='dashboard'||id==='admin')window.__smvSyncWorkspace?.(); };
 const go=id=>$(id)?.scrollIntoView({behavior:"smooth",block:"start"});
 function hideHomeSurface(){
   // Hide the COMPLETE public Home surface. Internal views such as Question Form
@@ -252,6 +243,10 @@ function smvShowRoleNav(){
 let smvInternalView="home";
 function smvEnterInternalView(view,push=true){
   smvInternalView=view;
+  if(view==='dashboard'||view==='admin'){
+    document.getElementById('smv-consult-dedicated-shell')?.classList.add('hidden');
+    document.body.classList.remove('smv-consult-dedicated','smv-internal-public-view');
+  }
   if(view!=="home")window.__SMV_PUBLIC_ROUTE=null;
   if(push){try{history.pushState({smvView:view},"",`#${view}`);}catch(_e){}}
 }
@@ -302,6 +297,8 @@ function hidePrimarySections(except=""){
   hide("dashLink");
   hide("adminLink");
   if(except==="dashboard" || except==="admin"){
+    document.getElementById('smv-consult-dedicated-shell')?.classList.add('hidden');
+    document.body.classList.remove('smv-consult-dedicated','smv-internal-public-view');
     hideHomeSurface();
     hideDashboardPublicSections();
     hide("register-flow");
@@ -529,14 +526,6 @@ $("registerNav")?.addEventListener("click",()=>openCustomerRegistration());
 document.querySelectorAll('header a[href="#home"]').forEach(el=>{
   el.addEventListener("click",e=>{e.preventDefault();smvReturnHome(true);});
 });
-
-// Keep every header control in the same SMV ASTRO style. Logout alone changes to red.
-(function syncHeaderAuthStyle(){
-  const b=$("authBtn"); if(!b) return;
-  const sync=()=>b.classList.toggle("smv-logout-btn",String(b.textContent||"").trim().toLowerCase()==="logout");
-  sync();
-  new MutationObserver(sync).observe(b,{childList:true,characterData:true,subtree:true});
-})();
 
 // Header role label: logged-in role is shown in green.
 function setHeaderRoleLabel(role){
@@ -1099,6 +1088,7 @@ async function smvGetPublicReviewsOnce(astrologer){
  try{return await request;}finally{smvPublicReviewsRequests.delete(astrologerId);}
 }
 
+window.__smvGetPublicReviewsOnce=smvGetPublicReviewsOnce;
 async function smvGetPublicAstrologersOnce(){
  if(Array.isArray(smvPublicAstrologersCache))return smvPublicAstrologersCache;
  if(smvPublicAstrologersRequest)return smvPublicAstrologersRequest;
@@ -1106,7 +1096,7 @@ async function smvGetPublicAstrologersOnce(){
  try{return await smvPublicAstrologersRequest;}finally{smvPublicAstrologersRequest=null;}
 }
 async function smvRenderPrivateConsultAstrologers(){
- const host=$('privateConsultationAstrologers');if(!host||host.dataset.smvLoaded==='1')return;
+ const host=$('privateConsultationAstrologers');if(!host||host.dataset.smvLoaded==='1'||host.dataset.smvLoading==='1')return;host.dataset.smvLoading='1';
  host.innerHTML='<div class="empty">Loading approved astrologers...</div>';
  try{
   const items=await smvGetPublicAstrologersOnce();
@@ -1115,17 +1105,18 @@ async function smvRenderPrivateConsultAstrologers(){
   items.forEach(a=>{
    const row=document.createElement('article');row.className='smv-private-consult-row';
    const photo=a.photoData||a.photoURL||a.photoUrl||'',desc=a.profileDescription||a.bio||a.about||'Professional astrologer';
-   row.innerHTML=`<div class="smv-private-consult-head">${photo?`<img class="smv-private-consult-photo" src="${escapeHtml(photo)}" alt="${escapeHtml(a.name||'Astrologer')} photo">`:''}<div class="smv-private-consult-meta"><h3>${escapeHtml(a.name||'Astrologer')}</h3><div class="small"><b>Vedic:</b> ${escapeHtml(a.expertise||a.specialization||'Astrology')}</div><div class="small"><b>Experience:</b> ${escapeHtml(a.experience||'Experienced')} years</div></div></div><p class="smv-private-consult-description">${escapeHtml(desc)}</p><button class="btn gray smv-private-review-toggle" type="button">REVIEWS &amp; RATINGS</button><div class="smv-inline-reviews hidden"></div><div class="smv-private-consult-price">Chat Price: ₹${Number(a.chatPrice||0).toFixed(2)}</div><button class="btn smv-private-consult-select" type="button" data-astrologer-id="${escapeHtml(String(a.id||''))}" data-astrologer-name="${escapeHtml(a.name||'Astrologer')}" data-price="${Number(a.chatPrice||0)}">SELECT ASTROLOGER</button>`;
+   row.innerHTML=`<div class="smv-private-consult-head">${photo?`<img class="smv-private-consult-photo" src="${escapeHtml(photo)}" alt="${escapeHtml(a.name||'Astrologer')} photo">`:''}<div class="smv-private-consult-meta"><h3>${escapeHtml(a.name||'Astrologer')}</h3><div class="small"><b>Vedic:</b> ${escapeHtml(a.expertise||a.specialization||'Astrology')}</div><div class="small"><b>Experience:</b> ${escapeHtml(a.experience||'Experienced')} years</div></div></div><p class="smv-private-consult-description">${escapeHtml(desc)}</p><div class="smv-private-main-rating">${Number(a.rating||0)>0?`${smvRatingStars(a.rating)} <strong>${smvClampRating(a.rating).toFixed(1)} / 5</strong>`:`<span class="smv-rating-none">Reviews load on request</span>`}</div><button class="smv-compact-control smv-private-review-toggle" type="button">REVIEWS &amp; RATINGS</button><div class="smv-inline-reviews hidden"></div><div class="smv-private-consult-price">Chat Price: ₹${Number(a.chatPrice||0).toFixed(2)}</div><button class="smv-compact-control smv-private-consult-select" type="button" data-astrologer-id="${escapeHtml(String(a.id||''))}" data-astrologer-name="${escapeHtml(a.name||'Astrologer')}" data-price="${Number(a.chatPrice||0)}">SELECT ASTROLOGER</button>`;
    const btn=row.querySelector('.smv-private-review-toggle'),box=row.querySelector('.smv-inline-reviews');
-   btn.onclick=async()=>{const opening=box.classList.contains('hidden');box.classList.toggle('hidden',!opening);btn.textContent=opening?'HIDE REVIEWS & RATINGS':'REVIEWS & RATINGS';if(!opening||box.dataset.loaded==='1')return;box.innerHTML='<div class="empty">Loading reviews...</div>';try{const reviews=await smvGetPublicReviewsOnce(a);box.innerHTML=reviews.length?reviews.map(r=>`<div class="smv-directory-review"><div class="stars">${smvRatingStars(r.rating)} <strong>${smvClampRating(r.rating).toFixed(1)} / 5</strong></div><p>${escapeHtml(r.review||'Verified customer review')}</p><span class="small">${escapeHtml(r.customerName||r.name||'Verified customer')}</span></div>`).join(''):'<div class="empty">No approved reviews for this astrologer yet.</div>';box.dataset.loaded='1';}catch(e){box.innerHTML='<div class="empty error">Unable to load reviews: '+escapeHtml(e?.message||String(e))+'</div>';}}
+   btn.onclick=async()=>{const opening=box.classList.contains('hidden');box.classList.toggle('hidden',!opening);btn.textContent=opening?'HIDE REVIEWS':'REVIEWS & RATINGS';if(!opening||box.dataset.loaded==='1')return;box.innerHTML='<div class="empty">Loading reviews...</div>';try{const reviews=await smvGetPublicReviewsOnce(a);const summary=smvRatingSummary(reviews);const main=row.querySelector('.smv-private-main-rating');if(main&&summary.count)main.innerHTML=`${smvRatingStars(summary.avg)} <strong>${summary.avg.toFixed(1)} / 5</strong> <span class="smv-rating-count">(${summary.count} review${summary.count===1?'':'s'})</span>`;box.innerHTML=reviews.length?reviews.map(r=>`<div class="smv-private-sub-review"><div class="smv-review-stars">${smvRatingStars(r.rating)}</div><p>${escapeHtml(r.review||'Verified customer review')}</p><span class="small">${escapeHtml(r.customerName||r.name||'Verified customer')}</span></div>`).join(''):'<div class="empty">No approved reviews for this astrologer yet.</div>';box.dataset.loaded='1';}catch(e){box.innerHTML='<div class="empty error">Unable to load reviews: '+escapeHtml(e?.message||String(e))+'</div>';}}
+   row.querySelector('.smv-private-consult-select').onclick=e=>window.__smvSelectPrivateAstrologer?.(a,e.currentTarget);
    host.appendChild(row);
   });host.dataset.smvLoaded='1';
- }catch(e){host.innerHTML='<div class="empty error">Approved astrologers are temporarily unavailable.</div>';}
+ }catch(e){host.innerHTML='<div class="empty error">Approved astrologers are temporarily unavailable.</div>';}finally{delete host.dataset.smvLoading;}
 }
 window.addEventListener('smv:private-consultation-open',()=>smvRenderPrivateConsultAstrologers().catch(()=>{}));
 function smvInitDedicatedConsultView(){
  try{
-  if(new URLSearchParams(location.search).get('view')==='consult'){
+  if(new URLSearchParams(location.search).get('view')==='consult'||location.hash==='#private-consultation'){
    smvRenderPrivateConsultAstrologers().catch(()=>{});
   }
  }catch(_){}
@@ -1210,12 +1201,12 @@ async function smvLoadAstroCards(){
     btn.onclick=async()=>{
       const opening=reviewBox.classList.contains('hidden');
       reviewBox.classList.toggle('hidden',!opening);btn.setAttribute('aria-expanded',String(opening));
-      btn.textContent=opening?'HIDE REVIEWS & RATINGS':'REVIEWS & RATINGS';
+      btn.textContent=opening?'HIDE REVIEWS':'REVIEWS & RATINGS';
       if(!opening||loaded)return;
       reviewBox.innerHTML='<div class="empty">Loading reviews...</div>';
       try{
         const reviews=await ensureReviews();
-        reviewBox.innerHTML=reviews.length?reviews.map(r=>`<div class="smv-directory-review"><div class="stars">${ratingStars(r.rating)} <strong>${clampRating(r.rating).toFixed(1)} / 5</strong></div><p>${escapeHtml(r.review||'Verified customer review')}</p><span class="small">${escapeHtml(r.customerName||r.name||'Verified customer')}</span></div>`).join(''):'<div class="empty">No approved reviews for this astrologer yet.</div>';
+        reviewBox.innerHTML=reviews.length?reviews.map(r=>`<div class="smv-directory-review"><div class="smv-review-stars">${ratingStars(r.rating)}</div><p>${escapeHtml(r.review||'Verified customer review')}</p><span class="small">${escapeHtml(r.customerName||r.name||'Verified customer')}</span></div>`).join(''):'<div class="empty">No approved reviews for this astrologer yet.</div>';
         const summary=ratingSummary(reviews);
         smvReviewSummaryCache.set(String(a.name||'').trim().toLowerCase(),summary);
         summaryBox.innerHTML=summary.count?`${ratingStars(summary.avg)} <strong>${summary.avg.toFixed(1)} / 5</strong> <span class="smv-rating-count">(${summary.count} review${summary.count===1?'':'s'})</span>`:`<span class="smv-rating-none">No ratings yet</span>`;
@@ -1224,7 +1215,7 @@ async function smvLoadAstroCards(){
     };
     box.appendChild(row);
   });
- }catch(e){console.error("Approved astrologers load failed:",e);box.innerHTML='<div class="empty error">Approved astrologers are temporarily unavailable.</div>';}
+ }catch(e){console.error("Approved astrologers load failed:",e);box.innerHTML='<div class="empty error">Approved astrologers are temporarily unavailable.</div>';}finally{delete host.dataset.smvLoading;}
 }
 window.__smvReloadAstrologers=loadAstroCards;
 window.dispatchEvent(new Event('smv:app-ready'));
@@ -1310,11 +1301,13 @@ async function refreshPrivateOfferQuote(){
   if(!currentUser)return null;
   const card=$("privateConsultationQuestionCard");
   if(!card||card.classList.contains('hidden'))return null;
+  const quoteSelection=window.__smvSelectedPrivateConsultAstrologer?.id,quoteUid=currentUser.uid;
   const selected=$("privateConsultationSelected"), summary=$("privateConsultPaymentSummary");
-  const original=smvMoneyFromText((selected?.textContent||'')+' '+(summary?.textContent||''));
+  const original=Number(window.__smvSelectedPrivateConsultAstrologer?.chatPrice||summary?.dataset.smvOfferOriginal)||smvMoneyFromText((selected?.textContent||'')+' '+(summary?.textContent||''));
   if(!original)return null;
   try{
     const q=await renderApi('/offers/quote',{method:'POST',body:JSON.stringify({service:'private_consultation',originalAmount:original,promoCode:''})});
+    if(quoteSelection!==window.__smvSelectedPrivateConsultAstrologer?.id||quoteUid!==currentUser?.uid)return null;
     smvPrivateOfferQuote=q;
     const automatic=!!(q?.offerId&&q?.automatic===true);
     smvHidePrivatePromoControls(automatic);
@@ -1337,9 +1330,10 @@ async function refreshPrivateOfferQuote(){
 let smvPrivateOfferInFlight=null,smvPrivateOfferLastKey="",smvPrivateOfferLastAt=0;
 async function smvRefreshPrivateOfferOnce(){
   const selected=$("privateConsultationSelected"),summary=$("privateConsultPaymentSummary");
-  const original=smvMoneyFromText((selected?.textContent||'')+' '+(summary?.textContent||''));
-  if(!original||smvPrivateOfferInFlight)return;
-  const key=String(original);
+  const original=Number(window.__smvSelectedPrivateConsultAstrologer?.chatPrice||summary?.dataset.smvOfferOriginal)||smvMoneyFromText((selected?.textContent||'')+' '+(summary?.textContent||''));
+  if(!original)return;
+  if(smvPrivateOfferInFlight){await smvPrivateOfferInFlight;return smvRefreshPrivateOfferOnce();}
+  const key=[currentUser?.uid,window.__smvSelectedPrivateConsultAstrologer?.id,original].join(':');
   if(key===smvPrivateOfferLastKey && Date.now()-smvPrivateOfferLastAt<15000)return;
   smvPrivateOfferLastKey=key;smvPrivateOfferLastAt=Date.now();
   smvPrivateOfferInFlight=refreshPrivateOfferQuote().finally(()=>{smvPrivateOfferInFlight=null;});
@@ -1353,7 +1347,7 @@ document.addEventListener('click',e=>{
   // bubble handler then reads the settled selection and requests exactly one quote.
   smvRefreshPrivateOfferOnce().catch(()=>{});
 },false);
-window.addEventListener('smv:private-consultation-open',()=>smvRefreshPrivateOfferOnce().catch(()=>{}));
+
 document.addEventListener('click',e=>{
  if(e.target?.closest?.('#askNowButton,#privateConsultationHomeLink,.smv-private-consult-select')){
   smvResetPublicPaymentUi();
@@ -1386,9 +1380,8 @@ async function retryCustomerPayment(questionId, triggerButton){
   const btn=triggerButton; const originalLabel=btn?.textContent||'Retry Payment';
   if(btn){btn.disabled=true;btn.textContent='CREATING PAYMENT...';}
   try{
-    const orderRes=await withTimeout(renderApi("/create-order",{method:"POST",body:JSON.stringify({questionId:id,serviceName:"Public Astrology Question"})}),30000);
+    const [orderRes]=await Promise.all([withTimeout(renderApi("/create-order",{method:"POST",body:JSON.stringify({questionId:id,serviceName:"Public Astrology Question"})}),30000),ensureRazorpayCheckout()]);
     if(orderRes?.alreadyPaid){await loadDashboard("customer",true);return;}
-    await ensureRazorpayCheckout();
     const {orderId,keyId,amount:paise,currency}=orderRes||{};
     if(!orderId||!keyId) throw new Error(orderRes?.error||"Payment order could not be created. Please try again.");
     const options={
@@ -1459,7 +1452,7 @@ $("submitQuestionBtn")?.addEventListener("click",async()=>{
    const birthPlace=$("birthPlace").value.trim();
    const birthGender=$("birthGender").value;
    const payload={customerName:name,question:text,amount,birthDetails:{name,birthDate,birthTime,birthPlace,birthGender,timezone:"Asia/Kolkata",utcOffsetMinutes:330},serviceName:"Public Astrology Question",customerEmail:currentUser.email||"",promoCode:String($("smvPromoCode")?.value||"").trim()};
-  const orderRes=await withTimeout(renderApi("/create-order",{method:"POST",body:JSON.stringify(payload)}),30000);
+  const [orderRes]=await Promise.all([withTimeout(renderApi("/create-order",{method:"POST",body:JSON.stringify(payload)}),30000),ensureRazorpayCheckout()]);
   if(orderRes?.questionId) pendingQuestionId=String(orderRes.questionId).trim();
   const {orderId,keyId,amount:paise,currency}=orderRes||{};
   if(orderRes?.offerId&&$("smvOfferMsg"))$("smvOfferMsg").innerHTML=`<span class="success">${escapeHtml(orderRes.offerBannerText||orderRes.offerName||'Offer applied')} — Pay ₹${(Number(paise||0)/100).toFixed(2)}</span>`;
@@ -2192,7 +2185,7 @@ async function smvRunTargetedLiveRefresh(role,uid){
  if(kinds.length===1&&kinds[0]==='notifications'){
   const canonical=(role==='customer'&&smvCustomerNotificationCanonical.uid===uid)?smvCustomerNotificationCanonical:{};
   await renderNotifications('userNotifications',canonical);
-  smvLiveStatus('Updated just now');
+  window.__smvRefreshCollapse?.();smvLiveStatus('Updated just now');
   return;
  }
  if(role==='astrologer'&&kinds.length&&kinds.every(k=>['questions','withdrawals','open_questions','workflow','notifications'].includes(k))){
@@ -2244,42 +2237,18 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)smvLiveQue
 document.addEventListener('focusout',()=>setTimeout(()=>smvLiveQueue?.resume(),0));
 window.addEventListener('smv:logged-out',()=>{smvStopLive();smvStopRefundReconciliation();dashboardReadyUid=null;dashboardReadyRole=null;dashboardReadyAt=0;smvProfiles.clear();});
 
-let smvPublicBannerCache={at:0,offers:null,promise:null};
-async function smvGetPublicBannerOffers(){
- const now=Date.now();
- if(Array.isArray(smvPublicBannerCache.offers)&&now-smvPublicBannerCache.at<60000)return smvPublicBannerCache.offers;
- if(smvPublicBannerCache.promise)return smvPublicBannerCache.promise;
- smvPublicBannerCache.promise=(async()=>{
-  const r=await withTimeout(fetch(RAZORPAY_BACKEND_URL+"/offers/public-banners",{cache:"no-store",headers:{"Accept":"application/json"}}),12000);
-  const d=await r.json().catch(()=>({offers:[]}));
-  if(!r.ok)throw new Error(d.error||"Offer banner request failed.");
-  const offers=Array.isArray(d.offers)?d.offers:[];
-  smvPublicBannerCache={at:Date.now(),offers,promise:null};
-  return offers;
- })();
- try{return await smvPublicBannerCache.promise;}finally{smvPublicBannerCache.promise=null;}
-}
-function smvOfferBadgeText(o){
- const type=String(o.discountType||"");
- if(type==="fixed_price"&&Number(o.offerPrice)>0)return `₹${Number(o.offerPrice).toFixed(0)} SPECIAL`;
- if(type==="percentage"&&Number(o.discountValue)>0)return `${Number(o.discountValue)}% OFF`;
- if(type==="flat"&&Number(o.discountValue)>0)return `₹${Number(o.discountValue).toFixed(0)} OFF`;
- return "SPECIAL OFFER";
-}
 async function smvRenderCustomerOfferBanner(box){
  if(!box)return;
- try{
-  const offers=(await smvGetPublicBannerOffers()).filter(o=>["customer_dashboard","home_dashboard"].includes(String(o.displayMode||"").toLowerCase()));
-  box.querySelector(".smv-customer-offer-banners")?.remove();
-  if(!offers.length)return;
-  const host=document.createElement("div");host.className="smv-customer-offer-banners";
-  host.innerHTML=offers.map(o=>`<div class="smv-customer-offer-banner"><span class="smv-customer-offer-badge">${escapeHtml(smvOfferBadgeText(o))}</span><strong>${escapeHtml(o.bannerText||o.name||"Special Offer")}</strong></div>`).join("");
-  box.prepend(host);
- }catch(e){console.warn("Customer offer banner skipped:",e);}
+ const offers=await window.SMVOfferBanners.getOffers();
+ if(!box.isConnected)return;
+ box.querySelector('.smv-customer-offer-banners')?.remove();
+ const host=document.createElement('div');host.className='smv-customer-offer-banners smv-home-offer-banners';box.prepend(host);
+ window.SMVOfferBanners.render(host,offers,'customer_dashboard',()=>{smvResetPublicPaymentUi();openQuestionService();});
 }
 async function loadDashboard(expectedRole=null,force=false,background=false){
  const box=$('dashboardContent');
  if(!currentUser){ if(box) box.innerHTML='<div class="card">Please login to continue.</div>'; return; }
+ const dashboardTimingStart=performance.now();
  const loadUid=currentUser.uid;
  const requestedRole=String(expectedRole||'').toLowerCase();
  // IMPORTANT: Returning from ASK NOW must not rehydrate an already-rendered
@@ -2287,7 +2256,7 @@ async function loadDashboard(expectedRole=null,force=false,background=false){
  // the Question Form Back button was pressed, which could create a repeated
  // Loading -> open -> Loading cycle. Explicit data-changing actions can pass
  // force=true when a fresh render is actually required.
- if(!force && !smvDashboardDirty && Date.now()-dashboardReadyAt<15000 && dashboardReadyUid===loadUid && (!requestedRole || dashboardReadyRole===requestedRole) && smvInternalView==='dashboard' && box && !box.querySelector('.error')){
+ if(!force && !smvDashboardDirty && Date.now()-dashboardReadyAt<300000 && dashboardReadyUid===loadUid && (!requestedRole || dashboardReadyRole===requestedRole) && smvInternalView==='dashboard' && box && !box.querySelector('.error')){
    show('dashboard');
    touchSession();
    armIdleTimer();
@@ -3130,7 +3099,7 @@ ${ad.status === 'rejected' && ad.rejectionReason
    <div class="card" style="margin-top:16px"><h3 class="customer-private-consultations-title">My Private Consultations</h3>${!privateConsultationItems.length?'<div class="empty">No private consultations yet.</div>':privateConsultationItems.slice(0,20).map(c=>{const id=String(c.id||c.consultationId||'');const rejected=c.status==='question_rejected';const refundStatus=String(c.refundStatus||'').toLowerCase();const refundDone=['processed','completed'].includes(refundStatus);const answerReady=c.status==='answered'&&!!String(c.answer||'').trim();const unpaid=c.paymentStatus!=='paid'&&!rejected;const statusMap={awaiting_payment:'Payment Pending',pending_admin_approval:'Waiting for Admin Approval',approved_for_astrologer:'Waiting for Selected Astrologer',answer_pending_admin_approval:'Answer Waiting for Admin Approval',revision_required:'Astrologer Revising Answer',answered:c.customerViewedAt?'Answer Viewed':'Answer Ready',question_rejected:'Question Rejected / Refund'};return `<div class="smv-consultation-item" style="padding:14px 0;border-bottom:1px solid #eee"><div class="smv-question-text">${escapeHtml(c.question||'Private Consultation')}</div><div class="small smv-customer-meta-line"><b>Selected Astrologer:</b> <span>${escapeHtml(c.astrologerName||'Astrologer')}</span> · <b>Chat Price:</b> <span>₹${Number(c.chatPrice||c.amount||0).toFixed(2)}</span></div><div class="small smv-customer-meta-line"><b>Status:</b> <span>${escapeHtml(statusMap[c.status]||c.status||'Processing')}</span></div><div class="small smv-customer-meta-line"><b>Payment Status:</b> <span>${escapeHtml(c.paymentStatus||'pending')}</span></div><div class="small smv-customer-meta-line"><b>Consultation ID:</b> <span>${escapeHtml(id)}</span></div>${c.razorpayPaymentId?`<div class="small smv-customer-meta-line"><b>Payment ID:</b> <span>${escapeHtml(c.razorpayPaymentId)}</span></div>`:''}${unpaid?`<div class="smv-private-payment-actions" style="margin-top:8px"><button class="smv-customer-payment-btn" data-private-retry="${escapeHtml(id)}">RETRY PAYMENT ₹${Number(c.chatPrice||c.amount||0).toFixed(2)}</button> <button class="smv-customer-payment-btn" data-private-recover="${escapeHtml(id)}">RECOVER PAYMENT</button></div>`:''}${rejected?`<div class="refund-summary" style="margin-top:10px"><b>Refund Status:</b> ${refundDone?'Refund Completed':(refundStatus==='failed'?'Refund Failed — Admin Retry Required':escapeHtml(c.refundStatus||'Pending'))}<br><span class="small"><b>Refund Amount:</b> ₹${Number(c.refundAmount||c.chatPrice||0).toFixed(2)}</span>${c.refundId?`<br><span class="small"><b>Refund ID:</b> ${escapeHtml(c.refundId)}</span>`:''}<br><span class="small"><b>RRN:</b> ${escapeHtml(c.refundRrn||'Available after Razorpay processes the refund')}</span>${c.refundProcessedAt?`<br><span class="small"><b>Refund Date:</b> ${escapeHtml(smvDateTime(c.refundProcessedAt))}</span>`:''}</div>`:''}${answerReady?`<div class="card" style="margin-top:10px"><b>Astrologer Answer</b><div class="smv-customer-answer-text" style="white-space:pre-wrap;overflow-wrap:anywhere">${escapeHtml(c.answer)}</div>${c.customerViewedAt?'<div class="small success smv-customer-viewed-status">CUSTOMER VIEWED</div>':`<div class="small success smv-customer-viewed-status">SUBMITTED</div><button class="btn" data-private-view="${escapeHtml(id)}">MARK ANSWER VIEWED</button>`}</div>`:''}</div>`}).join('')}</div>`;
    smvRenderCustomerOfferBanner(box).catch(()=>{});
    document.querySelectorAll('[data-private-recover]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{const r=await renderApi('/private-consultation/recover-payment',{method:'POST',body:JSON.stringify({consultationId:b.dataset.privateRecover})});if(r.recovered)await loadDashboard('customer',true);else alert('No captured Razorpay payment was found. Use Retry Payment.');}catch(e){alert(e.message||String(e));}finally{b.disabled=false;}});
-   document.querySelectorAll('[data-private-retry]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{const r=await renderApi('/private-consultation/retry-payment',{method:'POST',body:JSON.stringify({consultationId:b.dataset.privateRetry})});if(!window.Razorpay)throw new Error('Razorpay is not available. Please refresh and try again.');const rz=new Razorpay({key:r.keyId,amount:r.amount,currency:r.currency,name:'SMV ASTRO',description:'Private Astrology Consultation',order_id:r.orderId,handler:async p=>{await renderApi('/private-consultation/verify-payment',{method:'POST',body:JSON.stringify({consultationId:r.consultationId,...p})});await loadDashboard('customer',true);},modal:{ondismiss:()=>{renderApi('/private-consultation/cancel-payment',{method:'POST',body:JSON.stringify({consultationId:r.consultationId})}).catch(()=>{});b.disabled=false;}}});rz.on('payment.failed',()=>{b.disabled=false;});rz.open();}catch(e){alert(e.message||String(e));b.disabled=false;}});
+   document.querySelectorAll('[data-private-retry]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{const r=await renderApi('/private-consultation/retry-payment',{method:'POST',body:JSON.stringify({consultationId:b.dataset.privateRetry})});await ensureRazorpayCheckout();const rz=new Razorpay({key:r.keyId,amount:r.amount,currency:r.currency,name:'SMV ASTRO',description:'Private Astrology Consultation',order_id:r.orderId,handler:async p=>{await renderApi('/private-consultation/verify-payment',{method:'POST',body:JSON.stringify({consultationId:r.consultationId,...p})});await loadDashboard('customer',true);},modal:{ondismiss:()=>{renderApi('/private-consultation/cancel-payment',{method:'POST',body:JSON.stringify({consultationId:r.consultationId})}).catch(()=>{});b.disabled=false;}}});rz.on('payment.failed',()=>{b.disabled=false;});rz.open();}catch(e){alert(e.message||String(e));b.disabled=false;}});
    document.querySelectorAll('[data-private-view]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{await renderApi('/customer/private-consultation/mark-viewed',{method:'POST',body:JSON.stringify({consultationId:b.dataset.privateView})});await loadDashboard('customer',true);}catch(e){alert(e.message||String(e));b.disabled=false;}});
    document.querySelectorAll('[data-retry-payment]').forEach(b=>b.onclick=()=>retryCustomerPayment(b.dataset.retryPayment,b));
    document.querySelectorAll('[data-review]').forEach(b=>b.onclick=()=>openReview(b.dataset.review,b.dataset.astro));
@@ -3153,7 +3122,7 @@ ${ad.status === 'rejected' && ad.rejectionReason
   show('dashboard');
   dashboardReadyUid=loadUid; dashboardReadyAt=Date.now(); smvDashboardDirty=false;
   dashboardReadyRole=role; smvWatchQuestions(role);
-  smvLiveStatus('Updated just now');
+  window.__smvRefreshCollapse?.();smvLiveStatus('Updated just now');
   const refresh=$('smvRefreshDashboard');if(refresh)refresh.textContent='Refresh';
   touchSession();
   armIdleTimer();
@@ -3167,7 +3136,7 @@ ${ad.status === 'rejected' && ad.rejectionReason
  }
  })();
  const ownedRequest=dashboardLoadPromise;
- try{return await ownedRequest;}finally{if(dashboardLoadPromise===ownedRequest){dashboardLoadPromise=null;dashboardLoadUid=null;}}
+ try{return await ownedRequest;}finally{if(dashboardLoadPromise===ownedRequest){dashboardLoadPromise=null;dashboardLoadUid=null;}window.__smvRecordTiming?.('dashboard-render',performance.now()-dashboardTimingStart,true);}
 }
 function openPayoutChange(){
  openModal(`<h2>Change Payment Method</h2><p class="small">For security, your previous bank/UPI details are not displayed. Enter the new details. The new method will remain pending until Admin approval.</p>
@@ -3451,7 +3420,7 @@ async function renderAdminOffers(){
   const anchor=$("questionPrice")?.closest(".card"); if(!anchor)return;
   let card=$("adminOffersPromotions"); if(!card){card=document.createElement("div");card.id="adminOffersPromotions";card.className="card";card.style.marginTop="16px";anchor.insertAdjacentElement("afterend",card);}
   card.innerHTML='<h3>Offers & Promotions</h3><p class="small">Built-in ₹1 Welcome Offer, promo codes, festival/season offers and invisible payment-only promotions. Discounts never stack; server verifies the Razorpay amount.</p><div id="adminOfferEditor"></div><div id="adminOfferList"><div class="empty">Loading offers...</div></div><div class="small" id="adminOfferMsg"></div>';
-  $("adminOfferEditor").innerHTML=`<input type="hidden" id="offerEditId"><div class="grid"><label><b>Offer Name</b><input id="offerName" placeholder="Pongal Special"></label><label><b>Promo Code</b><input id="offerPromoCode" maxlength="40" placeholder="PONGAL49"></label><label><b>Discount Type</b><select id="offerDiscountType"><option value="fixed_price">Fixed Price</option><option value="percentage">Percentage Discount</option><option value="flat">Flat Discount</option></select></label><label><b>Offer Price ₹</b><input id="offerPrice" type="number" min="1" step="0.01" value="1"></label><label><b>Discount Value</b><input id="offerDiscountValue" type="number" min="0" step="0.01" value="0"></label><label><b>Eligibility</b><select id="offerEligibility"><option value="all">All Customers</option><option value="new_customer">New Customers Only</option><option value="existing_customer">Existing Customers Only</option></select></label><label><b>Applies To</b><select id="offerAppliesTo"><option value="public_question">Ask Question</option><option value="private_consultation">Private Consultation</option><option value="all">Both</option></select></label><label><b>Display Mode</b><select id="offerDisplayMode"><option value="payment_only">Payment Only / Invisible</option><option value="hidden">Hidden</option><option value="home_banner">Home Banner</option><option value="customer_dashboard">Customer Dashboard</option><option value="home_dashboard">Home + Dashboard</option></select></label><label><b>Banner Theme</b><select id="offerBannerTheme"><option value="auto">Auto Detect</option><option value="generic">Generic Astrology</option><option value="pongal">Pongal</option><option value="diwali">Diwali / Deepavali</option><option value="navaratri">Navaratri</option><option value="dasara">Dasara / Vijayadashami</option><option value="ayudha_pooja">Ayudha Pooja</option><option value="shivaratri">Shivaratri</option><option value="tamil_new_year">Tamil New Year</option></select></label><label><b>Start Date & Time</b><input id="offerStartAt" type="datetime-local"></label><label><b>End Date & Time</b><input id="offerEndAt" type="datetime-local"></label><label><b>Per Customer Limit</b><input id="offerPerCustomerLimit" type="number" min="0" value="1"></label><label><b>Total Usage Limit (0 = unlimited)</b><input id="offerTotalUsageLimit" type="number" min="0" value="0"></label><label><b>Minimum Amount ₹</b><input id="offerMinimumAmount" type="number" min="0" step="0.01" value="1"></label><label><b>Automatic Offer</b><select id="offerAutomatic"><option value="true">YES</option><option value="false">NO — Promo Code Required</option></select></label><label><b>Enabled</b><select id="offerEnabled"><option value="true">ON</option><option value="false">OFF</option></select></label></div><label><b>Banner / Payment Message</b><input id="offerBannerText" maxlength="240" placeholder="Pongal Special Offer Applied"></label><div class="action-row"><button class="btn" id="saveOfferBtn" type="button">SAVE OFFER</button><button class="btn gray" id="clearOfferBtn" type="button">CLEAR</button></div>`;
+  $("adminOfferEditor").innerHTML=`<input type="hidden" id="offerEditId"><div class="grid"><label><b>Offer Name</b><input id="offerName" placeholder="Pongal Special"></label><label><b>Promo Code</b><input id="offerPromoCode" maxlength="40" placeholder="PONGAL49"></label><label><b>Discount Type</b><select id="offerDiscountType"><option value="fixed_price">Fixed Price</option><option value="percentage">Percentage Discount</option><option value="flat">Flat Discount</option></select></label><label><b>Offer Price ₹</b><input id="offerPrice" type="number" min="1" step="0.01" value="1"></label><label><b>Discount Value</b><input id="offerDiscountValue" type="number" min="0" step="0.01" value="0"></label><label><b>Eligibility</b><select id="offerEligibility"><option value="all">All Customers</option><option value="new_customer">New Customers Only</option><option value="existing_customer">Existing Customers Only</option></select></label><label><b>Applies To</b><select id="offerAppliesTo"><option value="public_question">Ask Question</option><option value="private_consultation">Private Consultation</option><option value="all">Both</option></select></label><label><b>Display Mode</b><select id="offerDisplayMode"><option value="payment_only">Payment Only / Invisible</option><option value="hidden">Hidden</option><option value="home_banner">Home Banner</option><option value="customer_dashboard">Customer Dashboard</option><option value="home_dashboard">Home + Dashboard</option></select></label><label><b>Banner Theme</b><select id="offerBannerTheme"><option value="auto">Auto Detect</option><option value="generic">Generic Astrology</option><option value="welcome">Welcome</option><option value="vinayagar_chaturthi">Vinayagar Chaturthi</option><option value="karthigai_deepam">Karthigai Deepam</option><option value="thaipusam">Thaipusam</option><option value="new_year">New Year</option><option value="onam">Onam</option><option value="christmas">Christmas</option><option value="eid">Eid</option><option value="pongal">Pongal</option><option value="diwali">Diwali / Deepavali</option><option value="navaratri">Navaratri</option><option value="dasara">Dasara / Vijayadashami</option><option value="ayudha_pooja">Ayudha Pooja</option><option value="shivaratri">Shivaratri</option><option value="tamil_new_year">Tamil New Year</option></select></label><label><b>Start Date & Time</b><input id="offerStartAt" type="datetime-local"></label><label><b>End Date & Time</b><input id="offerEndAt" type="datetime-local"></label><label><b>Per Customer Limit</b><input id="offerPerCustomerLimit" type="number" min="0" value="1"></label><label><b>Total Usage Limit (0 = unlimited)</b><input id="offerTotalUsageLimit" type="number" min="0" value="0"></label><label><b>Minimum Amount ₹</b><input id="offerMinimumAmount" type="number" min="0" step="0.01" value="1"></label><label><b>Automatic Offer</b><select id="offerAutomatic"><option value="true">YES</option><option value="false">NO — Promo Code Required</option></select></label><label><b>Enabled</b><select id="offerEnabled"><option value="true">ON</option><option value="false">OFF</option></select></label></div><label><b>Banner / Payment Message</b><input id="offerBannerText" maxlength="240" placeholder="Pongal Special Offer Applied"></label><div class="action-row"><button class="btn" id="saveOfferBtn" type="button">SAVE OFFER</button><button class="btn gray" id="clearOfferBtn" type="button">CLEAR</button></div>`;
   const clear=()=>{for(const id of ['offerEditId','offerName','offerPromoCode','offerStartAt','offerEndAt','offerBannerText'])if($(id))$(id).value='';$('offerPrice').value='1';$('offerDiscountValue').value='0';$('offerPerCustomerLimit').value='1';$('offerTotalUsageLimit').value='0';$('offerMinimumAmount').value='1';$('offerEnabled').value='true';$('offerAutomatic').value='true';if($('offerBannerTheme'))$('offerBannerTheme').value='auto';syncPromoMode();}; $("clearOfferBtn").onclick=clear;
   function syncPromoMode(){const auto=$('offerAutomatic')?.value==='true',input=$('offerPromoCode');if(!input)return;input.disabled=auto;if(auto){input.value='';input.placeholder='No code required for Automatic Offer';}else input.placeholder='Required — e.g. PONGAL49';}
   $('offerAutomatic')?.addEventListener('change',syncPromoMode); syncPromoMode();
@@ -4283,7 +4252,7 @@ $('adminReviews')
 
   });
   $('adminQuestions').innerHTML=questions.empty?'<div class="empty">No questions yet.</div>':questions.docs.slice(-50).reverse().map(d=>{const q=d.data();return `<div style="padding:10px;border-bottom:1px solid #eee"><b>${escapeHtml(q.question||'Question')}</b><div class="small">Status: ${escapeHtml(q.status||'')} · Customer: ${escapeHtml(q.customerId||'')} · Price paid: ₹${Number(q.amount||0).toFixed(2)} · Astrologer share: ₹${Number(q.astrologerCommissionAmount||0).toFixed(2)} · Admin share: ₹${Number(q.adminCommissionAmount||0).toFixed(2)} · ${escapeHtml(q.astrologerName||'Unclaimed')}</div><div class="small"><b>Date & Time:</b> ${escapeHtml(smvDateTime(q.updatedAt||q.answerApprovedAt||q.adminQuestionApprovedAt||q.createdAt))}</div></div>`}).join('');
-  smvLiveStatus('Updated just now');
+  window.__smvRefreshCollapse?.();smvLiveStatus('Updated just now');
   const refresh=$('smvRefreshAdmin');if(refresh)refresh.textContent='Refresh';
  }catch(e){
  const message='<div class="empty error">'+escapeHtml(e.message||String(e))+'</div>';
@@ -4300,7 +4269,7 @@ if(auth){ onAuthStateChanged(auth,async user=>{
    if(previousUid && (!user || previousUid!==user.uid)){
      hide('dashboard'); hide('admin'); hide('dashLink'); hide('adminLink');
    }
-   $('authBtn').textContent=user?'Logout':'Login';
+   $('authBtn').textContent=user?'Logout':'Login';$('authBtn').classList.toggle('smv-logout-btn',!!user);
    if(user){
      hide('smv-content-hub'); window.__smvContentVisible=false;
      lastAuthUid=user.uid; window.__SMV_LOGGED_OUT=false; touchSession(); armIdleTimer(); window.dispatchEvent(new Event('smv:auth-user'));
@@ -4323,13 +4292,13 @@ if(auth){ onAuthStateChanged(auth,async user=>{
        armIdleTimer();
        return;
      }
-     if(window.__SMV_PUBLIC_ROUTE){smvShowRoleNav();armIdleTimer();return;}
      const listenerEpoch=smvNavigationEpoch;
      const adminUser=await isCurrentAdmin();
      const headerProfile=adminUser?{role:'admin'}:await getUserProfile(user.uid).catch(()=>({role:'customer'}));
      const headerRole=adminUser?'admin':String(headerProfile?.role||'customer').toLowerCase();
      setHeaderRoleLabel(headerRole);
      window.__smvCurrentRole=headerRole;
+     if(window.__SMV_PUBLIC_ROUTE){smvShowRoleNav();armIdleTimer();return;}
      // CRITICAL LATE-RACE GUARD: ASK NOW may have started while the auth
      // listener was awaiting Firebase/profile data. Never let this older
      // listener resume and overwrite the Question Form with Dashboard.
