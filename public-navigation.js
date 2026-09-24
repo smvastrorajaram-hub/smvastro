@@ -45,6 +45,11 @@
   if(event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
   const control=event.target.closest?.('a[href^="#"],[data-smv-route]');if(!control)return;
   const id=control.dataset.smvRoute||(control.getAttribute('href')||'').slice(1);if(!targets.has(id))return;
+  if(id==='private-consultation'){
+   event.preventDefault();event.stopImmediatePropagation();
+   window.open('./?view=consult','_blank','noopener');
+   return;
+  }
   event.preventDefault();event.stopImmediatePropagation();navigate(id);
  },true);
  document.addEventListener('click',event=>{

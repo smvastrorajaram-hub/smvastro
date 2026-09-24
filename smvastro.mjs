@@ -1112,6 +1112,16 @@ async function smvRenderPrivateConsultAstrologers(){
  }catch(e){host.innerHTML='<div class="empty error">Approved astrologers are temporarily unavailable.</div>';}
 }
 window.addEventListener('smv:private-consultation-open',()=>smvRenderPrivateConsultAstrologers().catch(()=>{}));
+function smvInitDedicatedConsultView(){
+ try{
+  if(new URLSearchParams(location.search).get('view')==='consult'){
+   smvRenderPrivateConsultAstrologers().catch(()=>{});
+  }
+ }catch(_){}
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',smvInitDedicatedConsultView,{once:true});
+else smvInitDedicatedConsultView();
+
 function loadAstroCards(){
  if(smvAstroListRequest)return smvAstroListRequest;
  smvAstroListRequest=smvLoadAstroCards().finally(()=>smvAstroListRequest=null);return smvAstroListRequest;

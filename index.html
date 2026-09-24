@@ -3909,17 +3909,6 @@ document.addEventListener('DOMContentLoaded', function(){
 </script>
 
 
-<script>
-(function(){
-  function openConsultWindow(event){
-    const control=event.target.closest?.('a[href="#private-consultation"],[data-smv-route="private-consultation"]');
-    if(!control)return;
-    event.preventDefault();event.stopImmediatePropagation();
-    window.open('./?view=consult','_blank','noopener');
-  }
-  document.addEventListener('click',openConsultWindow,true);
-})();
-</script>
 
 </body>
 <script id="smv-v172-ui-symbol-collapse-script">
