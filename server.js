@@ -39,6 +39,7 @@ if (!admin.apps.length) {
 }
 const db = admin.firestore();
 const FieldValue = admin.firestore.FieldValue;
+const publicWorkflow = require('./public-question-workflow').createPublicWorkflow({db,FieldValue,Timestamp:admin.firestore.Timestamp,FieldPath:admin.firestore.FieldPath});
 const RAZORPAY_KEY_ID = String(process.env.RAZORPAY_KEY_ID || "").trim();
 const RAZORPAY_KEY_SECRET = String(process.env.RAZORPAY_KEY_SECRET || "").trim();
 const ADMIN_EMAIL = String(process.env.ADMIN_EMAIL || "").trim();
@@ -245,7 +246,7 @@ app.use((req, res, next) => {
 // write after the response has finished so it never delays Razorpay/payment or
 // any other request's critical path.
 const DASHBOARD_SIGNAL_PATHS=new Set([
-  '/register-customer-profile','/register-astrologer-profile','/astrologer/edit-answer','/submit-answer',
+  '/register-customer-profile','/register-astrologer-profile','/astrologer/edit-answer','/submit-answer','/astrologer/claim-question',
   '/customer/submit-review','/admin/appointment-status','/admin/approve-question','/admin/reallocate-question','/admin/reject-question','/admin/retry-refund','/admin/sync-refund',
   '/admin/edit-question','/admin/takeover-answer','/astrologer/change-payout','/admin/payout-change-status',
   '/admin/set-open-workflow','/customer/mark-answer-viewed','/admin/astrologer-quiz/load-defaults',
@@ -268,7 +269,7 @@ function dashboardSignalCategory(path=''){
   if(p.includes('/review'))return 'reviews';
   if(p.includes('/astrologer-quiz/')||p.includes('/astrologer-auto-approval/'))return 'astrologer_settings';
   if(p.includes('/set-open-workflow')||p.includes('/set-commission')||p.includes('/set-word-count')||p.includes('/set-workflow'))return 'settings';
-  if(p.includes('/approve-question')||p.includes('/reallocate-question')||p.includes('/reject-question')||p.includes('/retry-refund')||p.includes('/sync-refund')||p.includes('/edit-question')||p.includes('/takeover-answer')||p.includes('/approve-answer')||p.includes('/reject-answer')||p.includes('/submit-answer')||p.includes('/mark-answer-viewed'))return 'questions';
+  if(p.includes('/claim-question')||p.includes('/approve-question')||p.includes('/reallocate-question')||p.includes('/reject-question')||p.includes('/retry-refund')||p.includes('/sync-refund')||p.includes('/edit-question')||p.includes('/takeover-answer')||p.includes('/approve-answer')||p.includes('/reject-answer')||p.includes('/submit-answer')||p.includes('/mark-answer-viewed'))return 'questions';
   if(p.includes('/register-astrologer-profile')||p.includes('/google-form/astrologer-qualification'))return 'astrologers';
   if(p.includes('/verify-payment')||p.includes('/recover-payment')||p.includes('/razorpay/webhook')||p.includes('/credit-commission'))return 'financial';
   return 'unknown';
@@ -630,56 +631,12 @@ app.post("/astrologer/edit-answer", async (req, res) => {
   }
 
   try {
-    const questionRef = db.collection("smv_questions").doc(questionId);
-    const snap = await questionRef.get();
-    if (!snap.exists) {
-      return res.status(404).json({ error: "Question not found." });
-    }
-
-    const q = snap.data() || {};
-    if (String(q.astrologerId || "") !== String(user.uid)) {
-      return res.status(403).json({ error: "This question is not assigned to you." });
-    }
-
-    const workflow = await getOpenWorkflowSettings();
-    const bypassEditable = workflow.allowWithoutAdminApproval && String(q.status || "") === "answered" && q.adminApprovalBypassed === true && !q.customerAnswerViewedAt;
-    // In normal Admin-approval mode, approved answers are final. In open mode,
-    // the astrologer may reopen the answer only until the customer has viewed it.
-    if ((String(q.status || "") === "answered" || String(q.astrologerAnswerStatus || "") === "approved") && !bypassEditable) {
-      return res.status(409).json({ error: "This answer is final or has already been viewed by the customer." });
-    }
-
-    // Only submitted answers waiting for approval or requiring revision can
-    // be reopened. A draft/unanswered question is already in the Question Box.
-    const allowedStatuses = ["processing", "answer_draft", "admin_review", "revision_required"];
-    const status = String(q.status || "");
-    const hasAnswer = !!String(q.answer || "").trim();
-    if (!hasAnswer || (!allowedStatuses.includes(status) && q.astrologerEditMode !== true && !bypassEditable)) {
-      return res.status(409).json({ error: "This answer is not available for editing right now." });
-    }
-
-    await questionRef.update({
-      // Keep the same question and same astrologer allocation.
-      allocationStatus: "claimed_by_astrologer",
-      astrologerEditMode: true,
-      // admin_approved here means the QUESTION was approved/allocated, not
-      // that the ANSWER was approved. /submit-answer moves it back to processing.
-      status: "admin_approved",
-      astrologerAnswerStatus: "draft",
-      editReopenedAt: FieldValue.serverTimestamp(),
-      editReopenedBy: user.uid,
-      updatedAt: FieldValue.serverTimestamp()
-    });
-
-    await writeAdminAudit("ASTROLOGER_ANSWER_REOPENED_FOR_EDIT", questionId, user.uid, {
-      previousStatus: status,
-      nextStatus: "admin_approved"
-    });
-
-    return res.json({ success: true, questionId, status: "admin_approved", astrologerEditMode: true });
+    const result = await publicWorkflow.reopen(questionId,user.uid);
+    await writeAdminAudit("ASTROLOGER_ANSWER_REOPENED_FOR_EDIT",questionId,user.uid,{status:result.status});
+    return res.json(result);
   } catch (e) {
     console.error("Astrologer answer edit reopen failed:", e);
-    return res.status(500).json({ error: e?.message || "Unable to open answer for editing." });
+    return res.status(e.httpStatus||500).json({ error: e?.message || "Unable to open answer for editing." });
   }
 });
 
@@ -703,65 +660,7 @@ app.post("/submit-answer", async (req, res) => {
     }
 
     const questionRef = db.collection("smv_questions").doc(questionId);
-    const snap = await questionRef.get();
-    if (!snap.exists) return res.status(404).json({ error: "Question not found." });
-
-    const q = snap.data() || {};
-    const workflow = await getOpenWorkflowSettings();
-    const bypassApproval = workflow.allowWithoutAdminApproval && q.adminApprovalBypassed === true;
-    if (String(q.astrologerId || "") !== String(user.uid)) {
-      return res.status(403).json({ error: "This question is not assigned to you." });
-    }
-
-    // Astrologer may edit and resubmit the answer while it is still waiting
-    // for Admin approval. Once Admin approves it (status = answered), editing
-    // is no longer allowed.
-    const editableStatuses = ["admin_approved", "revision_required", "processing", "admin_review"];
-    if (bypassApproval && String(q.status||"")==="answered" && q.customerAnswerViewedAt) return res.status(409).json({error:"The customer has already viewed this answer. It can no longer be edited."});
-    if (!editableStatuses.includes(String(q.status || "")) && !(bypassApproval && String(q.status||"")==="answered")) {
-      return res.status(409).json({ error: "This answer can no longer be edited." });
-    }
-
-    const minWords = Number(q.answerMinWords || 150);
-    const wordCount = answer.split(/\s+/).filter(Boolean).length;
-    if (wordCount < minWords) {
-      return res.status(400).json({ error: `Please write at least ${minWords} words.` });
-    }
-
-    const commissionPercent = Number(q.commissionPercent || q.commissionRate || 20);
-    const commissionAmount =
-      Math.round(Number(q.amount || 0) * commissionPercent) / 100;
-
-    // Save the answer before attempting email. This makes the submission
-    // independent of browser notification calls and email-provider latency.
-    // For Auto Approval, the answer becomes customer-visible now, so the 24h
-    // commission clock starts from this exact server timestamp.
-    const publicAnswerNow=admin.firestore.Timestamp.now();
-    const publicAutoCreditDueAt=admin.firestore.Timestamp.fromMillis(publicAnswerNow.toMillis()+24*60*60*1000);
-    await questionRef.update({
-      answer,
-      answerWordCount: wordCount,
-      answerSubmittedAt: publicAnswerNow,
-      astrologerAnswerStatus: "submitted",
-      // Once resubmitted, remove edit mode so the same question is no longer
-      // shown in both the Question Box and Answers section.
-      astrologerEditMode: false,
-      status: bypassApproval ? "answered" : "processing",
-      astrologerAnswerStatus: bypassApproval ? "approved" : "submitted",
-      answerApprovedAt: bypassApproval ? publicAnswerNow : FieldValue.delete(),
-      adminAnswerApprovedAt: bypassApproval ? publicAnswerNow : FieldValue.delete(),
-      commissionAutoCreditDueAt: bypassApproval ? publicAutoCreditDueAt : FieldValue.delete(),
-      customerAnswerViewedAt: bypassApproval ? FieldValue.delete() : (q.customerAnswerViewedAt || FieldValue.delete()),
-      astrologerCommissionAmount: commissionAmount,
-      commissionPercent,
-      commissionRate: commissionPercent,
-      commissionStatus: bypassApproval ? "pending_customer_view" : "pending_admin_approval",
-      commissionCreditedAt: FieldValue.delete(),
-      answerEmailStatus: {
-        state: "pending",
-        updatedAt: FieldValue.serverTimestamp()
-      }
-    });
+    const {q,bypassApproval,wordCount} = await publicWorkflow.submit(questionId,user.uid,answer);
 
     await writeAdminAudit("ASTROLOGER_ANSWER_SUBMITTED", questionId, user.uid, {
       wordCount, previousStatus: String(q.status || ""), nextStatus: bypassApproval ? "answered" : "processing", bypassApproval
@@ -851,7 +750,7 @@ app.post("/submit-answer", async (req, res) => {
       `Answer submission failed | Question ID: ${questionId || "N/A"} | Reason:`,
       e?.message || e
     );
-    return res.status(500).json({
+    return res.status(e.httpStatus||500).json({
       error: e?.message || "Unable to submit answer."
     });
   }
@@ -1278,28 +1177,11 @@ app.post("/admin/approve-question", express.json({limit:"10kb"}), async (req,res
     const pct=Number(req.body?.commissionPercent);
     if(!questionId||!astrologerId) return res.status(400).json({error:"Question ID and astrologer are required."});
     if(!Number.isFinite(pct)||pct<0||pct>100) return res.status(400).json({error:"Commission percentage must be between 0 and 100."});
-    const qRef=db.collection("smv_questions").doc(questionId);
-    const aRef=db.collection("smv_astrologers").doc(astrologerId);
-    const [qSnap,aSnap]=await Promise.all([qRef.get(),aRef.get()]);
-    if(!qSnap.exists) return res.status(404).json({error:"Question not found."});
-    if(!aSnap.exists) return res.status(404).json({error:"Astrologer not found."});
-    const q=qSnap.data()||{}, a=aSnap.data()||{};
-    if(String(a.status||"").toLowerCase()!=="approved") return res.status(409).json({error:"Selected astrologer is not approved."});
-    if(["answered","question_rejected"].includes(String(q.status||""))) return res.status(409).json({error:"This question is already closed."});
-    const amount=Number(q.amount||q.paymentAmount||0);
-    if(!Number.isFinite(amount)||amount<=0) return res.status(409).json({error:"This question does not have a valid paid amount."});
-    const astroCommission=Math.round(amount*pct)/100;
-    const adminCommission=Math.round((amount-astroCommission)*100)/100;
-    await qRef.update({
-      status:"paid", allocationStatus:"assigned_to_astrologer", astrologerId, astrologerName:a.name||"Astrologer",
-      commissionPercent:pct, commissionRate:pct, astrologerCommissionAmount:astroCommission,
-      adminCommissionAmount:adminCommission, adminQuestionApprovedAt:FieldValue.serverTimestamp(),
-      adminQuestionApprovedBy:user.uid, commissionStatus:"allocated_pending_answer", updatedAt:FieldValue.serverTimestamp()
-    });
+    const {astroCommission,adminCommission,oldAstrologerId}=await publicWorkflow.assign(questionId,user.uid,astrologerId,pct,false);
     await writeAdminAudit("QUESTION_APPROVED",questionId,user.uid,{astrologerId,commissionPercent:pct,astrologerCommissionAmount:astroCommission,adminCommissionAmount:adminCommission});
     await db.collection("smv_notifications").add({userId:astrologerId,type:"question_assigned",title:"New Question Assigned",message:"A paid question has been assigned to you by Admin.",questionId,commissionAmount:astroCommission,createdAt:FieldValue.serverTimestamp(),read:false});
     return res.json({success:true,questionId,astrologerId,commissionPercent:pct,astrologerCommissionAmount:astroCommission,adminCommissionAmount:adminCommission});
-  }catch(e){console.error("Admin approve question error:",e);return res.status(500).json({error:e?.message||"Unable to approve and allocate question."});}
+  }catch(e){console.error("Admin approve question error:",e);return res.status(e.httpStatus||500).json({error:e?.message||"Unable to approve and allocate question."});}
 });
 
 
@@ -1308,17 +1190,18 @@ app.post('/astrologer/claim-question', express.json({limit:'10kb'}), async(req,r
  const questionId=String(req.body?.questionId||'').trim();
  if(!questionId)return res.status(400).json({error:'Question ID is required.'});
  try{
-  const [workflow,commissionSnap]=await Promise.all([getOpenWorkflowSettings(),db.collection('smv_settings').doc('commission').get().catch(()=>null)]);
+  const commissionSnap=await db.collection('smv_settings').doc('commission').get().catch(()=>null);
   const defaultPct=Number(commissionSnap?.exists?commissionSnap.data()?.astroPercent:20);
   let astroName='Astrologer',commissionPercent=Number.isFinite(defaultPct)?defaultPct:20,commissionAmount=0;
   await db.runTransaction(async tx=>{
    const qRef=db.collection('smv_questions').doc(questionId),aRef=db.collection('smv_astrologers').doc(user.uid);
-   const [qs,as]=await Promise.all([tx.get(qRef),tx.get(aRef)]);
+   const [qs,as,ws]=await Promise.all([tx.get(qRef),tx.get(aRef),tx.get(db.collection('smv_settings').doc('workflow'))]);
+   const workflow={allowWithoutAdminApproval:ws.exists&&ws.data().allowWithoutAdminApproval===true};
    const fail=(status,message)=>{throw Object.assign(new Error(message),{httpStatus:status});};
    if(!qs.exists)fail(404,'Question not found.');
    if(!as.exists||String(as.data()?.status||'').toLowerCase()!=='approved')fail(403,'Your astrologer profile is not approved.');
    const q=qs.data()||{}; astroName=String(as.data()?.name||'Astrologer');
-   const isOpen=workflow.allowWithoutAdminApproval && !q.astrologerId && q.paymentStatus==='paid' && String(q.status||'')==='available_to_astrologers' && String(q.allocationStatus||'')==='available_to_astrologers';
+   const isOpen=workflow.allowWithoutAdminApproval && !q.astrologerId && q.paymentStatus==='paid' && String(q.status||'')==='available_to_astrologers';
    const isAllocated=String(q.astrologerId||'')===String(user.uid) && !!q.adminQuestionApprovedAt && ['paid','admin_approved'].includes(String(q.status||'')) && ['assigned_to_astrologer','available_to_astrologers','reallocated','claimed_by_astrologer'].includes(String(q.allocationStatus||''));
    if(!isOpen && !isAllocated) fail(409,'This question is no longer available to claim.');
    commissionPercent=Number(q.commissionPercent??q.commissionRate??defaultPct??20);
@@ -1424,34 +1307,13 @@ app.post("/admin/reallocate-question", express.json({limit:"10kb"}), async (req,
     const pct=Number(req.body?.commissionPercent);
     if(!questionId||!astrologerId) return res.status(400).json({error:"Question ID and astrologer are required."});
     if(!Number.isFinite(pct)||pct<0||pct>100) return res.status(400).json({error:"Commission percentage must be between 0 and 100."});
-    const qRef=db.collection("smv_questions").doc(questionId);
-    const aRef=db.collection("smv_astrologers").doc(astrologerId);
-    const [qSnap,aSnap]=await Promise.all([qRef.get(),aRef.get()]);
-    if(!qSnap.exists) return res.status(404).json({error:"Question not found."});
-    if(!aSnap.exists) return res.status(404).json({error:"Astrologer not found."});
-    const q=qSnap.data()||{}, a=aSnap.data()||{};
-    if(String(a.status||"").toLowerCase()!=="approved") return res.status(409).json({error:"Selected astrologer is not approved."});
-    if(["answered","question_rejected","admin_rejected"].includes(String(q.status||""))) return res.status(409).json({error:"This question is already closed."});
-    if(!q.adminQuestionApprovedAt || !q.astrologerId) return res.status(409).json({error:"This question has not been allocated yet."});
-    const amount=Number(q.amount||q.paymentAmount||0);
-    const astroCommission=Math.round(amount*pct)/100;
-    const adminCommission=Math.round((amount-astroCommission)*100)/100;
-    const oldAstrologerId=String(q.astrologerId||"");
-    await qRef.update({
-      astrologerId, astrologerName:a.name||"Astrologer", commissionPercent:pct, commissionRate:pct,
-      astrologerCommissionAmount:astroCommission, adminCommissionAmount:adminCommission,
-      allocationStatus:"assigned_to_astrologer", commissionStatus:"allocated_pending_answer",
-      astrologerAnswerStatus:"pending", status:"admin_approved",
-      answer:"", answerWordCount:0, answerAuthorType:"", adminTakeover:false,
-      adminRejectionReason:FieldValue.delete(), adminRejectedAt:FieldValue.delete(), adminRejectedBy:FieldValue.delete(),
-      reallocatedAt:FieldValue.serverTimestamp(), reallocatedBy:user.uid, updatedAt:FieldValue.serverTimestamp()
-    });
+    const {astroCommission,adminCommission,oldAstrologerId}=await publicWorkflow.assign(questionId,user.uid,astrologerId,pct,true);
     if(oldAstrologerId && oldAstrologerId!==astrologerId){
       await db.collection("smv_notifications").add({userId:oldAstrologerId,type:"question_reallocated",title:"Question Re-allocated",message:"Admin has re-allocated this question to another astrologer. It is no longer assigned to you.",questionId,createdAt:FieldValue.serverTimestamp(),read:false});
     }
     await db.collection("smv_notifications").add({userId:astrologerId,type:"question_assigned",title:"Question Re-allocated",message:"Admin has assigned a paid question to you. Please submit your answer.",questionId,commissionAmount:astroCommission,createdAt:FieldValue.serverTimestamp(),read:false});
     return res.json({success:true,questionId,astrologerId,commissionPercent:pct,astrologerCommissionAmount:astroCommission,adminCommissionAmount:adminCommission});
-  }catch(e){console.error("Admin reallocate question error:",e);return res.status(500).json({error:e?.message||"Unable to re-allocate question."});}
+  }catch(e){console.error("Admin reallocate question error:",e);return res.status(e.httpStatus||500).json({error:e?.message||"Unable to re-allocate question."});}
 });
 
 
@@ -1571,30 +1433,23 @@ app.post("/admin/set-open-workflow", express.json({limit:"10kb"}), async (req,re
   try{
     const allow=req.body?.allowWithoutAdminApproval===true;
     await db.collection("smv_settings").doc("workflow").set({allowWithoutAdminApproval:allow,updatedAt:FieldValue.serverTimestamp(),updatedBy:user.uid},{merge:true});
-    let opened=0;
-    let closed=0;
-    if(allow){
-      const snap=await db.collection("smv_questions").where("status","in",["pending_admin_approval","paid"]).get();
-      const batch=db.batch();
+    let opened=0,closed=0,cursor=null;
+    for(;;){
+      let query=db.collection('smv_questions').where('status','in',allow?['pending_admin_approval','paid']:['available_to_astrologers']).orderBy(admin.firestore.FieldPath.documentId()).limit(100);
+      if(cursor)query=query.startAfter(cursor);
+      const snap=await query.get();if(snap.empty)break;
       for(const d of snap.docs){
-        const q=d.data()||{};
-        if(q.paymentStatus==='paid' && !q.astrologerId && ['pending_admin_approval','paid'].includes(String(q.status||''))){
-          batch.update(d.ref,{status:'available_to_astrologers',allocationStatus:'available_to_astrologers',adminApprovalBypassed:true,openedToAstrologersAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()});
-          opened++;
-        }
+        const changed=await db.runTransaction(async tx=>{
+          const [qs,ws]=await Promise.all([tx.get(d.ref),tx.get(db.collection('smv_settings').doc('workflow'))]);
+          if(!qs.exists || ws.data()?.allowWithoutAdminApproval!==allow)return false;
+          const q=qs.data();
+          if(q.paymentStatus!=='paid'||q.astrologerId||q.answer||!(allow?['pending_admin_approval','paid']:['available_to_astrologers']).includes(q.status))return false;
+          tx.update(d.ref,{status:allow?'available_to_astrologers':'pending_admin_approval',allocationStatus:allow?'available_to_astrologers':'awaiting_admin',adminApprovalBypassed:allow,updatedAt:FieldValue.serverTimestamp()});
+          return true;
+        });
+        if(changed){if(allow)opened++;else closed++;}
       }
-      if(opened) await batch.commit();
-    } else {
-      const snap=await db.collection("smv_questions").where("status","==","available_to_astrologers").get();
-      const batch=db.batch();
-      for(const d of snap.docs){
-        const q=d.data()||{};
-        if(q.paymentStatus==='paid' && !q.astrologerId && String(q.status||'')==='available_to_astrologers'){
-          batch.update(d.ref,{status:'pending_admin_approval',allocationStatus:'awaiting_admin',adminApprovalBypassed:false,updatedAt:FieldValue.serverTimestamp()});
-          closed++;
-        }
-      }
-      if(closed) await batch.commit();
+      cursor=snap.docs.at(-1).id;if(snap.size<100)break;
     }
     await writeAdminAudit("OPEN_WORKFLOW_"+(allow?"ENABLED":"DISABLED"),null,user.uid,{opened,closed});
     return res.json({success:true,allowWithoutAdminApproval:allow,opened,closed});
@@ -1616,16 +1471,15 @@ app.get("/astrologer/open-questions", async (req,res)=>{
     // which incorrectly hid the same paid question from other approved astrologers.
     // Keep this read bounded and read-only: no per-astrologer repair writes, listeners,
     // MutationObserver, or collection-wide client reads are introduced.
-    const [snap,commissionSnap]=await Promise.all([
-      db.collection("smv_questions").where("status","==","available_to_astrologers").limit(50).get(),
-      db.collection("smv_settings").doc("commission").get().catch(()=>null)
-    ]);
-    const pct=Number(commissionSnap?.exists?commissionSnap.data()?.astroPercent:20);
-    const questions=snap.docs
-      .map(d=>({id:d.id,...d.data()}))
-      .filter(q=>q.paymentStatus==='paid' && !q.astrologerId && String(q.status||'')==='available_to_astrologers')
-      .map(q=>({...q,commissionPercent:Number.isFinite(pct)?pct:20,astrologerCommissionAmount:Math.round(Number(q.amount||0)*(Number.isFinite(pct)?pct:20))/100}));
-    return res.json({success:true,allowWithoutAdminApproval:true,questions});
+    const cursor=String(req.query.cursor||'');
+    if(cursor&&!/^[A-Za-z0-9_-]+$/.test(cursor))return res.status(400).json({error:'Invalid cursor.'});
+    let query=db.collection('smv_questions').where('status','==','available_to_astrologers').orderBy(admin.firestore.FieldPath.documentId()).limit(50);
+    if(cursor)query=query.startAfter(cursor);
+    const [snap,commissionSnap]=await Promise.all([query.get(),db.collection('smv_settings').doc('commission').get().catch(()=>null)]);
+    const pct=Number(commissionSnap?.data()?.astroPercent??20);
+    const questions=snap.docs.map(d=>({id:d.id,...d.data()})).filter(q=>q.paymentStatus==='paid'&&!q.astrologerId)
+      .map(q=>{const rate=Number(q.commissionPercent??q.commissionRate??pct);return {...q,commissionPercent:rate,astrologerCommissionAmount:Math.round(Number(q.amount||0)*rate)/100};});
+    return res.json({success:true,allowWithoutAdminApproval:true,questions,nextCursor:snap.size===50?snap.docs.at(-1).id:null});
   }catch(e){console.error("Open questions load failed:",e);return res.status(500).json({error:e?.message||"Unable to load open questions."});}
 });
 
@@ -1635,55 +1489,8 @@ app.post("/customer/mark-answer-viewed", express.json({limit:"10kb"}), async (re
     const questionId=String(req.body?.questionId||'').trim();
     const autoCredit=req.body?.autoCredit===true;
     if(!questionId) return res.status(400).json({error:"Question ID is required."});
-    const ref=db.collection("smv_questions").doc(questionId);
-    const snap=await ref.get();
-    if(!snap.exists) return res.status(404).json({error:"Question not found."});
-    const q=snap.data()||{};
-    if(String(q.customerId||'')!==String(user.uid)) return res.status(403).json({error:"You do not own this question."});
-    if(String(q.status||'')!=="answered" || !String(q.answer||'').trim()) return res.status(409).json({error:"Answer is not ready yet."});
-
-    // Public-question auto-approval only. Manual Admin-approval flow is unchanged.
-    if(autoCredit){
-      if(q.adminApprovalBypassed!==true) return res.status(409).json({error:"Automatic credit is not applicable to this question."});
-      const raw=q.answerSubmittedAt||q.answerApprovedAt||q.updatedAt;
-      const answerMs=raw?.toDate?raw.toDate().getTime():Date.parse(raw||'');
-      if(!Number.isFinite(answerMs)||Date.now()-answerMs<24*60*60*1000) return res.status(409).json({error:"Automatic credit becomes available 24 hours after answer submission."});
-    }
-
-    if(String(q.commissionStatus||'')==="credited") {
-      const patch={updatedAt:FieldValue.serverTimestamp()};
-      if(!autoCredit&&!q.customerAnswerViewedAt)patch.customerAnswerViewedAt=FieldValue.serverTimestamp();
-      if(Object.keys(patch).length>1)await ref.update(patch);
-      return res.json({success:true,questionId,already:true,credited:true,autoCredit});
-    }
-
-    let astrologerPaymentId=String(q.astrologerPaymentId||'');
-    const amount=Number(q.astrologerCommissionAmount||q.commissionAmount||0);
-    const shouldCredit=!!q.astrologerId && Number.isFinite(amount) && amount>=0;
-    if(shouldCredit && !astrologerPaymentId){
-      const paymentId=await nextPaymentId();
-      astrologerPaymentId=paymentId.replace(/^SMV-PAY-/,"SMV-PAT-");
-      await db.collection("smv_payments").doc(astrologerPaymentId).set({
-        paymentId:astrologerPaymentId,type:"astrologer_earning",customerId:q.customerId||null,
-        astrologerId:q.astrologerId,questionId,bookingId:q.bookingId||null,
-        grossAmount:Number(q.amount||0),commissionPercent:Number(q.commissionPercent||q.commissionRate||0),
-        commissionAmount:amount,earningAmount:amount,status:"credited",paymentStatus:"pending_withdrawal",
-        source:autoCredit?"public_answer_24h_auto_credit":"customer_answer_view",createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()
-      },{merge:false});
-    }
-    const patch={updatedAt:FieldValue.serverTimestamp()};
-    if(autoCredit)patch.commissionAutoCreditedAt=FieldValue.serverTimestamp();
-    else patch.customerAnswerViewedAt=q.customerAnswerViewedAt||FieldValue.serverTimestamp();
-    if(shouldCredit){
-      patch.commissionStatus="credited";patch.commissionCreditedAt=FieldValue.serverTimestamp();
-      patch.commissionAmount=amount;patch.astrologerCommissionAmount=amount;patch.astrologerPaymentId=astrologerPaymentId;
-    }
-    await ref.update(patch);
-    if(shouldCredit){
-      await db.collection("smv_notifications").add({userId:q.astrologerId,type:"earning_credited",title:"Earning Credited",message:autoCredit?`24 hours passed after answer submission. ₹${amount.toFixed(2)} is now available in your earnings.`:`Customer viewed your answer. ₹${amount.toFixed(2)} is now available in your earnings.`,questionId,commissionAmount:amount,createdAt:FieldValue.serverTimestamp(),read:false});
-    }
-    return res.json({success:true,questionId,credited:shouldCredit,autoCredit,commissionAmount:shouldCredit?amount:0});
-  }catch(e){console.error("Mark answer viewed failed:",e);return res.status(500).json({error:e?.message||"Unable to open answer right now."});}
+    return res.json(await publicWorkflow.settle(questionId,{uid:user.uid,automatic:autoCredit}));
+  }catch(e){console.error("Mark answer viewed failed:",e);return res.status(e.httpStatus||500).json({error:e?.message||"Unable to open answer right now."});}
 });
 
 
@@ -2790,9 +2597,10 @@ app.post("/create-order", express.json(), async (req, res) => {
 
 async function markQuestionPaid(questionId, orderId, paymentId, signature, source) {
   const qRef = db.collection("smv_questions").doc(questionId);
-  const workflow = await getOpenWorkflowSettings();
+  let workflow;
   const result = await db.runTransaction(async tx => {
-    const snap = await tx.get(qRef);
+    const [snap,ws] = await Promise.all([tx.get(qRef),tx.get(db.collection("smv_settings").doc("workflow"))]);
+    workflow={allowWithoutAdminApproval:ws.exists&&ws.data().allowWithoutAdminApproval===true};
     if (!snap.exists) throw new Error("Question not found.");
     const q = snap.data();
     if (q.razorpayOrderId !== orderId) throw new Error("Order mismatch.");
@@ -2851,19 +2659,8 @@ app.post("/admin/credit-commission", async (req, res) => {
   if (!(await isAdminUser(user))) return res.status(403).json({ error: "Admin access denied." });
   try {
     const questionId = String(req.body?.questionId || "").trim(); if (!questionId) return res.status(400).json({ error: "Question ID is required." });
-    const qRef = db.collection("smv_questions").doc(questionId);
-    const qSnap = await qRef.get(); if (!qSnap.exists) return res.status(404).json({ error: "Question not found." });
-    const q = qSnap.data() || {};
-    if (!q.astrologerId) return res.status(400).json({ error: "Astrologer is not assigned." });
-    const amount = Number(q.astrologerCommissionAmount || q.commissionAmount || 0);
-    if (!Number.isFinite(amount) || amount < 0) return res.status(400).json({ error: "Invalid astrologer commission amount." });
-    if (q.astrologerPaymentId && q.commissionStatus === "credited") return res.json({ success: true, astrologerPaymentId: q.astrologerPaymentId, commissionAmount: amount, already: true });
-    const paymentId = await nextPaymentId();
-    const astrologerPaymentId = paymentId.replace(/^SMV-PAY-/, "SMV-PAT-");
-    await db.collection("smv_payments").doc(astrologerPaymentId).set({ paymentId: astrologerPaymentId, type:"astrologer_earning", customerId:q.customerId||null, astrologerId:q.astrologerId, questionId, bookingId:q.bookingId||null, grossAmount:Number(q.amount||0), commissionPercent:Number(q.commissionPercent||q.commissionRate||0), commissionAmount:amount, earningAmount:amount, status:"credited", paymentStatus:"pending_withdrawal", source:"admin_answer_approval", createdAt:FieldValue.serverTimestamp(), updatedAt:FieldValue.serverTimestamp() });
-    await qRef.update({ astrologerPaymentId:astrologerPaymentId, commissionStatus:"credited", commissionCreditedAt:FieldValue.serverTimestamp(), commissionAmount:amount });
-    return res.json({ success:true, astrologerPaymentId:astrologerPaymentId, commissionAmount:amount });
-  } catch(e) { console.error("Commission credit error:",e); return res.status(500).json({ error:e?.message||"Unable to credit commission." }); }
+    return res.json(await publicWorkflow.settle(questionId,{automatic:true}));
+  } catch(e) { console.error("Commission credit error:",e); return res.status(e.httpStatus||500).json({ error:e?.message||"Unable to credit commission." }); }
 });
 
 
@@ -2899,54 +2696,12 @@ app.post("/admin/approve-answer", express.json({limit:"20kb"}), async (req, res)
   try {
     if (!questionId) return res.status(400).json({ error: "Question ID is required." });
     const qRef = db.collection("smv_questions").doc(questionId);
-    const snap = await qRef.get();
-    if (!snap.exists) return res.status(404).json({ error: "Question not found." });
-    const q = snap.data() || {};
-    if (!q.astrologerId) return res.status(400).json({ error: "Astrologer is not assigned." });
-    if (["question_rejected","admin_rejected"].includes(String(q.status||""))) return res.status(409).json({ error: "This question was rejected and refunded. Its answer cannot be approved." });
-    if (!String(q.answer || "").trim()) return res.status(400).json({ error: "No answer found." });
-    const alreadyApproved = String(q.status || "") === "answered" && String(q.astrologerAnswerStatus || "") === "approved";
-    // IMPORTANT: An answer may have been approved before email delivery was fixed.
-    // Do not return early in that case. Re-run the email notification so Admin can
-    // safely approve/retry and the customer still receives the message.
-    const amount = Number(q.astrologerCommissionAmount || q.commissionAmount || 0);
-    if (!Number.isFinite(amount) || amount < 0) return res.status(400).json({ error: "Invalid astrologer commission amount." });
-
-    let astrologerPaymentId = q.astrologerPaymentId || "";
-    if (false && !alreadyApproved && (!astrologerPaymentId || String(q.commissionStatus || "") !== "credited")) {
-      const paymentId = await nextPaymentId();
-      astrologerPaymentId = paymentId.replace(/^SMV-PAY-/, "SMV-PAT-");
-      await db.collection("smv_payments").doc(astrologerPaymentId).set({
-        paymentId: astrologerPaymentId, type:"astrologer_earning", customerId:q.customerId||null,
-        astrologerId:q.astrologerId, questionId, bookingId:q.bookingId||null,
-        grossAmount:Number(q.amount||0), commissionPercent:Number(q.commissionPercent||q.commissionRate||0),
-        commissionAmount:amount, earningAmount:amount, status:"credited", paymentStatus:"pending_withdrawal",
-        source:"admin_answer_approval", createdAt:FieldValue.serverTimestamp(), updatedAt:FieldValue.serverTimestamp()
-      });
-    }
-
+    const {q,amount,alreadyApproved,astrologerPaymentId} = await publicWorkflow.approve(questionId,user.uid);
+    // Retry email delivery without republishing or resetting the earning deadline.
     if (!alreadyApproved) {
-      // Manual approval is the moment the answer first becomes customer-visible.
-      const publicAnswerApprovedNow=admin.firestore.Timestamp.now();
-      await qRef.update({
-        status:"answered",
-        astrologerAnswerStatus:"approved",
-        commissionStatus:"pending_customer_view",
-        answerApprovedAt:publicAnswerApprovedNow,
-        adminAnswerApprovedAt:publicAnswerApprovedNow,
-        commissionAutoCreditDueAt:admin.firestore.Timestamp.fromMillis(publicAnswerApprovedNow.toMillis()+24*60*60*1000),
-        answerApprovedBy:user.uid,
-        commissionCreditedAt:FieldValue.delete(),
-        commissionAmount:amount,
-        astrologerCommissionAmount:amount,
-        astrologerPaymentId,
-        updatedAt:FieldValue.serverTimestamp(),
-        answerApprovalEmailStatus:{state:"pending",updatedAt:FieldValue.serverTimestamp(),retry:true}
-      });
-
       await db.collection("smv_notifications").add({
         userId:q.astrologerId,type:"answer_approved",title:"Answer Approved",
-        message:`Your answer has been approved. Earnings will become available after the customer opens the answer.`,
+        message:`Your answer has been approved. Earnings are credited when the customer marks the answer viewed, or 24 hours after the answer becomes available, whichever happens first.`,
         questionId,commissionAmount:amount,createdAt:FieldValue.serverTimestamp(),read:false
       });
       await writeAdminAudit("ANSWER_APPROVED", questionId, user.uid, {
@@ -2973,7 +2728,7 @@ app.post("/admin/approve-answer", express.json({limit:"20kb"}), async (req, res)
       const text = isCustomer
         ? `Dear ${customerName},\n\nYour astrology answer has been approved by SMV ASTRO Admin and is now ready to view.\n\nQuestion: ${q.question || ""}\nQuestion ID: ${questionId}\n\nRegards,\nSMV ASTRO`
         : isAstrologer
-          ? `Dear ${astrologerName},\n\nYour submitted astrology answer has been approved by SMV ASTRO Admin.\n\nQuestion ID: ${questionId}\nCommission credited: ₹${amount.toFixed(2)}\n\nRegards,\nSMV ASTRO`
+          ? `Dear ${astrologerName},\n\nYour submitted astrology answer has been approved by SMV ASTRO Admin.\n\nQuestion ID: ${questionId}\nCommission pending customer view or 24-hour automatic credit: ₹${amount.toFixed(2)}\n\nRegards,\nSMV ASTRO`
           : `SMV ASTRO answer approval notification.\n\nQuestion ID: ${questionId}\nCustomer Email: ${customerEmail || "N/A"}\nAstrologer Email: ${astrologerEmail || "N/A"}\nCommission: ₹${amount.toFixed(2)}`;
       const result = await sendSystemEmail({to:[recipient],replyTo:ADMIN_EMAIL,subject,text});
       if (result?.failed) {
@@ -2992,7 +2747,7 @@ app.post("/admin/approve-answer", express.json({limit:"20kb"}), async (req, res)
     return res.json({success:true,questionId,already:alreadyApproved,commissionAmount:amount});
   } catch (e) {
     console.error(`Admin answer approval failed | Question ID: ${questionId || "N/A"} | Reason:`, e?.message || e);
-    return res.status(500).json({error:e?.message || "Unable to approve answer."});
+    return res.status(e.httpStatus||500).json({error:e?.message || "Unable to approve answer."});
   }
 });
 
@@ -3060,53 +2815,19 @@ app.get("/astrologer/earnings", async (req, res) => {
 });
 
 
-// Public Question: server-side 24-hour commission fallback.
-// Customer login is NOT required. This uses the due-time field written only when
-// an answer becomes customer-visible. The query is bounded and does not scan the
-// whole questions collection. Customer-view state is never fabricated.
-let smvPublic24hSweepRunning=false;
-async function smvCreditDuePublicQuestions(){
-  if(smvPublic24hSweepRunning)return {skipped:true};
-  smvPublic24hSweepRunning=true;
-  let checked=0,credited=0;
-  try{
-    const now=admin.firestore.Timestamp.now();
-    const snap=await db.collection("smv_questions")
-      .where("commissionAutoCreditDueAt","<=",now).limit(25).get();
-    checked=snap.size;
-    for(const d of snap.docs){
-      const questionId=d.id;
-      try{
-        const result=await db.runTransaction(async tx=>{
-          const ref=db.collection("smv_questions").doc(questionId);
-          const qs=await tx.get(ref);if(!qs.exists)return null;
-          const q=qs.data()||{};
-          if(String(q.status||"")!=="answered"||!String(q.answer||"").trim())return null;
-          if(String(q.commissionStatus||"")==="credited"){
-            tx.update(ref,{commissionAutoCreditDueAt:FieldValue.delete(),updatedAt:FieldValue.serverTimestamp()});return null;
-          }
-          const dueMs=q.commissionAutoCreditDueAt?.toMillis?.()||0;if(!dueMs||dueMs>Date.now())return null;
-          if(!q.astrologerId)return null;
-          const amount=Number(q.astrologerCommissionAmount||q.commissionAmount||0);
-          if(!Number.isFinite(amount)||amount<0)return null;
-          // Deterministic ledger id makes retries/restarts idempotent without an
-          // extra counter read. One public question can create only one 24h earning.
-          const earningPaymentId=`SMV-PAT-PUB-${questionId}`;
-          const earningRef=db.collection("smv_payments").doc(earningPaymentId);
-          const earningSnap=await tx.get(earningRef);
-          if(!earningSnap.exists)tx.set(earningRef,{paymentId:earningPaymentId,type:"astrologer_earning",source:"public_answer_24h_auto_credit",customerId:q.customerId||null,astrologerId:q.astrologerId,questionId,bookingId:q.bookingId||null,grossAmount:Number(q.amount||0),commissionPercent:Number(q.commissionPercent||q.commissionRate||0),commissionAmount:amount,earningAmount:amount,status:"credited",paymentStatus:"pending_withdrawal",createdAt:FieldValue.serverTimestamp(),updatedAt:FieldValue.serverTimestamp()});
-          tx.update(ref,{commissionStatus:"credited",commissionCreditedAt:FieldValue.serverTimestamp(),commissionAutoCreditedAt:FieldValue.serverTimestamp(),commissionAutoCreditReason:"customer_not_marked_viewed_within_24h",astrologerPaymentId:earningPaymentId,commissionAutoCreditDueAt:FieldValue.delete(),updatedAt:FieldValue.serverTimestamp()});
-          return {q,amount};
-        });
-        if(result){credited++;await db.collection("smv_notifications").add({userId:result.q.astrologerId,type:"earning_credited",title:"Earning Credited",message:`Customer did not mark the answer viewed within 24 hours. ₹${result.amount.toFixed(2)} has been credited automatically.`,questionId,commissionAmount:result.amount,createdAt:FieldValue.serverTimestamp(),read:false}).catch(()=>{});}
-      }catch(e){console.warn("Public 24h auto-credit skipped:",questionId,e?.message||e);}
-    }
-    return {checked,credited};
-  }finally{smvPublic24hSweepRunning=false;}
-}
-const smvPublic24hSweepTimer=setInterval(()=>smvCreditDuePublicQuestions().catch(e=>console.warn("Public 24h sweep failed:",e?.message||e)),15*60*1000);
+// Public Questions only: one due-time query, transactional settlement, no browser timer.
+async function smvCreditDuePublicQuestions(){return publicWorkflow.sweep();}
+app.post('/internal/public-settlement/run', async(req,res)=>{
+  const secret=String(process.env.PUBLIC_SETTLEMENT_CRON_SECRET||'');
+  const token=String(req.headers.authorization||'').replace(/^Bearer /,'');
+  if(!secret || Buffer.byteLength(token)!==Buffer.byteLength(secret) || !crypto.timingSafeEqual(Buffer.from(token),Buffer.from(secret)))
+    return res.status(403).json({error:'Scheduler access denied.'});
+  try{return res.json(await smvCreditDuePublicQuestions());}
+  catch(e){console.error('Public settlement sweep failed:',e);return res.status(500).json({error:'Settlement sweep failed.'});}
+});
+const smvPublic24hSweepTimer=setInterval(()=>smvCreditDuePublicQuestions().catch(e=>console.warn('Public settlement:',e.message)),5*60*1000);
 smvPublic24hSweepTimer.unref?.();
-setTimeout(()=>smvCreditDuePublicQuestions().catch(e=>console.warn("Public 24h startup sweep failed:",e?.message||e)),30000).unref?.();
+setTimeout(()=>smvCreditDuePublicQuestions().catch(e=>console.warn('Public settlement startup:',e.message)),30000).unref?.();
 
 // Private Consultation only: server-side 24-hour commission fallback.
 // One bounded due-time query every 15 minutes; no customer login, DOM observer,
@@ -3698,7 +3419,7 @@ app.post("/astrologer/withdrawal-request", async (req, res) => {
     let totalEarnings = 0;
     questionSnap.docs.forEach(d => {
       const q = d.data() || {};
-      if (q.status === "answered" && q.commissionStatus === "credited" && q.customerAnswerViewedAt) {
+      if (q.status === "answered" && q.commissionStatus === "credited") {
         totalEarnings += Number(q.astrologerCommissionAmount || q.commissionAmount || 0);
       }
     });
